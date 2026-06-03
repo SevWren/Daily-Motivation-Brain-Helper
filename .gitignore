@@ -1,2 +1,29 @@
 DailyMotivation.exe
 digest.txt
+# Test and build artifacts
+TestResults.xml
+coverage.xml
+*.coverage
+code-coverage-results.md
+scriptanalyzer-results.sarif
+Output/
+*.log
+
+# Pester
+*.TestResults.xml
+
+# PowerShell specific
+*.ps1xml
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Build artifacts
+*.exe
+!docs/**/*.exe
+
+# Temporary files
+*.tmp
+~$*
