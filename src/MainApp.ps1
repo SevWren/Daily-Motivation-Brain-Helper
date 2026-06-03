@@ -31,8 +31,15 @@ try {
 # --- Module paths ---
 $scriptDir  = $PSScriptRoot
 $modulesDir = Join-Path $scriptDir "Modules"
-Import-Module (Join-Path $modulesDir "ConfigManager.psm1")   -Force
-Import-Module (Join-Path $modulesDir "TaskScheduler.psm1")   -Force
+try {
+    Import-Module (Join-Path $modulesDir "ConfigManager.psm1") -Force -ErrorAction Stop
+    Import-Module (Join-Path $modulesDir "TaskScheduler.psm1") -Force -ErrorAction Stop
+} catch {
+    [System.Windows.MessageBox]::Show(
+        "Required modules failed to load. Please reinstall the application.`n`n$($_.Exception.Message)",
+        "Startup Error", "OK", "Error")
+    exit 1
+}
 
 # --- Initialize app data directory and default files ---
 Initialize-AppData
@@ -59,7 +66,14 @@ if ($schedSvc.Status -ne "Running") {
 
 # --- Load and parse XAML ---
 $xamlPath = Join-Path $scriptDir "MainWindow.xaml"
-[xml]$xaml = Get-Content $xamlPath -Raw -Encoding UTF8
+try {
+    [xml]$xaml = Get-Content $xamlPath -Raw -Encoding UTF8 -ErrorAction Stop
+} catch {
+    [System.Windows.MessageBox]::Show(
+        "UI file missing. Please reinstall the application.`n`n$($_.Exception.Message)",
+        "Startup Error", "OK", "Error")
+    exit 1
+}
 
 # Strip x:Class if present (PowerShell loader doesn't support it)
 $xaml.Window.RemoveAttribute("x:Class")

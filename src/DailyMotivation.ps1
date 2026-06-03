@@ -54,7 +54,18 @@ try {
     Write-DLog "Mutex acquired"
 } catch [System.Threading.AbandonedMutexException] {
     $mutexOwned = $true
-    Write-DLog "Acquired abandoned mutex" "WARN"
+    Write-DLog "Acquired abandoned mutex -- checking for stale popup window" "WARN"
+    # Prior process crashed. Wait briefly, then verify no stale popup is still visible.
+    # Proceeding immediately risks two popups on-screen, violating SSOT-006.
+    Start-Sleep -Milliseconds 500
+    $stale = Get-Process | Where-Object {
+        $_.MainWindowTitle -like "*Daily Motivation*" -and $_.Id -ne $PID
+    }
+    if ($stale) {
+        Write-DLog "Stale popup still visible (PID $($stale.Id)) -- exiting to avoid duplicate" "WARN"
+        if ($mutex) { try { $mutex.ReleaseMutex() } catch {} }
+        exit 0
+    }
 } catch {
     Write-DLog "Mutex error (non-fatal): $_" "WARN"
 }
@@ -89,7 +100,8 @@ if (Test-Path $configPath) {
         $config = $loaded
         Write-DLog "Config loaded. title='$($config.title)' folder='$($config.folder_name)'"
     } catch {
-        Write-DLog "Config parse failed - using defaults" "WARN"
+        Write-DLog "Config parse failed: $($_.Exception.Message)" "WARN"
+        Write-DLog "Config parse inner: $($_.Exception.InnerException)" "WARN"
     }
 } else {
     Write-DLog "Config file not found - using defaults" "WARN"
