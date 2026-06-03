@@ -49,7 +49,7 @@ All PRD changes require corresponding updates to ACCEPTANCE_CRITERIA.md and TRAC
 ## Code Quality Standards
 - All code must pass PSScriptAnalyzer with project settings (`.PSScriptAnalyzerSettings.psd1`)
 - New functions require Pester tests (minimum 80% coverage)
-- Follow PowerShell best practices (see `MODERN-POWERSHELL-SCAFFOLDING.md`)
+- Follow PowerShell best practices (see `TESTING.md`)
 - No cmdlet aliases except 'cd', 'ls'
 - 4-space indentation (no tabs)
 - UTF-8 encoding for all files

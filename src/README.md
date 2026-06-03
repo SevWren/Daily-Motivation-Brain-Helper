@@ -89,7 +89,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
 | `../PesterConfiguration.psd1` | Test suite configuration |
 | `../.github/workflows/test.yml` | CI/CD pipeline (GitHub Actions) |
 | `../TESTING.md` | Complete testing guide |
-| `../MODERN-POWERSHELL-SCAFFOLDING.md` | Infrastructure overview |
+| `../docs/reports/SCAFFOLDING-COMPLETION-2026-06-03.md` | Historical infrastructure setup report (commit 4ba633a) |
 
 ### Development Workflow
 ```powershell

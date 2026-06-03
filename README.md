@@ -55,7 +55,7 @@ Daily-Motivation-Brain-Helper/
 +-- .PSScriptAnalyzerSettings.psd1  # Code quality configuration
 +-- PesterConfiguration.psd1      # Test suite configuration
 +-- TESTING.md                    # Testing guide
-+-- MODERN-POWERSHELL-SCAFFOLDING.md  # Infrastructure overview
++-- docs/reports/                     # Historical session reports and audit artifacts
 |
 +-- .github/workflows/
 |   +-- test.yml                  # CI/CD pipeline (automated tests)
@@ -163,7 +163,7 @@ Invoke-Build Release
 - **TaskScheduler.psm1**: ~85% coverage (80+ tests)
 - **Integration**: End-to-end scenarios for initialization bugs
 
-See [TESTING.md](TESTING.md) and [MODERN-POWERSHELL-SCAFFOLDING.md](MODERN-POWERSHELL-SCAFFOLDING.md) for details.
+See [TESTING.md](TESTING.md) and [Tests/README.md](Tests/README.md) for details.
 
 ---
 

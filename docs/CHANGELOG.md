@@ -54,7 +54,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
   - Build artifact generation
 - **Comprehensive documentation**
   - `TESTING.md` -- Complete testing guide (usage, best practices, debugging)
-  - `MODERN-POWERSHELL-SCAFFOLDING.md` -- Infrastructure overview and modern PowerShell practices
+  - `docs/reports/SCAFFOLDING-COMPLETION-2026-06-03.md` (archived) -- Infrastructure setup completion report
 - Code coverage: ~85% for ConfigManager and TaskScheduler modules (target: 80%+)
 
 ### Added -- Core Application

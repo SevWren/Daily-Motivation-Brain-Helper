@@ -26,7 +26,7 @@ Daily-Motivation-Brain-Helper/
 ├── .build.ps1                  ← Invoke-Build script; outputs to src\DailyMotivation.exe
 ├── Invoke-Tests.ps1            ← test runner with CI support
 ├── TESTING.md                  ← testing guide and best practices
-├── MODERN-POWERSHELL-SCAFFOLDING.md ← infrastructure overview
+├── docs/reports/                ← historical session reports (audits, handoffs)
 ├── CLAUDE/skills/              ← agent skills (see ## Agent Skills below)
 ├── docs/                       ← all planning, specs, and architecture docs
 ├── Tests/                      ← Pester 5.x test suite (180+ tests)
@@ -309,7 +309,7 @@ Read these before making changes in the relevant area:
 | Distribution packaging | `docs/DISTRIBUTION_STRATEGY.md` |
 | Sprint tasks and priorities | `docs/SPRINT_PLAN.md` |
 | Testing and quality assurance | `TESTING.md`, `Tests/README.md` |
-| Build system and automation | `MODERN-POWERSHELL-SCAFFOLDING.md`, `.build.ps1` |
+| Build system and automation | `docs/reports/SCAFFOLDING-COMPLETION-2026-06-03.md`, `.build.ps1` |
 | Code quality standards | `.PSScriptAnalyzerSettings.psd1`, `docs/CONTRIBUTING.md` |
 
 ---
