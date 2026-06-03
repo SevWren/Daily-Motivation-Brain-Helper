@@ -15,6 +15,9 @@
 | R-009 | Shell extension DLL registration requires admin (B-13) | High | Medium | Document as one-time setup step; Register-ShellExtension.ps1 prompts for elevation |
 | R-010 | Shell extension conflicts with antivirus/EDR (B-13) | Medium | High | Code-sign the DLL; document exception instructions for common AV products |
 | R-011 | Re-pick FolderBrowserDialog inside WPF popup (B-05) | Medium | Medium | Use Add-Type with STA thread check; test on both Win 10 and 11 |
+| R-012 | Test dependency version drift (Pester, PSScriptAnalyzer incompatible versions) | Low | Low | `Invoke-Build InstallDependencies` pins versions; CI uses consistent runner |
+| R-013 | Notification Engine change introduced without manual test run | Medium | Medium | NOTIFICATION_ENGINE_SPEC.md warning; CONTRIBUTING.md checklist; pre-release regression requirement |
+| R-014 | Code coverage drops below 80% threshold | Medium | Low | CI blocks PR merge on coverage regression; developer must add tests or document exception |
 
 ## Status
 > v1.1 DRAFT

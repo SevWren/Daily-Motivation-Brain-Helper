@@ -30,6 +30,10 @@
 | Multiple daily schedules | ❌ | ❌ | ✅ |
 | Message categories/tags | ❌ | ❌ | ✅ |
 | Dark/light theme toggle | ❌ | ❌ | ✅ |
+| Automated test suite (180+ Pester tests) | ✅ | ✅ | ✅ |
+| CI/CD pipeline (GitHub Actions) | ✅ | ✅ | ✅ |
+| Build automation (Invoke-Build) | ✅ | ✅ | ✅ |
+| PSScriptAnalyzer code quality enforcement | ✅ | ✅ | ✅ |
 
 ## Status
 > v1.1 DRAFT

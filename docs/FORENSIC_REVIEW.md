@@ -440,3 +440,26 @@ These findings are documented for completeness. They are deferred because the `S
 ---
 
 *Findings marked OUT OF SCOPE (ShellExtension) are retained for audit trail purposes only and should not be prioritized for the current development phase.*
+
+---
+
+## Regression Protection Status
+
+The following findings from this forensic review are now protected by automated tests
+(as of commit 4ba633a). A future code change that re-introduces these bugs will cause
+a Pester test to fail, blocking CI.
+
+| Finding | Pester Protection | Test Reference |
+|---------|------------------|----------------|
+| `Initialize-AppData` not creating `%APPDATA%` directory | Protected | `Tests/Integration/Initialization.Tests.ps1` -- Issue #2 test |
+| Module import before directory creation (order of operations) | Protected | `Tests/Integration/Initialization.Tests.ps1` -- Issue #4 test |
+| `ConvertFrom-Json "[]"` returns `$null` not `@()` | Protected | `Tests/Unit/TaskScheduler.Tests.ps1` -- empty task list test |
+| Duplicate task check case-sensitivity | Protected | `Tests/Unit/TaskScheduler.Tests.ps1` -- case-insensitive path comparison |
+| UTF-8 corruption on non-English Windows | Protected | `Tests/Unit/ConfigManager.Tests.ps1` -- international path encoding test |
+| Corrupted config file crash | Protected | `Tests/Unit/ConfigManager.Tests.ps1` -- corrupted file recovery test |
+| Recent folders exceeding 5 entries | Protected | `Tests/Unit/ConfigManager.Tests.ps1` -- FIFO max-5 test |
+
+**NOT yet protected by automated tests (manual verification required before each release):**
+- `$PSScriptRoot` empty in PS2EXE (Issue #3) -- requires compiled EXE context
+- `DailyMotivation.ps1` silent exit behavior (Issue #6) -- WPF context required
+- Task Scheduler invocation path (Issues #5, #7) -- live Windows session required

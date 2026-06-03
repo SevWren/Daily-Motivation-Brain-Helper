@@ -8,6 +8,10 @@
 
 ---
 
+> **Note (2026-06-03):** Test-Driven Development infrastructure is now in place (commit 4ba633a).
+> New work items should follow the TDD workflow: write failing test first, implement to pass,
+> refactor. See `TESTING.md` and `docs/CONTRIBUTING.md` for developer workflow.
+
 ## Priority Order
 
 The following order is determined by dependency chain:
@@ -174,3 +178,4 @@ All of the following must be true:
 - [x] SSOT-001 through SSOT-008 all Compliant
 - [x] No user ever edits a JSON, script, or config file
 - [x] Security MEDIUM finding resolved (path validation)
+- Address Notification Engine test coverage gap -- extract pure logic from DailyMotivation.ps1 into testable module (see NOTIFICATION_ENGINE_SPEC.md Testing Approach Roadmap, Option 1)

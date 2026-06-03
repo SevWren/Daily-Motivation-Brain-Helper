@@ -22,6 +22,14 @@
 | Shell Extension | The optional COM DLL that adds "Schedule for Tomorrow at 2 PM" to the Windows Explorer right-click menu (B-13) |
 | History Viewer | The in-app panel displaying past task outcomes parsed from popup_log.txt (B-18) |
 | First-Run Overlay | The one-time onboarding card shown on initial app launch (B-07) |
+| **CI/CD Pipeline** | Automated workflow (`.github/workflows/test.yml`) that runs PSScriptAnalyzer, Pester tests, and PS2EXE compilation on every push and pull request |
+| **Code Coverage** | Percentage of source code lines executed during a Pester test run; project target is 80%+ for module code |
+| **Invoke-Build** | PowerShell build automation framework; project uses it via `.build.ps1` for test, analyze, compile, and package tasks |
+| **Pester** | PowerShell testing framework (v5.x); used for unit and integration tests in `Tests/` |
+| **PSScriptAnalyzer** | Static analysis tool for PowerShell; enforces code quality rules defined in `.PSScriptAnalyzerSettings.psd1` |
+| **Quality Gate** | CI/CD enforcement point: tests must pass, coverage must be >=80%, PSScriptAnalyzer must show zero warnings before a PR can merge |
+| **Tag Filter** | Pester feature for running a subset of tests by category: `Unit`, `Integration`, `Initialization` |
+| **Test Fixture** | Pre-built sample data files in `Tests/Fixtures/` used to simulate realistic inputs in Pester tests |
 
 ## Status
 > v1.1 DRAFT

@@ -192,3 +192,39 @@ Move all 14 approved features from v1.1/v2.0 into v1.0.
 
 ### CHANGELOG.md
 Add Unreleased entries for all 14 approved features.
+
+---
+
+## Addendum: Test Infrastructure Impact (Commit 4ba633a -- 2026-06-03)
+
+**Trigger:** Modern PowerShell engineering scaffold added (Pester, Invoke-Build, CI/CD)
+**Audit methodology:** 5-agent parallel review of 60+ files
+**Agent audit reports:** See `docs/reports/` for full reports
+
+### Documentation Changes Required (25 files identified)
+
+| Document | Change Type | Status |
+|----------|------------|--------|
+| README.md | Add Tests/ to structure, add Testing section | Done (commit 8d6cb0d) |
+| CLAUDE.MD | Fix build ref, update layout, add testing conventions | Done (commit 8d6cb0d) |
+| src/README.md | Add Test Infrastructure section | Done (commit 8d6cb0d) |
+| docs/CONTRIBUTING.md | Add Development Workflow, TDD guidelines | Done (commit 8d6cb0d) |
+| docs/TEST_PLAN.md | Add Automated Testing section | Done (commit 8d6cb0d) |
+| docs/CHANGELOG.md | Add commit 4ba633a entry | Done (commit 8d6cb0d) |
+| docs/ARCHITECTURE.md | Add QA section | Done (Phase 2) |
+| docs/INSTALL.md | Fix build ref, add Developer Setup | Done (Phase 2) |
+| docs/PRD.md | Add validation matrix | Done (Phase 2) |
+| docs/TRACEABILITY_MATRIX.md | Add test coverage section | Done (Phase 2) |
+| docs/DISTRIBUTION_STRATEGY.md | Add build system section | Done (Phase 2) |
+| docs/SPRINT_PLAN.md | Add Sprint 0 | Done (Phase 2) |
+| docs/ROADMAP.md | Add infra milestone | Done (Phase 2) |
+| docs/NOTIFICATION_ENGINE_SPEC.md | Add zero-coverage warning | Done (Phase 2) |
+| docs/CONFIGURATION_SPEC.md | Add test validation notes | Done (Phase 2) |
+| docs/README.md | Add test doc entries | Done (Phase 3) |
+| docs/NPR.md | Add NPR-008, NPR-009, NPR-010 | Done (Phase 3) |
+| docs/RISK_REGISTER.md | Add R-012, R-013, R-014 | Done (Phase 3) |
+| docs/GLOSSARY.md | Add test terminology | Done (Phase 3) |
+| docs/FEATURE_MATRIX.md | Add infra feature rows | Done (Phase 3) |
+| docs/NEXT_STEPS.md | Add TDD workflow note | Done (Phase 3) |
+| docs/FORENSIC_REVIEW.md | Add regression protection section | Done (Phase 3) |
+| Archive session files to docs/reports/ | File moves (11 files) | Done (Phase 0) |
