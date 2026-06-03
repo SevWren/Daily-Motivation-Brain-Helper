@@ -5,7 +5,9 @@
 # =============================================================================
 
 $script:TaskPrefix   = "DailyMotivation_"
-$script:LauncherPath = Join-Path $env:APPDATA "DailyMotivationBrainHelper\LaunchMotivation.bat"
+# Resolve LaunchMotivation.bat from the actual install location (parent of the Modules\ dir).
+# This must NOT point to %APPDATA% -- the .bat lives beside the .ps1 scripts, not in user data.
+$script:LauncherPath = Join-Path (Split-Path $PSScriptRoot -Parent) "LaunchMotivation.bat"
 
 # --- Helper: load tasks.json ---
 function Get-TasksJson {
