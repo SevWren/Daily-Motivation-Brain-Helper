@@ -11,6 +11,36 @@ $script:MessagesPath= Join-Path $script:AppDataDir "messages.json"
 $script:SettingsPath= Join-Path $script:AppDataDir "app_settings.json"
 $script:LogPath     = Join-Path $script:AppDataDir "popup_log.txt"
 
+# =============================================================================
+# ERR-034: Shared error dialog helper.
+# All modules previously used ad-hoc catch blocks with inconsistent patterns.
+# Centralise user-facing error display here so callers are uniform.
+# =============================================================================
+function Show-ErrorDialog {
+    <#
+    .SYNOPSIS
+    Shows a WPF MessageBox with a standardised "Error" title.
+    Safe to call before or after the main window exists.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [string]$Title = "Daily Motivation Brain Helper"
+    )
+    try {
+        [System.Windows.MessageBox]::Show($Message, $Title, "OK", "Error") | Out-Null
+    } catch {
+        # WPF not yet loaded — fall back to Windows Forms dialog
+        try {
+            [System.Windows.Forms.MessageBox]::Show($Message, $Title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        } catch {
+            # Last resort: write to stderr
+            [Console]::Error.WriteLine("ERROR [$Title]: $Message")
+        }
+    }
+}
+
 function Initialize-AppData {
     <#
     .SYNOPSIS

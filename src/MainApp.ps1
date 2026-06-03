@@ -35,6 +35,8 @@ try {
     Import-Module (Join-Path $modulesDir "ConfigManager.psm1") -Force -ErrorAction Stop
     Import-Module (Join-Path $modulesDir "TaskScheduler.psm1") -Force -ErrorAction Stop
 } catch {
+    # ERR-034: use shared Show-ErrorDialog once modules are available; fall back inline here
+    # because Show-ErrorDialog itself lives in ConfigManager which hasn't loaded yet.
     [System.Windows.MessageBox]::Show(
         "Required modules failed to load. Please reinstall the application.`n`n$($_.Exception.Message)",
         "Startup Error", "OK", "Error")
@@ -56,9 +58,7 @@ if ($schedSvc.Status -ne "Running") {
         try {
             Start-Service Schedule -ErrorAction Stop
         } catch {
-            [System.Windows.MessageBox]::Show(
-                "Could not start Task Scheduler. Please run Services.msc and start 'Task Scheduler' manually.",
-                "Error", "OK", "Error")
+            Show-ErrorDialog "Could not start Task Scheduler. Please run Services.msc and start 'Task Scheduler' manually." "Error"
             exit 1
         }
     } else { exit 0 }
@@ -69,9 +69,7 @@ $xamlPath = Join-Path $scriptDir "MainWindow.xaml"
 try {
     [xml]$xaml = Get-Content $xamlPath -Raw -Encoding UTF8 -ErrorAction Stop
 } catch {
-    [System.Windows.MessageBox]::Show(
-        "UI file missing. Please reinstall the application.`n`n$($_.Exception.Message)",
-        "Startup Error", "OK", "Error")
+    Show-ErrorDialog "UI file missing. Please reinstall the application.`n`n$($_.Exception.Message)" "Startup Error"
     exit 1
 }
 
@@ -82,9 +80,7 @@ $reader = [System.Xml.XmlNodeReader]::new($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
 # GAP-005: validate the loaded object is actually a Window
 if ($null -eq $window -or $window -isnot [System.Windows.Window]) {
-    [System.Windows.MessageBox]::Show(
-        "UI failed to load (unexpected root element type). Please reinstall the application.",
-        "Startup Error", "OK", "Error")
+    Show-ErrorDialog "UI failed to load (unexpected root element type). Please reinstall the application." "Startup Error"
     exit 1
 }
 
@@ -251,6 +247,16 @@ function Do-Schedule {
             "Could not create the scheduled task.`n$($result.Error)",
             "Scheduling Failed", "OK", "Error")
         return
+    }
+
+    # GAP-010: Warn if the scheduled folder is on a network path.
+    # Mapped drives may not be available when Task Scheduler fires; UNC paths are safer.
+    if ($result.IsNetworkPath) {
+        [System.Windows.MessageBox]::Show(
+            "Scheduled successfully, but '$FolderPath' appears to be a network location.`n`n" +
+            "The popup may fail to open the folder if the network share is unavailable or the drive is not mapped at 2 PM.`n`n" +
+            "Tip: Use the full UNC path (\\\\server\\share\\...) instead of a mapped drive letter for best reliability.",
+            "Network Path Warning", "OK", "Warning")
     }
 
     # --- Write popup_config.json (TASK-004) ---

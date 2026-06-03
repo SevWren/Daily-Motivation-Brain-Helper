@@ -113,13 +113,20 @@ if (Test-Path $configPath) {
 
 # =============================================================================
 # TASK-007 / B-05: Path validation
+# GAP-003b: Treat null/empty explorer_path as "never configured" — exit cleanly
+#            rather than showing the path-missing panel, which implies a folder
+#            was once set but got moved/deleted.
 # =============================================================================
+if (-not $config.explorer_path -or $config.explorer_path -eq "") {
+    Write-DLog "No folder configured in popup_config.json -- exiting silently" "WARN"
+    if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
+    exit 0
+}
+
 $script:pathMissing = $false
-if ($config.explorer_path -and $config.explorer_path -ne "") {
-    if (-not (Test-Path $config.explorer_path -PathType Container)) {
-        $script:pathMissing = $true
-        Write-DLog "Path missing: '$($config.explorer_path)'" "WARN"
-    }
+if (-not (Test-Path $config.explorer_path -PathType Container)) {
+    $script:pathMissing = $true
+    Write-DLog "Path missing: '$($config.explorer_path)'" "WARN"
 }
 
 # --- Step 4: XAML ---
@@ -330,7 +337,14 @@ if ($script:pathMissing) {
     $titleText.Text = $config.title
     $bodyText.Text  = $config.body
     if ($config.folder_name -and $config.folder_name -ne "") {
-        $folderNameText.Text       = "Opening: $($config.folder_name)"
+        # UB-004: UNC root shares (\\server\share) produce a context-free leaf name.
+        # Show the full path instead so the user knows which server/share is opening.
+        $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
+            $config.explorer_path
+        } else {
+            $config.folder_name
+        }
+        $folderNameText.Text       = "Opening: $displayName"
         $folderNameText.Visibility = "Visible"
     }
 }
@@ -342,6 +356,7 @@ $script:snoozeMinutes   = 5
 $script:firstTick       = $true
 $script:snoozeCount     = 0
 $script:newExplorerPath = ""
+$script:windowClosed    = $false   # UB-002: guard against queued dispatcher tick closing disposed window
 
 # --- Fade-in ---
 $window.Add_Loaded({
@@ -361,7 +376,14 @@ if (-not $script:pathMissing) {
             if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
             $script:remaining--
             $countdownText.Text = $script:remaining
-            if ($script:remaining -le 0) { $timer.Stop(); $script:openExplorer = $true; $window.Close() }
+            # UB-002: check $windowClosed before closing — a queued tick may fire after
+            # $timer.Stop() runs inside the same condition on a previous tick.
+            if ($script:remaining -le 0 -and -not $script:windowClosed) {
+                $timer.Stop()
+                $script:windowClosed = $true
+                $script:openExplorer = $true
+                $window.Close()
+            }
         } catch { Write-DLog "Timer error: $_" "ERROR"; $timer.Stop(); $window.Close() }
     })
     $timer.Start()

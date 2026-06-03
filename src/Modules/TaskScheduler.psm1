@@ -60,9 +60,15 @@ function New-MotivationTask {
         }
     }
 
-    # --- Generate task ID ---
+    # --- Generate task ID (GAP-007: retry on GUID collision — near-impossible but defensive) ---
     $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,8)
     $taskName = "$script:TaskPrefix$taskId"
+    $attempts = 0
+    while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
+        $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+        $taskName = "$script:TaskPrefix$taskId"
+        $attempts++
+    }
 
     # --- Register with Windows Task Scheduler ---
     $triggerStr = $TriggerTime.ToString("yyyy-MM-ddTHH:mm:ss")
@@ -77,10 +83,21 @@ function New-MotivationTask {
         -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
         -MultipleInstances IgnoreNew
 
+    # GAP-010: Detect network/UNC paths. Mapped drives may not be available to the
+    # Task Scheduler session; UNC paths may need higher privilege to access at fire time.
+    # Register with RunLevel Highest for network targets so the task has the best chance
+    # of succeeding. On standard user accounts this equals the user's highest available
+    # privilege (no UAC prompt); on admin accounts it runs elevated.
+    $isNetworkPath = $FolderPath -match '^\\\\' -or (
+        $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':' -and
+        (try { [System.IO.DriveInfo]::new([string]$FolderPath[0]).DriveType -eq [System.IO.DriveType]::Network } catch { $false })
+    )
+    $runLevel = if ($isNetworkPath) { 'Highest' } else { 'Limited' }
+
     $principal = New-ScheduledTaskPrincipal `
         -UserId    $env:USERNAME `
         -LogonType Interactive   `
-        -RunLevel  Limited
+        -RunLevel  $runLevel
 
     try {
         Register-ScheduledTask `
@@ -111,7 +128,7 @@ function New-MotivationTask {
     $tasks += $newTask
     Save-TasksJson $tasks
 
-    return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false }
+    return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false; IsNetworkPath = $isNetworkPath }
 }
 
 function Get-MotivationTasks {
