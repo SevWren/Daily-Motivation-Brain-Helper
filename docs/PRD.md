@@ -1,5 +1,10 @@
 # Product Requirements Document (PRD)
 
+**Last Updated:** 2026-06-03
+**Version:** 1.1 — updated for approved brainstorm features B-01 through B-19
+
+---
+
 ## FR-001 — Folder Selection
 The system shall provide a native Windows folder picker dialog for folder selection.
 
@@ -10,7 +15,7 @@ The system shall persist the selected folder path in a local configuration file 
 The system shall create a Windows Scheduled Task upon folder selection confirmation.
 
 ## FR-004 — Scheduling Time
-The system shall schedule the task for 2:00 PM on the following calendar day.
+The system shall schedule the task for 2:00 PM on the following calendar day by default.
 
 ## FR-005 — Motivational Popup Display
 The system shall display a popup containing a motivational message at the scheduled time.
@@ -19,10 +24,12 @@ The system shall display a popup containing a motivational message at the schedu
 The system shall provide an "Open Folder" button that dismisses the popup and opens Windows Explorer.
 
 ## FR-007 — Popup Snooze
-The system shall provide a "Snooze" button that dismisses the popup temporarily.
+The system shall provide a "Snooze" split-button that dismisses the popup temporarily.
+**Updated (B-10):** The snooze split-button shall offer duration options: 5 min (default), 15 min, 30 min, 1 hour.
 
 ## FR-008 — Snooze Repeat Interval
-The system shall reschedule the popup to reappear exactly 5 minutes after snooze is activated.
+The system shall reschedule the popup to reappear after the user-selected snooze duration.
+**Updated (B-10):** Duration is selected per snooze action; default is 5 minutes.
 
 ## FR-009 — Windows Explorer Launch
 The system shall launch Windows Explorer pointed at the scheduled folder path upon acceptance.
@@ -34,7 +41,46 @@ The system shall open the folder directly in Explorer without additional user st
 The system shall allow users to delete scheduled tasks via the main UI.
 
 ## FR-012 — Message Management
-The system shall allow users to view, add, edit, and delete motivational messages via the main UI.
+The system shall display a default library of motivational messages. Custom add/edit/delete deferred to v1.1.
+
+## FR-013 — Remember Last Folder (B-01)
+The system shall persist the most recently scheduled folder path. On subsequent launches, the app shall display a one-click banner: "Schedule same folder as last time? [Yes, Schedule] [Choose Different]"
+
+## FR-014 — Recent Folders List (B-02)
+The system shall maintain a list of up to 5 recently scheduled folders. Each entry shall be displayed with a "Schedule Again" button.
+
+## FR-015 — Schedule For Today (B-03)
+When current local time is before 14:00, the system shall offer "Today at 2:00 PM" as a scheduling option alongside "Tomorrow at 2:00 PM".
+
+## FR-016 — Undo Schedule (B-04)
+After a successful task creation, the system shall display an undo banner for 30 seconds with an [Undo] button and countdown. Clicking [Undo] shall delete the task and restore the UI.
+
+## FR-017 — Moved Folder Re-Pick Prompt (B-05)
+At popup time, if the scheduled folder path is invalid, the popup shall transform to show: "This folder was moved or deleted." with [Choose New Location] and [Dismiss] buttons.
+
+## FR-018 — First-Run Welcome Screen (B-07)
+On first launch, the system shall display a fullscreen onboarding overlay explaining Pick Folder → Schedule → Opens at 2 PM. Dismissed by "Got it" and never shown again.
+
+## FR-019 — Drag-and-Drop Folder Selection (B-09)
+The main window shall accept folders dragged from Windows Explorer and treat them as if selected via the picker dialog.
+
+## FR-020 — Dismiss for Today (B-11)
+The popup shall provide a "Dismiss for Today" button that cancels all snooze re-triggers for the current task without opening the folder.
+
+## FR-021 — Show Folder Name in Popup (B-12)
+The popup shall display the scheduled folder's leaf name as a subtitle: "Opening: [FolderName]"
+
+## FR-022 — Windows Explorer Shell Extension (B-13)
+The system shall provide an optional shell extension adding "Schedule for Tomorrow at 2 PM" to the Explorer right-click context menu on folders.
+
+## FR-023 — Duplicate Schedule Warning (B-16)
+Before creating a new task, the system shall check for an existing task with the same folder and date. If found, show a confirmation dialog before proceeding.
+
+## FR-024 — Task History / Outcome Log Viewer (B-18)
+The main window shall include a History panel showing past task outcomes: Date, Folder Name, Outcome (Opened / Snoozed N times / Dismissed / Missed), newest first, max 30 entries.
+
+## FR-025 — Tooltips on All UI Controls (B-19)
+Every interactive control shall have a plain-English ToolTip with no technical jargon.
 
 ## Status
-> DRAFT
+> v1.1 DRAFT

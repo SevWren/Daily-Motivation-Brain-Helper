@@ -1,5 +1,7 @@
 # Configuration Specification
 
+**Last Updated:** 2026-06-03
+
 ## Overview
 All application configuration is stored in JSON files managed exclusively by the application. The user never edits these files.
 
@@ -7,10 +9,11 @@ All application configuration is stored in JSON files managed exclusively by the
 
 | File | Path | Purpose |
 |------|------|---------|
-| popup_config.json | `{app_dir}\popup_config.json` | Active task config for popup script |
+| popup_config.json | `%APPDATA%\DailyMotivationBrainHelper\popup_config.json` | Active task config for popup script |
 | tasks.json | `%APPDATA%\DailyMotivationBrainHelper\tasks.json` | All scheduled tasks |
 | messages.json | `%APPDATA%\DailyMotivationBrainHelper\messages.json` | Message library |
-| app_settings.json | `%APPDATA%\DailyMotivationBrainHelper\app_settings.json` | User preferences |
+| app_settings.json | `%APPDATA%\DailyMotivationBrainHelper\app_settings.json` | User preferences and state |
+| popup_log.txt | `%APPDATA%\DailyMotivationBrainHelper\popup_log.txt` | Structured outcome log |
 
 ## popup_config.json Schema
 ```json
@@ -18,15 +21,41 @@ All application configuration is stored in JSON files managed exclusively by the
   "glyph": "string",
   "title": "string",
   "body": "string",
-  "explorer_path": "string (absolute Windows path)"
+  "explorer_path": "string (absolute Windows path)",
+  "folder_name": "string (leaf name only — B-12)",
+  "task_id": "string (UUID — for snooze lookup)"
 }
 ```
+**New (B-12):** `folder_name` — leaf directory name displayed as popup subtitle.
+
+## app_settings.json Schema
+```json
+{
+  "firstRun": true,
+  "lastFolder": "string (absolute path — B-01)",
+  "recentFolders": ["path1", "path2", "path3"],
+  "theme": "dark"
+}
+```
+**New (B-07):** `firstRun` — set to `false` after welcome overlay is dismissed.
+**New (B-01):** `lastFolder` — path of last successfully scheduled folder.
+**New (B-02):** `recentFolders` — array of up to 5 paths, FIFO, newest first.
+
+## popup_log.txt Format
+Pipe-delimited, one entry per line (B-18):
+```
+[YYYY-MM-DD HH:mm:ss] | task_id | folder_name | folder_path | outcome | snooze_count
+```
+Outcomes: `Opened`, `Snoozed`, `Dismissed`, `PathMissing`
 
 ## Encoding
-All JSON files must be saved as UTF-8 with BOM to ensure correct parsing by PowerShell 5.1.
+All JSON files saved as UTF-8 with BOM for PowerShell 5.1 compatibility.
+
+## Initialization
+`ConfigManager.psm1` exposes `Initialize-AppData` which creates the `%APPDATA%\DailyMotivationBrainHelper\` directory and all JSON files with defaults if they do not exist. Called at every app startup.
 
 ## Migration
-Future versions must support reading older config formats and migrating them forward automatically.
+Future versions must support reading older config formats and migrating forward automatically.
 
 ## Status
-> DRAFT
+> v1.1 DRAFT
