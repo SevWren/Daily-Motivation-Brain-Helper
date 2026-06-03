@@ -1,5 +1,7 @@
 # GAP Analysis — Current Prototype vs. Full Specification
 
+> **Historical Document:** This analysis was conducted on the initial prototype before the full application was implemented. All gaps identified here have since been resolved. The current codebase implements all modules listed as "Not Started" or "Partial" below. Retained for audit trail purposes only.
+
 **Review Date:** 2026-06-02  
 **Prototype:** `src/` (DailyMotivation.ps1, LaunchMotivation.bat, UpdateScheduledTask.ps1, popup_config.json)  
 **Spec Baseline:** `docs/` (27 planning documents)  
@@ -24,6 +26,19 @@ All other modules are either stubs or entirely absent.
 ---
 
 ## Module Completion Status
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| Notification Engine | ✅ Implemented | WPF popup, countdown, fade-in, snooze engine, dismiss for today, path re-pick |
+| Explorer Launcher | ✅ Implemented | `Start-Process explorer.exe` with path validation |
+| Task Scheduler Module | ✅ Implemented | Full CRUD API with duplicate check, network path detection |
+| Configuration Manager | ✅ Implemented | Full JSON I/O, settings, log, error dialogs |
+| Snooze Engine | ✅ Implemented | Duration-parameterised re-trigger (5/15/30/60 min) |
+| Motivation Repository | ✅ Implemented | 10 default messages, random selection |
+| Folder Picker Module | ✅ Implemented | GUI picker + drag-and-drop in `MainApp.ps1` |
+| Main Application Window | ✅ Implemented | Full WPF window with all features |
+
+(Original prototype assessment below, retained for reference)
 
 | Module (from ARCHITECTURE.md) | Status | Notes |
 |-------------------------------|--------|-------|

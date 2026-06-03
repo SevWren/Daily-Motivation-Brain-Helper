@@ -9,7 +9,7 @@ The Task Scheduler Module wraps Windows Task Scheduler to create, query, and del
 
 ```powershell
 # Create a new scheduled task
-New-MotivationTask -FolderPath <string> -TriggerTime <datetime> -> task_id: string
+New-MotivationTask -FolderPath <string> -TriggerTime <datetime> [-Force] -> @{ Success: bool; TaskId: string; IsDuplicate: bool; IsNetworkPath: bool; Error?: string }
 
 # List all active tasks
 Get-MotivationTasks -> ScheduledTask[]
@@ -21,7 +21,7 @@ Remove-MotivationTask -TaskId <string> -> bool
 Get-MotivationTaskStatus -TaskId <string> -> TaskStatus
 ```
 
-**Updated (B-03):** `New-MotivationTask` accepts an explicit `TriggerTime` parameter. The caller determines whether to schedule for today or tomorrow. The module does not hardcode "tomorrow at 14:00."
+**Updated (B-03):** `New-MotivationTask` accepts an explicit `TriggerTime` parameter. The caller determines whether to schedule for today or tomorrow. The module does not hardcode "tomorrow at 14:00." The optional `-Force` parameter overrides the duplicate check, allowing a new task to be created even when a PENDING task for the same path and date already exists.
 
 ## Pre-Conditions for New-MotivationTask (B-16)
 
@@ -36,7 +36,7 @@ Before registering a new task, the module MUST:
 |----------|-------|
 | Task Name | `DailyMotivation_{task_id}` |
 | Trigger | One-time, at caller-specified `TriggerTime` |
-| Action | `cmd.exe /c "%APPDATA%\DailyMotivationBrainHelper\LaunchMotivation.bat"` |
+| Action | `cmd.exe /c "<app_install_dir>\LaunchMotivation.bat"` (resolved at runtime from module's install location) |
 | Run Level | Limited (no elevation required) |
 | Logon Type | Interactive |
 | Run At Logon If Missed | True (NPR-004 recovery) |
@@ -65,4 +65,4 @@ The shell extension invokes `ShellBridge.ps1` with the right-clicked folder path
 - ExecutionPolicy bypass scoped to this task only
 
 ## Status
-> v1.1 DRAFT
+> v1.1

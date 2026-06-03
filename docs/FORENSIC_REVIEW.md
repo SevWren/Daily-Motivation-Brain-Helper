@@ -6,6 +6,22 @@
 **Scope:** All bugs, gaps, unhandled error conditions, and unintended behaviors
 **Out of Scope:** `ShellExtension/` directory — dropped from product scope (user confirmed: app launches via `.exe` only; no right-click context menu feature required)
 
+## Resolution Status — All Findings Resolved
+
+**Resolution Date:** 2026-06-03
+**Resolution Method:** Phase 1-A through Phase 1-E commit series (see HANDOFF2.md for commit history)
+
+All 38 in-scope findings documented below have been resolved in the current codebase. The findings are retained for audit trail and historical reference only. Do not treat them as outstanding issues.
+
+| Commit Phase | Findings Resolved |
+|-------------|------------------|
+| Phase 1-A | GAP-002, ERR-017, GAP-035 (critical path fixes) |
+| Phase 1-B | ERR-001, UB-001, ERR-003 |
+| Phase 1-C | ERR-002, ERR-004, BUG-009 |
+| Phase 1-D | GAP-003, ERR-008, GAP-004, ERR-005b, BUG-005, GAP-001 |
+| Phase 1-E | BUG-001, ERR-005, UB-003, GAP-005, GAP-006 |
+| Phase 2-4 | GAP-007, GAP-010, GAP-003b, UB-002, UB-004, ERR-034, BUG-011, BUG-004, BUG-003, GAP-014, XAML-016, BUG-015, ERR-013 |
+
 ---
 
 ## Executive Summary
@@ -22,11 +38,11 @@
 
 ### Show-Stopper Risks (Fix Before Anything Else)
 
-| # | ID | Risk | Impact |
-|---|-----|------|--------|
-| 1 | GAP-002 | `LauncherPath` in `TaskScheduler.psm1` points to `%APPDATA%` where `LaunchMotivation.bat` is **never copied**. | Every scheduled task fires and silently fails. Core feature is completely broken. |
-| 2 | GAP-035 | No code-behind file exists for `MainWindow.xaml`. | All buttons (Select Folder, Schedule, Delete, Undo, Clear History) do nothing when clicked. |
-| 3 | ERR-017 | WPF requires STA thread. No `-STA` flag enforced in launcher chain. | App crashes on load on most systems: *"The calling thread must be STA, because many UI components require this."* |
+| # | ID | Risk | Impact | Status |
+|---|-----|------|--------|--------|
+| 1 | GAP-002 | `LauncherPath` in `TaskScheduler.psm1` points to `%APPDATA%` where `LaunchMotivation.bat` is **never copied**. | Every scheduled task fires and silently fails. Core feature is completely broken. | RESOLVED — `LauncherPath` now resolved from module's `$PSScriptRoot` (install dir) |
+| 2 | GAP-035 | No code-behind file exists for `MainWindow.xaml`. | All buttons (Select Folder, Schedule, Delete, Undo, Clear History) do nothing when clicked. | RESOLVED — Full code-behind implemented in `MainApp.ps1` |
+| 3 | ERR-017 | WPF requires STA thread. No `-STA` flag enforced in launcher chain. | App crashes on load on most systems: *"The calling thread must be STA, because many UI components require this."* | RESOLVED — `-STA` flag present in `LaunchMotivation.bat` |
 
 ---
 

@@ -58,7 +58,7 @@ At Scheduled Time (2 PM):
 │  │  If missing → Re-Pick UI          │  │
 │  └───────────────────────────────────┘  │
 │                                          │
-│  Named Mutex: Global\DailyMotivation    │
+│  Named Mutex: Global\DailyMotivationBrainHelperPopup    │
 │  (SSOT-006 enforcement)                  │
 └──────────────────────────────────────────┘
 
@@ -95,4 +95,4 @@ Optional (Sprint 4):
 - Shell Extension: .NET Framework 4.x COM-visible DLL
 
 ## Status
-> v1.1 DRAFT
+> v1.1

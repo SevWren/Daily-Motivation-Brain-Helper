@@ -246,11 +246,11 @@ MSIX provides the best OS integration, automatic updates, and clean uninstall. T
 
 Before packaging with any method, confirm these items are resolved:
 
-- [ ] **GAP-002** fixed: `LauncherPath` correctly points to the app's actual install/run location
-- [ ] **ERR-017** fixed: `-STA` flag present in launcher; WPF loads without crash
-- [ ] **GAP-035** addressed: Code-behind event handlers implemented for all buttons
-- [ ] **BUG-011** fixed: All `Set-Content` calls use `-Encoding UTF8`
-- [ ] **BUG-004** fixed: Empty task array JSON round-trip returns `@()` not `$null`
+- [x] **GAP-002** fixed: `LauncherPath` correctly points to the app's actual install/run location
+- [x] **ERR-017** fixed: `-STA` flag present in launcher; WPF loads without crash
+- [x] **GAP-035** addressed: Code-behind event handlers implemented for all buttons
+- [x] **BUG-011** fixed: All `Set-Content` calls use `-Encoding UTF8`
+- [x] **BUG-004** fixed: Empty task array JSON round-trip returns `@()` not `$null`
 - [ ] End-to-end test: Schedule a folder → wait for task to fire → confirm Explorer opens
 - [ ] End-to-end test: Snooze the popup → confirm it reappears after 5 minutes
 - [ ] End-to-end test: Delete a task → confirm it is removed from both `tasks.json` and Windows Task Scheduler

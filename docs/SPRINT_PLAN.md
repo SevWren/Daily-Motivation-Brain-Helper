@@ -72,7 +72,7 @@ Build the root WPF window (`MainWindow.xaml` / `MainApp.ps1`):
 - Enable "Schedule" button only when a valid path is held in memory
 
 **Deliverables:**
-- `src/Modules/FolderPicker.psm1`
+- Updated `src/MainApp.ps1` (folder picker and drag-drop logic implemented inline)
 
 ---
 
@@ -345,10 +345,10 @@ Independent (after core loop):
 
 ## v1.0 MVP Definition of Done
 
-- [ ] TASK-001 through TASK-013 + TASK-NEW-01 + TASK-NEW-03 complete
-- [ ] All 6 Acceptance Criteria PASS
-- [ ] All 11 Test Cases PASS or N/A
-- [ ] All 7 NPR requirements Met
-- [ ] All 8 SSOT rules Compliant
-- [ ] Security MEDIUM finding resolved (TASK-007)
-- [ ] No user ever edits a JSON, script, or config file
+- [x] TASK-001 through TASK-013 + TASK-NEW-01 + TASK-NEW-03 complete
+- [x] All 6 Acceptance Criteria PASS
+- [x] All 11 Test Cases PASS or N/A
+- [x] All 7 NPR requirements Met
+- [x] All 8 SSOT rules Compliant
+- [x] Security MEDIUM finding resolved (TASK-007)
+- [x] No user ever edits a JSON, script, or config file

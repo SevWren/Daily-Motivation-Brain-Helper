@@ -32,12 +32,12 @@ Windows desktop application that allows users to:
 2. **Feature Brainstorming** - 20 features proposed, 14 approved:
    - Approved: B-01, B-02, B-03, B-04, B-05, B-07, B-09, B-10, B-11, B-12, B-13, B-16, B-18, B-19
    - Rejected: B-06, B-08, B-14, B-15, B-17, B-20
-   - Details in `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/docs/REVISED_SPRINT_PLAN.md`
+   - Details in docs/SPRINT_PLAN.md
 
 3. **Multi-Agent Code Review** - Forensic analysis completed:
    - 55 findings documented (bugs, gaps, error handling, unintended behavior)
    - Findings organized by phase/priority
-   - Report in `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/docs/CODE_REVIEW_FINDINGS.md`
+   - Report in docs/FORENSIC_REVIEW.md
 
 4. **Skills Installation**:
    - Installed from mattpocock/skills: engineering, in-progress, misc, personal, productivity
@@ -87,6 +87,8 @@ User wants **single EXE** distribution - no multi-file extraction. Suggested app
 
 ## Next Steps
 
+> **Note:** All Phase 1–4 fixes documented here have been completed. See HANDOFF2.md for the current state and next steps toward distribution packaging.
+
 ### Immediate Priorities
 
 1. **Continue Phase 1 Fixes** - Work through remaining high-priority findings:
@@ -118,9 +120,9 @@ User wants **single EXE** distribution - no multi-file extraction. Suggested app
 ## Key Documentation References
 
 All documentation in `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/docs/`:
-- `CODE_REVIEW_FINDINGS.md` - All 55 bugs/gaps/errors
-- `REVISED_SPRINT_PLAN.md` - Sprint breakdown with approved features
-- `PRD.md` - Functional requirements (FR-001 through FR-012)
+- `FORENSIC_REVIEW.md` - All 55 bugs/gaps/errors
+- `SPRINT_PLAN.md` - Sprint breakdown with approved features
+- `PRD.md` - Functional requirements (FR-001 through FR-025)
 - `NPR.md` - Non-product requirements (simplicity, accessibility)
 - `ARCHITECTURE.md` - System components and flow
 - `TRACEABILITY_MATRIX.md` - Requirement to test mapping

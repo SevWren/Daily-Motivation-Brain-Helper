@@ -20,10 +20,16 @@ That's it. The application is now installed.
 ## Step 4 — Use It
 Run the main application to pick a folder and schedule it for tomorrow at 2 PM.
 
+Run the main application:
+```powershell
+powershell.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
+```
+Or double-click `src\DailyMotivation.exe` if you built the EXE with `build.ps1`.
+
 ## Uninstallation
-1. Delete the scheduled task: open Task Scheduler, find "Open Claude Folder Daily", right-click → Delete
+1. Delete scheduled tasks: open Task Scheduler, find tasks named "DailyMotivationBrainHelper_Launcher" and any "DailyMotivation_*" tasks, right-click each → Delete
 2. Delete the application folder
 
 ## Troubleshooting
-- Check `%TEMP%\DailyMotivation_debug.log` for diagnostic output
-- Check `C:\daily_moti\launch_log.txt` for launcher output
+- Check `%TEMP%\DailyMotivation_debug.log` for popup script trace
+- Check `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` for launcher output

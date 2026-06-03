@@ -1,3 +1,5 @@
+> **Historical Document:** All tasks listed below have been completed. This backlog was generated from the initial prototype gap analysis. See SPRINT_PLAN.md for the full feature sprint breakdown and HANDOFF2.md for completion status.
+
 # Next Steps — Prioritized Implementation Backlog
 
 **Generated:** 2026-06-02  
@@ -165,10 +167,10 @@ Independent:
 
 All of the following must be true:
 
-- [ ] TASK-001 through TASK-009 complete
-- [ ] AC-001 through AC-006 all PASS
-- [ ] TC-001 through TC-011 all PASS or N/A
-- [ ] NPR-001 through NPR-007 all Met
-- [ ] SSOT-001 through SSOT-008 all Compliant
-- [ ] No user ever edits a JSON, script, or config file
-- [ ] Security MEDIUM finding resolved (path validation)
+- [x] TASK-001 through TASK-009 complete
+- [x] AC-001 through AC-006 all PASS
+- [x] TC-001 through TC-011 all PASS or N/A
+- [x] NPR-001 through NPR-007 all Met
+- [x] SSOT-001 through SSOT-008 all Compliant
+- [x] No user ever edits a JSON, script, or config file
+- [x] Security MEDIUM finding resolved (path validation)

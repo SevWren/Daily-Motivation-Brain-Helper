@@ -221,8 +221,8 @@ Tasks in `tasks.json` follow this schema:
 
 ```json
 {
-  "task_id": "a1b2c3d4",
-  "task_name": "DailyMotivation_a1b2c3d4",
+  "task_id": "a1b2c3d4e5f6a7b8",
+  "task_name": "DailyMotivation_a1b2c3d4e5f6a7b8",
   "folder_path": "C:\\Projects\\ClientA",
   "folder_name": "ClientA",
   "scheduled_time": "2026-06-04T14:00:00",
@@ -235,7 +235,7 @@ Tasks in `tasks.json` follow this schema:
 
 Status values: `PENDING` | `COMPLETED` | `SNOOZED` | `DISMISSED` | `DELETED`
 
-Task names are always `DailyMotivation_` + 8-char hex GUID substring.
+Task names are always `DailyMotivation_` + 16-char hex GUID substring.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-03
 **Repository:** https://github.com/SevWren/Daily-Motivation-Brain-Helper
-**Local Clone:** `/home/vercel-sandbox/daily-motivation`
+**Local Clone:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper`
 **Previous Handoff:** `docs/HANDOFF.md`
 
 ---
@@ -12,7 +12,7 @@
 ### 1. Repo Cloned Fresh
 
 ```
-git clone https://github.com/SevWren/Daily-Motivation-Brain-Helper.git /home/vercel-sandbox/daily-motivation
+git clone https://github.com/SevWren/Daily-Motivation-Brain-Helper.git /home/vercel-sandbox/Daily-Motivation-Brain-Helper
 ```
 
 ### 2. Skills Installed
