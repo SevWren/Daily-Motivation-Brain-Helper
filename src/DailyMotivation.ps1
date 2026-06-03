@@ -77,6 +77,10 @@ trap {
     break
 }
 
+# GAP-004: capture $PSScriptRoot at startup -- it may not resolve correctly inside
+# WPF dispatcher callbacks (async event handlers). All event handlers reference this.
+$script:ModulesPath = Join-Path $PSScriptRoot "Modules"
+
 # --- Step 2: Paths ---
 $appDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
 $configPath = Join-Path $appDataDir "popup_config.json"
@@ -388,8 +392,8 @@ $snoozeBtn.Add_Click({
         if (-not $script:pathMissing) { $timer.Stop() }
         $script:snoozeCount++
         $script:openExplorer = $false
-        # Register re-trigger task
-        $modulePath = Join-Path $PSScriptRoot "Modules\TaskScheduler.psm1"
+        # Register re-trigger task (use $script:ModulesPath -- GAP-004)
+        $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
         if (Test-Path $modulePath) {
             Import-Module $modulePath -Force -ErrorAction SilentlyContinue
             $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes)
@@ -406,7 +410,8 @@ $dismissBtn.Add_Click({
         Write-DLog "Dismiss for Today clicked"
         if (-not $script:pathMissing) { $timer.Stop() }
         $script:openExplorer = $false
-        $modulePath = Join-Path $PSScriptRoot "Modules\TaskScheduler.psm1"
+        # Use $script:ModulesPath -- GAP-004
+        $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
         if (Test-Path $modulePath -and $config.explorer_path) {
             Import-Module $modulePath -Force -ErrorAction SilentlyContinue
             $pending = Get-MotivationTasks | Where-Object {

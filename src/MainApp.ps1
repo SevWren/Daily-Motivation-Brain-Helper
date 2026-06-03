@@ -268,8 +268,12 @@ function Get-RandomMessage {
     $messagesPath = Join-Path $env:APPDATA "DailyMotivationBrainHelper\messages.json"
     $srcPath      = Join-Path $scriptDir "data\messages.json"
 
-    # Copy bundled messages on first run
+    # Copy bundled messages on first run (ERR-005b: ensure dest dir exists first)
     if (-not (Test-Path $messagesPath) -and (Test-Path $srcPath)) {
+        $destDir = Split-Path $messagesPath
+        if (-not (Test-Path $destDir)) {
+            New-Item -ItemType Directory -Path $destDir -Force | Out-Null
+        }
         Copy-Item $srcPath $messagesPath -Force
     }
 

@@ -15,10 +15,25 @@ function Initialize-AppData {
     <#
     .SYNOPSIS
     Creates %APPDATA%\DailyMotivationBrainHelper\ and default JSON files if absent.
+    Falls back to %TEMP%\DailyMotivationBrainHelper\ if %APPDATA% is unavailable (GAP-003).
     Call at every app startup.
     #>
     if (-not (Test-Path $script:AppDataDir)) {
-        New-Item -ItemType Directory -Path $script:AppDataDir -Force | Out-Null
+        try {
+            New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
+        } catch {
+            # %APPDATA% unavailable (permission denied, disk quota, roaming redirect failure).
+            # Fall back to %TEMP% so the app can still run.
+            $fallback = Join-Path $env:TEMP "DailyMotivationBrainHelper"
+            Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir' ($_). Falling back to '$fallback'."
+            New-Item -ItemType Directory -Path $fallback -Force | Out-Null
+            $script:AppDataDir   = $fallback
+            $script:ConfigPath   = Join-Path $script:AppDataDir "popup_config.json"
+            $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
+            $script:MessagesPath = Join-Path $script:AppDataDir "messages.json"
+            $script:SettingsPath = Join-Path $script:AppDataDir "app_settings.json"
+            $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+        }
     }
 
     # app_settings.json

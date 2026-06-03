@@ -121,8 +121,19 @@ function Get-MotivationTasks {
     $tasks = Get-TasksJson
     foreach ($t in $tasks) {
         if ($t.status -eq "PENDING") {
-            $wt = Get-ScheduledTask -TaskName $t.task_name -ErrorAction SilentlyContinue
-            if ($null -eq $wt) { $t.status = "DELETED" }
+            try {
+                $wt = Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop
+                # Task exists in scheduler — status stays PENDING
+            } catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+                # ObjectNotFoundException: task is genuinely gone — mark deleted (ERR-008)
+                $t.status = "DELETED"
+            } catch [System.UnauthorizedAccessException] {
+                # Access denied: task exists but we can't read it — do NOT mark deleted (ERR-008)
+                Write-Warning "Get-MotivationTasks: access denied reading task '$($t.task_name)' — skipping status update."
+            } catch {
+                # Unknown error — treat as possibly-still-present, log and skip
+                Write-Warning "Get-MotivationTasks: unexpected error for '$($t.task_name)': $_"
+            }
         }
     }
     Save-TasksJson $tasks

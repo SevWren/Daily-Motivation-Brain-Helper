@@ -17,7 +17,15 @@ set APP_DATA_DIR=%APPDATA%\DailyMotivationBrainHelper
 set LAUNCH_LOG=%APP_DATA_DIR%\launch_log.txt
 set PS_LOG=%APP_DATA_DIR%\launch_ps.log
 set PS_SCRIPT=%APP_DIR%\DailyMotivation.ps1
-set PS_EXE=C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+REM GAP-001: use %SystemRoot%-relative path instead of hard-coded C:\Windows
+set PS_EXE=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe
+if not exist "%PS_EXE%" (
+    for /f "delims=" %%i in ('where powershell 2^>nul') do set PS_EXE=%%i
+)
+if not exist "%PS_EXE%" (
+    echo [%date% %time%] ERROR: powershell.exe not found >> "%LAUNCH_LOG%"
+    exit /b 1
+)
 
 REM Ensure app data dir exists
 if not exist "%APP_DATA_DIR%" mkdir "%APP_DATA_DIR%"
@@ -37,12 +45,12 @@ if not exist "%PS_SCRIPT%" (
 echo [%date% %time%] Script found. Launching... >> "%LAUNCH_LOG%"
 
 REM Launch PowerShell with all defensive flags
-REM   -STA           : required for WPF
+REM   -STA           : required for WPF (ERR-017)
 REM   -NoProfile     : skip profile scripts (prevent profile crash)
-REM   -NonInteractive: suppress interactive prompts
+REM   NOTE: -NonInteractive removed (BUG-005) -- it hides all unhandled error dialogs
 REM   -WindowStyle Hidden: no console window
 REM   -ExecutionPolicy Bypass: skip policy for this invocation only
-"%PS_EXE%" -NoProfile -NonInteractive -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "%PS_SCRIPT%" >> "%PS_LOG%" 2>&1
+"%PS_EXE%" -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "%PS_SCRIPT%" >> "%PS_LOG%" 2>&1
 
 set EXIT_CODE=!errorlevel!
 echo [%date% %time%] PowerShell exited with code !EXIT_CODE! >> "%LAUNCH_LOG%"
