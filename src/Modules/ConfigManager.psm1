@@ -111,7 +111,10 @@ function Add-RecentFolder {
     #>
     param([string]$FolderPath)
     $s = Get-AppSettings
-    $existing = if ($null -eq $s.recentFolders) { @() } else { [System.Collections.Generic.List[string]]$s.recentFolders }
+    # BUG-001: ConvertFrom-Json returns PSCustomObject arrays, not [string[]].
+    # Force-enumerate through @() and filter nulls before constructing the List.
+    $raw      = if ($null -eq $s.recentFolders) { @() } else { @($s.recentFolders) }
+    $existing = [System.Collections.Generic.List[string]]($raw | Where-Object { $_ })
     # Remove if already present, then prepend
     $existing.Remove($FolderPath) | Out-Null
     $existing.Insert(0, $FolderPath)
@@ -170,8 +173,11 @@ function Get-OutcomeLog {
     #>
     param([int]$Limit = 30)
     if (-not (Test-Path $script:LogPath)) { return @() }
-    $lines = Get-Content $script:LogPath -Encoding UTF8 | Where-Object { $_ -match '^\[' } | Select-Object -Last $Limit
+    $lines = @(Get-Content $script:LogPath -Encoding UTF8 | Where-Object { $_ -match '^\[' } | Select-Object -Last $Limit)
+    # UB-003: guard against null/empty before reversing
+    if (-not $lines -or $lines.Count -eq 0) { return @() }
     $entries = foreach ($line in [Linq.Enumerable]::Reverse([string[]]$lines)) {
+        if (-not $line) { continue }   # skip null elements
         $parts = $line -split '\s*\|\s*'
         if ($parts.Count -ge 6) {
             [PSCustomObject]@{
@@ -182,6 +188,9 @@ function Get-OutcomeLog {
                 Outcome     = $parts[4].Trim()
                 SnoozeCount = [int]($parts[5].Trim())
             }
+        } else {
+            # ERR-005: log malformed entries so corruption is diagnosable
+            Write-Verbose "Get-OutcomeLog: skipping malformed line: $line"
         }
     }
     return $entries

@@ -47,9 +47,11 @@ function New-MotivationTask {
     )
 
     # --- Duplicate check (B-16) ---
+    # GAP-006: Windows paths are case-insensitive; normalise before comparing.
+    $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
-            $_.folder_path -eq $FolderPath -and
+            [System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -eq $normalizedInput -and
             ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date -and
             $_.status -eq "PENDING"
         }

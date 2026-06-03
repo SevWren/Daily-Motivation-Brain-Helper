@@ -80,6 +80,13 @@ $xaml.Window.RemoveAttribute("x:Class")
 
 $reader = [System.Xml.XmlNodeReader]::new($xaml)
 $window = [Windows.Markup.XamlReader]::Load($reader)
+# GAP-005: validate the loaded object is actually a Window
+if ($null -eq $window -or $window -isnot [System.Windows.Window]) {
+    [System.Windows.MessageBox]::Show(
+        "UI failed to load (unexpected root element type). Please reinstall the application.",
+        "Startup Error", "OK", "Error")
+    exit 1
+}
 
 # --- Get named controls ---
 function Find { param($n) $window.FindName($n) }
