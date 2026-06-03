@@ -16,7 +16,7 @@
 #Requires -Version 5.1
 
 # --- Step 0: Debug log ---
-$debugLog     = Join-Path $env:TEMP "DailyMotivation_debug.log"
+$debugLog = Join-Path $env:TEMP "DailyMotivation_debug.log"
 $errorLogPath = Join-Path $env:TEMP "DailyMotivation_error.log"
 
 function Write-DLog {
@@ -33,7 +33,8 @@ try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
     Add-Type -AssemblyName System.Windows.Forms
     Write-DLog "Assemblies loaded OK"
-} catch {
+}
+catch {
     Write-DLog "FATAL: Assembly load failed - $_" "ERROR"
     exit 1
 }
@@ -41,18 +42,19 @@ try {
 # =============================================================================
 # TASK-006: Named mutex -- enforce SSOT-006 (one popup at a time)
 # =============================================================================
-$mutexName  = "Global\DailyMotivationBrainHelperPopup"
+$mutexName = "Global\DailyMotivationBrainHelperPopup"
 $mutexOwned = $false
-$mutex      = $null
+$mutex = $null
 try {
-    $mutex      = [System.Threading.Mutex]::new($false, $mutexName)
+    $mutex = [System.Threading.Mutex]::new($false, $mutexName)
     $mutexOwned = $mutex.WaitOne(0)
     if (-not $mutexOwned) {
         Write-DLog "Mutex already held -- another popup is running. Exiting." "WARN"
         exit 0
     }
     Write-DLog "Mutex acquired"
-} catch [System.Threading.AbandonedMutexException] {
+}
+catch [System.Threading.AbandonedMutexException] {
     $mutexOwned = $true
     Write-DLog "Acquired abandoned mutex -- checking for stale popup window" "WARN"
     # Prior process crashed. Wait briefly, then verify no stale popup is still visible.
@@ -66,7 +68,8 @@ try {
         if ($mutex) { try { $mutex.ReleaseMutex() } catch {} }
         exit 0
     }
-} catch {
+}
+catch {
     Write-DLog "Mutex error (non-fatal): $_" "WARN"
 }
 
@@ -84,7 +87,7 @@ $script:ModulesPath = Join-Path $PSScriptRoot "Modules"
 # --- Step 2: Paths ---
 $appDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
 $configPath = Join-Path $appDataDir "popup_config.json"
-$logPath    = Join-Path $appDataDir "popup_log.txt"
+$logPath = Join-Path $appDataDir "popup_log.txt"
 
 Write-DLog "Config path: $configPath"
 
@@ -103,17 +106,19 @@ if (Test-Path $configPath) {
         $loaded = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
         $config = $loaded
         Write-DLog "Config loaded. title='$($config.title)' folder='$($config.folder_name)'"
-    } catch {
+    }
+    catch {
         Write-DLog "Config parse failed: $($_.Exception.Message)" "WARN"
         Write-DLog "Config parse inner: $($_.Exception.InnerException)" "WARN"
     }
-} else {
+}
+else {
     Write-DLog "Config file not found - using defaults" "WARN"
 }
 
 # =============================================================================
 # TASK-007 / B-05: Path validation
-# GAP-003b: Treat null/empty explorer_path as "never configured" — exit cleanly
+# GAP-003b: Treat null/empty explorer_path as "never configured" - exit cleanly
 #            rather than showing the path-missing panel, which implies a folder
 #            was once set but got moved/deleted.
 # =============================================================================
@@ -300,7 +305,8 @@ Write-DLog "Parsing XAML..."
 try {
     $reader = [System.Xml.XmlNodeReader]::new($xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
-} catch {
+}
+catch {
     Write-DLog "FATAL: XAML build failed - $_" "ERROR"; exit 1
 }
 if ($null -eq $window) { Write-DLog "FATAL: XamlReader returned null" "ERROR"; exit 1 }
@@ -308,92 +314,96 @@ Write-DLog "Window built OK"
 
 function Find { param($n) $window.FindName($n) }
 
-$normalPanel      = Find "NormalPanel"
+$normalPanel = Find "NormalPanel"
 $pathMissingPanel = Find "PathMissingPanel"
-$glyphText        = Find "GlyphText"
-$titleText        = Find "TitleText"
-$bodyText         = Find "BodyText"
-$folderNameText   = Find "FolderNameText"
-$countdownText    = Find "CountdownText"
-$letsGoBtn        = Find "LetsGoBtn"
-$snoozeBtn        = Find "SnoozeBtn"
-$snoozeDropBtn    = Find "SnoozeDropBtn"
-$snooze5          = Find "Snooze5"
-$snooze15         = Find "Snooze15"
-$snooze30         = Find "Snooze30"
-$snooze60         = Find "Snooze60"
-$dismissBtn       = Find "DismissBtn"
+$glyphText = Find "GlyphText"
+$titleText = Find "TitleText"
+$bodyText = Find "BodyText"
+$folderNameText = Find "FolderNameText"
+$countdownText = Find "CountdownText"
+$letsGoBtn = Find "LetsGoBtn"
+$snoozeBtn = Find "SnoozeBtn"
+$snoozeDropBtn = Find "SnoozeDropBtn"
+$snooze5 = Find "Snooze5"
+$snooze15 = Find "Snooze15"
+$snooze30 = Find "Snooze30"
+$snooze60 = Find "Snooze60"
+$dismissBtn = Find "DismissBtn"
 $missingPathLabel = Find "MissingPathLabel"
-$pathDismissBtn   = Find "PathDismissBtn"
-$rePickBtn        = Find "RePickBtn"
+$pathDismissBtn = Find "PathDismissBtn"
+$rePickBtn = Find "RePickBtn"
 
 # --- Populate UI ---
 if ($script:pathMissing) {
-    $normalPanel.Visibility      = "Collapsed"
+    $normalPanel.Visibility = "Collapsed"
     $pathMissingPanel.Visibility = "Visible"
-    $missingPathLabel.Text       = "Was looking for: $($config.explorer_path)"
-} else {
+    $missingPathLabel.Text = "Was looking for: $($config.explorer_path)"
+}
+else {
     $glyphText.Text = $config.glyph
     $titleText.Text = $config.title
-    $bodyText.Text  = $config.body
+    $bodyText.Text = $config.body
     if ($config.folder_name -and $config.folder_name -ne "") {
         # UB-004: UNC root shares (\\server\share) produce a context-free leaf name.
         # Show the full path instead so the user knows which server/share is opening.
         $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
             $config.explorer_path
-        } else {
+        }
+        else {
             $config.folder_name
         }
-        $folderNameText.Text       = "Opening: $displayName"
+        $folderNameText.Text = "Opening: $displayName"
         $folderNameText.Visibility = "Visible"
     }
 }
 
 # --- State ---
-$script:openExplorer    = $true
-$script:remaining       = 20
-$script:snoozeMinutes   = 5
-$script:firstTick       = $true
-$script:snoozeCount     = 0
+$script:openExplorer = $true
+$script:remaining = 20
+$script:snoozeMinutes = 5
+$script:firstTick = $true
+$script:snoozeCount = 0
 $script:newExplorerPath = ""
-$script:windowClosed    = $false   # UB-002: guard against queued dispatcher tick closing disposed window
+$script:windowClosed = $false   # UB-002: guard against queued dispatcher tick closing disposed window
 
 # --- Fade-in ---
 $window.Add_Loaded({
-    try {
-        $anim = [System.Windows.Media.Animation.DoubleAnimation]::new(
-            0, 1, [System.Windows.Duration]::new([System.TimeSpan]::FromMilliseconds(300)))
-        $window.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
-    } catch { Write-DLog "Fade-in failed: $_" "WARN" }
-})
+        try {
+            $anim = [System.Windows.Media.Animation.DoubleAnimation]::new(
+                0, 1, [System.Windows.Duration]::new([System.TimeSpan]::FromMilliseconds(300)))
+            $window.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
+        }
+        catch { Write-DLog "Fade-in failed: $_" "WARN" }
+    })
 
 # --- Countdown (normal mode only) ---
 if (-not $script:pathMissing) {
-    $timer          = [System.Windows.Threading.DispatcherTimer]::new()
+    $timer = [System.Windows.Threading.DispatcherTimer]::new()
     $timer.Interval = [System.TimeSpan]::FromSeconds(1)
     $timer.Add_Tick({
-        try {
-            if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
-            $script:remaining--
-            $countdownText.Text = $script:remaining
-            # UB-002: check $windowClosed before closing — a queued tick may fire after
-            # $timer.Stop() runs inside the same condition on a previous tick.
-            if ($script:remaining -le 0 -and -not $script:windowClosed) {
-                $timer.Stop()
-                $script:windowClosed = $true
-                $script:openExplorer = $true
-                $window.Close()
+            try {
+                if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
+                $script:remaining--
+                $countdownText.Text = $script:remaining
+                # UB-002: check $windowClosed before closing - a queued tick may fire after
+                # $timer.Stop() runs inside the same condition on a previous tick.
+                if ($script:remaining -le 0 -and -not $script:windowClosed) {
+                    $timer.Stop()
+                    $script:windowClosed = $true
+                    $script:openExplorer = $true
+                    $window.Close()
+                }
             }
-        } catch { Write-DLog "Timer error: $_" "ERROR"; $timer.Stop(); if (-not $script:windowClosed -and $window.IsLoaded) { $script:windowClosed = $true; $window.Close() } }
-    })
+            catch { Write-DLog "Timer error: $_" "ERROR"; $timer.Stop(); if (-not $script:windowClosed -and $window.IsLoaded) { $script:windowClosed = $true; $window.Close() } }
+        })
     $timer.Start()
     Write-DLog "Countdown timer started"
 }
 
 # --- B-10: Snooze duration selection ---
 $snoozeDropBtn.Add_Click({
-    $snoozeDropBtn.ContextMenu.IsOpen = $true
-})
+        $snoozeDropBtn.ContextMenu.IsOpen = $true
+    })
 
 function Set-SnoozeDuration {
     param([int]$Minutes)
@@ -402,104 +412,110 @@ function Set-SnoozeDuration {
     $snoozeBtn.Content = "Snooze $label"
     Write-DLog "Snooze duration: $Minutes min"
 }
-$snooze5.Add_Click({  Set-SnoozeDuration 5  })
+$snooze5.Add_Click({ Set-SnoozeDuration 5 })
 $snooze15.Add_Click({ Set-SnoozeDuration 15 })
 $snooze30.Add_Click({ Set-SnoozeDuration 30 })
 $snooze60.Add_Click({ Set-SnoozeDuration 60 })
 
 # --- Snooze click ---
 $snoozeBtn.Add_Click({
-    try {
-        Write-DLog "Snooze clicked ($($script:snoozeMinutes) min)"
-        if (-not $script:pathMissing) { $timer.Stop() }
-        $script:snoozeCount++
-        $script:openExplorer = $false
-        # Register re-trigger task (use $script:ModulesPath -- GAP-004)
-        $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
-        if (Test-Path $modulePath) {
-            Import-Module $modulePath -Force -ErrorAction SilentlyContinue
-            $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes)
-            New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force | Out-Null
-            Write-DLog "Snooze re-trigger task created for $snoozeTime"
+        try {
+            Write-DLog "Snooze clicked ($($script:snoozeMinutes) min)"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:snoozeCount++
+            $script:openExplorer = $false
+            # Register re-trigger task (use $script:ModulesPath -- GAP-004)
+            $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
+            if (Test-Path $modulePath) {
+                Import-Module $modulePath -Force -ErrorAction SilentlyContinue
+                $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes)
+                New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force | Out-Null
+                Write-DLog "Snooze re-trigger task created for $snoozeTime"
+            }
+            $window.Close()
         }
-        $window.Close()
-    } catch { Write-DLog "Snooze error: $_" "ERROR"; $window.Close() }
-})
+        catch { Write-DLog "Snooze error: $_" "ERROR"; $window.Close() }
+    })
 
 # --- B-11: Dismiss for Today ---
 $dismissBtn.Add_Click({
-    try {
-        Write-DLog "Dismiss for Today clicked"
-        if (-not $script:pathMissing) { $timer.Stop() }
-        $script:openExplorer = $false
-        # Use $script:ModulesPath -- GAP-004
-        $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
-        if (Test-Path $modulePath -and $config.explorer_path) {
-            Import-Module $modulePath -Force -ErrorAction SilentlyContinue
-            $pending = Get-MotivationTasks | Where-Object {
-                $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
+        try {
+            Write-DLog "Dismiss for Today clicked"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:openExplorer = $false
+            # Use $script:ModulesPath -- GAP-004
+            $modulePath = Join-Path $script:ModulesPath "TaskScheduler.psm1"
+            if (Test-Path $modulePath -and $config.explorer_path) {
+                Import-Module $modulePath -Force -ErrorAction SilentlyContinue
+                $pending = Get-MotivationTasks | Where-Object {
+                    $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
+                }
+                foreach ($t in $pending) {
+                    Remove-MotivationTask -TaskId $t.task_id
+                    Write-DLog "Removed pending task $($t.task_id)"
+                }
             }
-            foreach ($t in $pending) {
-                Remove-MotivationTask -TaskId $t.task_id
-                Write-DLog "Removed pending task $($t.task_id)"
-            }
+            $window.Close()
         }
-        $window.Close()
-    } catch { Write-DLog "Dismiss error: $_" "ERROR"; $window.Close() }
-})
+        catch { Write-DLog "Dismiss error: $_" "ERROR"; $window.Close() }
+    })
 
 # --- Open Folder ---
 $letsGoBtn.Add_Click({
-    try {
-        Write-DLog "Open Folder clicked"
-        if (-not $script:pathMissing) { $timer.Stop() }
-        $script:openExplorer = $true
-        $window.Close()
-    } catch { Write-DLog "LetsGo error: $_" "ERROR" }
-})
+        try {
+            Write-DLog "Open Folder clicked"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:openExplorer = $true
+            $window.Close()
+        }
+        catch { Write-DLog "LetsGo error: $_" "ERROR" }
+    })
 
 # --- B-05: Path missing handlers ---
 $pathDismissBtn.Add_Click({
-    Write-DLog "Path-missing Dismiss clicked"
-    $script:openExplorer = $false
-    $window.Close()
-})
+        Write-DLog "Path-missing Dismiss clicked"
+        $script:openExplorer = $false
+        $window.Close()
+    })
 
 $rePickBtn.Add_Click({
-    Write-DLog "Re-pick clicked"
-    $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-    $dialog.Description = "Choose the new location for this folder"
-    $dialog.ShowNewFolderButton = $false
-    if ($dialog.ShowDialog() -eq "OK") {
-        $newPath = $dialog.SelectedPath
-        Write-DLog "Re-pick: $newPath"
-        try {
-            $c = Get-Content $configPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
-            $c.explorer_path = $newPath
-            $c.folder_name   = Split-Path -Leaf $newPath
-            $c | ConvertTo-Json | Set-Content $configPath -Encoding UTF8 -ErrorAction Stop
-            # Only update state if the write succeeded (ERR-002)
-            $script:newExplorerPath = $newPath
-            $script:openExplorer    = $true
-            $window.Close()
-        } catch {
-            Write-DLog "Config update failed: $_" "ERROR"
-            [System.Windows.MessageBox]::Show(
-                "Could not save the new folder path. Your change was not stored.`n`n$($_.Exception.Message)",
-                "Save Failed", "OK", "Error")
-            # Do NOT close the popup -- let the user retry
+        Write-DLog "Re-pick clicked"
+        $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+        $dialog.Description = "Choose the new location for this folder"
+        $dialog.ShowNewFolderButton = $false
+        if ($dialog.ShowDialog() -eq "OK") {
+            $newPath = $dialog.SelectedPath
+            Write-DLog "Re-pick: $newPath"
+            try {
+                $c = Get-Content $configPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
+                $c.explorer_path = $newPath
+                $c.folder_name = Split-Path -Leaf $newPath
+                $c | ConvertTo-Json | Set-Content $configPath -Encoding UTF8 -ErrorAction Stop
+                # Only update state if the write succeeded (ERR-002)
+                $script:newExplorerPath = $newPath
+                $script:openExplorer = $true
+                $window.Close()
+            }
+            catch {
+                Write-DLog "Config update failed: $_" "ERROR"
+                [System.Windows.MessageBox]::Show(
+                    "Could not save the new folder path. Your change was not stored.`n`n$($_.Exception.Message)",
+                    "Save Failed", "OK", "Error")
+                # Do NOT close the popup -- let the user retry
+            }
         }
-    }
-})
+    })
 
 # --- Show ---
 Write-DLog "Calling ShowDialog()"
 try {
     $window.ShowDialog() | Out-Null
     Write-DLog "ShowDialog returned. openExplorer=$($script:openExplorer)"
-} catch {
+}
+catch {
     Write-DLog "ShowDialog threw: $_" "ERROR"; exit 1
-} finally {
+}
+finally {
     if ($mutexOwned -and $mutex) {
         try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
         catch { Write-DLog "Mutex release error: $_" "WARN" }
@@ -521,10 +537,10 @@ if ($script:openExplorer -and $effectivePath -and $effectivePath -ne "") {
 }
 
 # --- Write structured log ---
-$outcome = if     ($script:pathMissing -and -not $script:openExplorer) { "PathMissing" }
-           elseif ($script:openExplorer)                               { "Opened"      }
-           elseif ($script:snoozeCount -gt 0)                          { "Snoozed"     }
-           else                                                         { "Dismissed"   }
+$outcome = if ($script:pathMissing -and -not $script:openExplorer) { "PathMissing" }
+elseif ($script:openExplorer) { "Opened" }
+elseif ($script:snoozeCount -gt 0) { "Snoozed" }
+else { "Dismissed" }
 
 $logLine = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] | $($config.task_id) | $($config.folder_name) | $effectivePath | $outcome | $($script:snoozeCount)"
 try { Add-Content -Path $logPath -Value $logLine -Encoding UTF8 -ErrorAction Stop }
