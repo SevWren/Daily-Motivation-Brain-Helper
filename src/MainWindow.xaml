@@ -71,7 +71,7 @@
                        FontSize="17" FontWeight="Bold" Foreground="#E8E8F4"
                        Margin="0,0,0,20"/>
 
-            <!-- ══ LAST FOLDER BANNER (B-01) — hidden by default ══ -->
+            <!-- ══ LAST FOLDER BANNER (B-01) - hidden by default ══ -->
             <Border x:Name="LastFolderBanner"
                     Background="#111B22" BorderBrush="#00BCD4" BorderThickness="1"
                     CornerRadius="7" Padding="14,10" Margin="0,0,0,16"
@@ -152,7 +152,7 @@
                     Margin="0,0,0,0"
                     ToolTip="Create a reminder to open this folder at the scheduled time"/>
 
-            <!-- ══ UNDO BANNER (B-04) — hidden by default ══ -->
+            <!-- ══ UNDO BANNER (B-04) - hidden by default ══ -->
             <Border x:Name="UndoBanner"
                     Background="#0E2A1A" BorderBrush="#2D6A4F" BorderThickness="1"
                     CornerRadius="7" Padding="14,10" Margin="0,14,0,0"
@@ -256,7 +256,7 @@
                     Margin="0,16,0,0" Padding="12,6"
                     ToolTip="See a log of your past folder openings"/>
 
-            <!-- History panel — hidden by default -->
+            <!-- History panel - hidden by default -->
             <Border x:Name="HistoryPanel"
                     Background="#0A0A14" BorderBrush="#2A2A42" BorderThickness="1"
                     CornerRadius="7" Padding="14,12" Margin="0,8,0,0"

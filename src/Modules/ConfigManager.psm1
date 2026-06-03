@@ -4,12 +4,12 @@
 # User never interacts with these files directly.
 # =============================================================================
 
-$script:AppDataDir  = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
-$script:ConfigPath  = Join-Path $script:AppDataDir "popup_config.json"
-$script:TasksPath   = Join-Path $script:AppDataDir "tasks.json"
-$script:MessagesPath= Join-Path $script:AppDataDir "messages.json"
-$script:SettingsPath= Join-Path $script:AppDataDir "app_settings.json"
-$script:LogPath     = Join-Path $script:AppDataDir "popup_log.txt"
+$script:AppDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+$script:ConfigPath = Join-Path $script:AppDataDir "popup_config.json"
+$script:TasksPath = Join-Path $script:AppDataDir "tasks.json"
+$script:MessagesPath = Join-Path $script:AppDataDir "messages.json"
+$script:SettingsPath = Join-Path $script:AppDataDir "app_settings.json"
+$script:LogPath = Join-Path $script:AppDataDir "popup_log.txt"
 
 # =============================================================================
 # ERR-034: Shared error dialog helper.
@@ -28,13 +28,15 @@ function Show-ErrorDialog {
     )
     try {
         [System.Windows.MessageBox]::Show($Message, $Title, "OK", "Error") | Out-Null
-    } catch {
-        # WPF not yet loaded — fall back to Windows Forms dialog
+    }
+    catch {
+        # WPF not yet loaded - fall back to Windows Forms dialog
         try {
             [System.Windows.Forms.MessageBox]::Show($Message, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
-        } catch {
+        }
+        catch {
             # Last resort: write to stderr
             [Console]::Error.WriteLine("ERROR [$Title]: $Message")
         }
@@ -51,18 +53,19 @@ function Initialize-AppData {
     if (-not (Test-Path $script:AppDataDir)) {
         try {
             New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
-        } catch {
+        }
+        catch {
             # %APPDATA% unavailable (permission denied, disk quota, roaming redirect failure).
             # Fall back to %TEMP% so the app can still run.
             $fallback = Join-Path $env:TEMP "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir' ($_). Falling back to '$fallback'."
             New-Item -ItemType Directory -Path $fallback -Force | Out-Null
-            $script:AppDataDir   = $fallback
-            $script:ConfigPath   = Join-Path $script:AppDataDir "popup_config.json"
-            $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
+            $script:AppDataDir = $fallback
+            $script:ConfigPath = Join-Path $script:AppDataDir "popup_config.json"
+            $script:TasksPath = Join-Path $script:AppDataDir "tasks.json"
             $script:MessagesPath = Join-Path $script:AppDataDir "messages.json"
             $script:SettingsPath = Join-Path $script:AppDataDir "app_settings.json"
-            $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+            $script:LogPath = Join-Path $script:AppDataDir "popup_log.txt"
         }
     }
 
@@ -98,7 +101,8 @@ function Initialize-AppData {
 function Get-AppSettings {
     try {
         return Get-Content $script:SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    } catch {
+    }
+    catch {
         return [PSCustomObject]@{ firstRun = $true; lastFolder = ""; recentFolders = @() }
     }
 }
@@ -143,7 +147,7 @@ function Add-RecentFolder {
     $s = Get-AppSettings
     # BUG-001: ConvertFrom-Json returns PSCustomObject arrays, not [string[]].
     # Force-enumerate through @() and filter nulls before constructing the List.
-    $raw      = if ($null -eq $s.recentFolders) { @() } else { @($s.recentFolders) }
+    $raw = if ($null -eq $s.recentFolders) { @() } else { @($s.recentFolders) }
     $existing = [System.Collections.Generic.List[string]]($raw | Where-Object { $_ })
     # Remove if already present, then prepend
     $existing.Remove($FolderPath) | Out-Null
@@ -156,7 +160,8 @@ function Add-RecentFolder {
 function Get-PopupConfig {
     try {
         return Get-Content $script:ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
-    } catch {
+    }
+    catch {
         return $null
     }
 }
@@ -192,7 +197,7 @@ function Write-OutcomeLog {
         [string]$Outcome,      # Opened | Snoozed | Dismissed | PathMissing
         [int]$SnoozeCount = 0
     )
-    $ts    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $entry = "[$ts] | $TaskId | $FolderName | $FolderPath | $Outcome | $SnoozeCount"
     Add-Content -Path $script:LogPath -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
 }
@@ -218,7 +223,8 @@ function Get-OutcomeLog {
                 Outcome     = $parts[4].Trim()
                 SnoozeCount = [int]($parts[5].Trim())
             }
-        } else {
+        }
+        else {
             # ERR-005: log malformed entries so corruption is diagnosable
             Write-Verbose "Get-OutcomeLog: skipping malformed line: $line"
         }

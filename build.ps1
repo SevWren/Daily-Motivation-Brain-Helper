@@ -1,8 +1,8 @@
 # =============================================================================
-# build.ps1 — Daily Motivation Brain Helper
+# build.ps1 - Daily Motivation Brain Helper
 # Compiles MainApp.ps1 into a single EXE using PS2EXE-NG.
 #
-# IMPORTANT: Output goes to src\DailyMotivation.exe — NOT the project root.
+# IMPORTANT: Output goes to src\DailyMotivation.exe - NOT the project root.
 # All referenced files (Modules\, MainWindow.xaml, data\, LaunchMotivation.bat)
 # live in src\, so the EXE must sit in the same directory for path resolution
 # to work correctly at runtime.
@@ -23,9 +23,9 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = $PSScriptRoot
-$srcDir      = Join-Path $projectRoot "src"
-$inputFile   = Join-Path $srcDir "MainApp.ps1"
-$outputFile  = Join-Path $srcDir "DailyMotivation.exe"
+$srcDir = Join-Path $projectRoot "src"
+$inputFile = Join-Path $srcDir "MainApp.ps1"
+$outputFile = Join-Path $srcDir "DailyMotivation.exe"
 
 Write-Host "Building DailyMotivation.exe into src\" -ForegroundColor Cyan
 
@@ -51,7 +51,8 @@ if (Test-Path $outputFile) {
     Write-Host ""
     Write-Host "To run: double-click src\DailyMotivation.exe" -ForegroundColor Yellow
     Write-Host "To distribute: copy the entire src\ folder." -ForegroundColor Yellow
-} else {
-    Write-Error "Build failed — output file not created."
+}
+else {
+    Write-Error "Build failed - output file not created."
     exit 1
 }

@@ -86,7 +86,7 @@ Invoke-ps2exe `
   -version "1.0.0.0"
 ```
 
-> Note: PS2EXE-NG only runs on Windows. This Linux sandbox can scaffold the build scripts and `dist/` directory, but the actual compile must happen on a Windows machine or CI runner.
+> Note: PS2EXE-NG only runs on Windows. This Linux sandbox can scaffold the build scripts and `dist/` directory, but the actual compile must happen on a Windows machine or CI runner. User will run on a Windows environment
 
 ### C# Rewrite File Map (for v1.0)
 
@@ -122,12 +122,6 @@ Invoke-ps2exe `
 - Communicates directly. Prefers action over discussion.
 - Expects commits and pushes after each logical group of changes.
 - Do not claim work is complete until files are modified and pushed.
-
----
-
-## Authentication
-
-GitHub token: **REDACTED** — request from user at start of next session if push access is needed.
 
 ---
 
