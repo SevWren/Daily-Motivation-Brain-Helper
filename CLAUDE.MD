@@ -337,3 +337,20 @@ Skills live in `CLAUDE/skills/`. Invoke by intent:
 | Stress-test a design decision | `productivity/grill-me` |
 | Compress token usage when working fast | `productivity/caveman` |
 | Hand off to the next session | `productivity/handoff` |
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live in GitHub Issues, managed via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles mapped to label strings for this repo. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` at the repo root for project overview, `docs/adr/` for architecture decisions. See `docs/agents/domain.md`.
+
