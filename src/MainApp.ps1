@@ -29,7 +29,14 @@ try {
 }
 
 # --- Module paths ---
-$scriptDir  = $PSScriptRoot
+# $PSScriptRoot is an empty string when compiled with PS2EXE; it is only populated
+# when the script is run directly via powershell.exe -File.  Fall back to the
+# directory that contains the running executable so all relative paths still resolve.
+$scriptDir = if ($PSScriptRoot -and $PSScriptRoot.Length -gt 0) {
+    $PSScriptRoot
+} else {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+}
 $modulesDir = Join-Path $scriptDir "Modules"
 try {
     Import-Module (Join-Path $modulesDir "ConfigManager.psm1") -Force -ErrorAction Stop
