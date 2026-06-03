@@ -24,7 +24,7 @@ Run the main application:
 ```powershell
 powershell.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
 ```
-Or double-click `src\DailyMotivation.exe` if you built the EXE with `build.ps1`.
+Or double-click `src\DailyMotivation.exe` if you built the EXE with `Invoke-Build` (see Developer Setup below).
 
 ## Uninstallation
 1. Delete scheduled tasks: open Task Scheduler, find tasks named "DailyMotivationBrainHelper_Launcher" and any "DailyMotivation_*" tasks, right-click each → Delete
@@ -33,3 +33,54 @@ Or double-click `src\DailyMotivation.exe` if you built the EXE with `build.ps1`.
 ## Troubleshooting
 - Check `%TEMP%\DailyMotivation_debug.log` for popup script trace
 - Check `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` for launcher output
+
+---
+
+## Developer Setup
+
+This section is for developers building from source or running tests.
+
+### Prerequisites
+
+Install development dependencies (one-time setup):
+
+```powershell
+# Requires Invoke-Build module. Install it first if needed:
+Install-Module -Name InvokeBuild -Scope CurrentUser -Force
+
+# Then install all project dev dependencies:
+Invoke-Build InstallDependencies
+```
+
+This installs: **Pester 5.x**, **PSScriptAnalyzer**, **ps2exe**
+
+### Running Tests
+
+```powershell
+# All tests (180+ total)
+.\Invoke-Tests.ps1
+
+# Unit tests only (fast, no integration overhead)
+.\Invoke-Tests.ps1 -Tag Unit
+
+# Integration tests only
+.\Invoke-Tests.ps1 -Tag Integration
+
+# CI mode -- generates NUnit XML and JaCoCo coverage XML
+.\Invoke-Tests.ps1 -CI
+```
+
+### Building the EXE
+
+```powershell
+# Full build: clean, analyze, test, compile
+Invoke-Build
+
+# Quick build (skip tests, useful during active development)
+Invoke-Build QuickBuild
+
+# Release package (ZIP + EXE)
+Invoke-Build Release
+```
+
+See `TESTING.md` for complete developer testing guide.

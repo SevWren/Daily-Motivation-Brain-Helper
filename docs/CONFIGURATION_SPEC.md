@@ -28,6 +28,9 @@ All application configuration is stored in JSON files managed exclusively by the
 ```
 **New (B-12):** `folder_name` — leaf directory name displayed as popup subtitle.
 
+> **Test validation:** Schema fully covered in `Tests/Unit/ConfigManager.Tests.ps1` -- `Set-PopupConfig` tests.
+> Any schema change must update corresponding test cases.
+
 ## app_settings.json Schema
 ```json
 {
@@ -41,12 +44,18 @@ All application configuration is stored in JSON files managed exclusively by the
 **New (B-01):** `lastFolder` — path of last successfully scheduled folder.
 **New (B-02):** `recentFolders` — array of up to 5 paths, FIFO, newest first.
 
+> **Test validation:** Schema fully covered in `Tests/Unit/ConfigManager.Tests.ps1` -- settings and recent-folders tests.
+> Any schema change must update corresponding test cases.
+
 ## popup_log.txt Format
 Pipe-delimited, one entry per line (B-18):
 ```
 [YYYY-MM-DD HH:mm:ss] | task_id | folder_name | folder_path | outcome | snooze_count
 ```
 Outcomes: `Opened`, `Snoozed`, `Dismissed`, `PathMissing`
+
+> **Test validation:** Log format fully covered in `Tests/Unit/ConfigManager.Tests.ps1` -- `Get-OutcomeLog` tests.
+> Any format change must update corresponding test cases.
 
 ## Encoding
 All JSON files saved as UTF-8 with BOM for PowerShell 5.1 compatibility.

@@ -96,3 +96,49 @@ Optional (Sprint 4):
 
 ## Status
 > v1.1
+
+---
+
+## Quality Assurance & Test Infrastructure
+
+### Test Coverage by Module
+
+| Module | Test File | Test Count | Coverage |
+|--------|-----------|------------|----------|
+| `ConfigManager.psm1` | `Tests/Unit/ConfigManager.Tests.ps1` | 100+ | ~90% |
+| `TaskScheduler.psm1` | `Tests/Unit/TaskScheduler.Tests.ps1` | 80+ | ~85% |
+| Integration | `Tests/Integration/Initialization.Tests.ps1` | 16 scenarios | N/A |
+
+### Coverage Gap: Notification Engine
+
+`DailyMotivation.ps1` has **zero automated test coverage**. WPF components cannot be
+exercised by Pester without a live Windows desktop session. Manual testing (TC-003 through
+TC-020 in `docs/TEST_PLAN.md`) remains the validation mechanism for this component.
+
+This is the highest quality risk in the codebase. See `docs/NOTIFICATION_ENGINE_SPEC.md`
+for the testing approach roadmap.
+
+### Build Automation (`.build.ps1`)
+
+| Task | Command | Description |
+|------|---------|-------------|
+| Default | `Invoke-Build` | Clean -> Analyze -> Test -> Build |
+| Test only | `Invoke-Build Test` | Run Pester suite |
+| Quick build | `Invoke-Build QuickBuild` | Build without tests |
+| Release | `Invoke-Build Release` | Full pipeline + package |
+| Install deps | `Invoke-Build InstallDependencies` | Install Pester, PSScriptAnalyzer, ps2exe |
+
+### CI/CD Pipeline (`.github/workflows/test.yml`)
+
+Three jobs run on every push and PR:
+
+1. **test** -- PSScriptAnalyzer + Pester suite + coverage upload + PR comment
+2. **build** -- PS2EXE compilation; only runs after `test` job passes
+3. **analyze** -- PSScriptAnalyzer SARIF for GitHub Security code scanning
+
+**Quality gates (PR merge is blocked if any fail):**
+- All Pester tests must pass
+- Code coverage must be >= 80%
+- PSScriptAnalyzer zero warnings
+
+See `TESTING.md` for developer usage.

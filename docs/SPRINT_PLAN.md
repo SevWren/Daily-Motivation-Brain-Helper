@@ -38,6 +38,32 @@
 
 ---
 
+## Sprint 0 -- Engineering Infrastructure (COMPLETE)
+
+**Completed:** 2026-06-03 (commit 4ba633a)
+**Goal:** Establish modern PowerShell development practices before feature work.
+
+### Delivered
+
+| Task | Status | Notes |
+|------|--------|-------|
+| INFRA-001 | Done | Pester 5.x test suite -- 180+ tests |
+| INFRA-002 | Done | ConfigManager unit tests (100+ tests, ~90% coverage) |
+| INFRA-003 | Done | TaskScheduler unit tests (80+ tests, ~85% coverage) |
+| INFRA-004 | Done | Integration tests for initialization bugs (Issues #2-#8) |
+| INFRA-005 | Done | Invoke-Build automation (.build.ps1, 12 tasks) |
+| INFRA-006 | Done | Invoke-Tests.ps1 test runner with tag filtering and CI mode |
+| INFRA-007 | Done | PSScriptAnalyzer configuration (.PSScriptAnalyzerSettings.psd1) |
+| INFRA-008 | Done | GitHub Actions CI/CD pipeline (.github/workflows/test.yml) |
+| INFRA-009 | Done | Test documentation (TESTING.md, Tests/README.md) |
+
+### Known Gaps
+
+- `DailyMotivation.ps1` (Notification Engine): **0% automated coverage** -- WPF component; addressed in Sprint 3+
+- Issues #3, #5, #6, #7: Tests documented but skipped pending fix implementation
+
+---
+
 ## Sprint 1 — Core User Promise + Onboarding Foundation
 
 **Definition of Done for Sprint 1:** User can open the app, see the welcome screen on first run, select or drag-drop a folder, see the "today vs. tomorrow" scheduling option, and schedule it — all without editing any file. The popup then fires at the right time showing the folder name.

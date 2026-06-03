@@ -84,3 +84,42 @@ Every interactive control shall have a plain-English ToolTip with no technical j
 
 ## Status
 > v1.1 DRAFT
+
+---
+
+## Requirements Validation Matrix
+
+This matrix links requirements to automated test coverage (as of commit 4ba633a).
+"Validated" means a Pester test exercises the described behavior. "Manual only" means
+the requirement is validated by manual test cases in `docs/TEST_PLAN.md`.
+
+| FR | Requirement Summary | Automated Coverage | Test Reference |
+|----|--------------------|--------------------|----------------|
+| FR-002 | Schedule a folder for tomorrow at 2 PM | Validated | `Tests/Unit/TaskScheduler.Tests.ps1` -- task creation, trigger time |
+| FR-003 | Duplicate schedule warning | Validated | `Tests/Unit/TaskScheduler.Tests.ps1` -- duplicate detection (case-insensitive, Force flag) |
+| FR-011 | Persist settings across launches | Validated | `Tests/Unit/ConfigManager.Tests.ps1` -- settings get/save |
+| FR-013 | Remember last 5 folders (FIFO) | Validated | `Tests/Unit/ConfigManager.Tests.ps1` -- FIFO, dedup, max-5 cap |
+| FR-014 | Log popup outcomes | Validated | `Tests/Unit/ConfigManager.Tests.ps1` -- write/read/clear/parse |
+| FR-015 | UTF-8 encoding for all paths | Validated | `Tests/Unit/ConfigManager.Tests.ps1` -- international paths, emoji glyphs |
+| FR-018 | Recover gracefully from corrupted config | Validated | `Tests/Unit/ConfigManager.Tests.ps1` -- corrupted file fallback |
+| FR-023 | Task status state machine | Validated | `Tests/Unit/TaskScheduler.Tests.ps1` -- all 5 status values |
+| FR-024 | Network path detection | Validated | `Tests/Unit/TaskScheduler.Tests.ps1` -- UNC path detection |
+| FR-001 | Folder picker dialog | Manual only | TC-001 |
+| FR-004 | Drag-and-drop folder | Manual only | TC-018 |
+| FR-005 | Schedule today option (before 2 PM) | Manual only | TC-014 |
+| FR-006 | Undo schedule (30s grace period) | Manual only | TC-015 |
+| FR-007 | First-run welcome screen | Manual only | TC-017 |
+| FR-008 | Remember last folder banner | Manual only | TC-012 |
+| FR-009 | Recent folders list | Manual only | TC-013 |
+| FR-010 | Snooze duration choice | Manual only | TC-019 |
+| FR-012 | Popup display at scheduled time | Manual only | TC-003 |
+| FR-016 | Open folder via Explorer | Manual only | TC-004 |
+| FR-017 | Moved folder re-pick prompt | Manual only | TC-016 |
+| FR-019 | Dismiss for Today | Manual only | TC-020 |
+| FR-020 | Task history viewer | Manual only | TC-023 |
+| FR-021 | Tooltips on all controls | Manual only | TC-024 |
+| FR-022 | Named mutex (single popup) | Manual only | SSOT-006 manual verification |
+| FR-025 | Shell extension right-click | Manual only | Manual install + context menu check |
+
+**Coverage summary:** 9/25 requirements (36%) have automated Pester validation.
+The unvalidated requirements are UI-driven and require a live Windows WPF session to test.

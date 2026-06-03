@@ -3,6 +3,18 @@
 **Last Updated:** 2026-06-03
 
 ## v1.0 — MVP (Current Sprint)
+
+### Engineering Foundation (COMPLETE -- commit 4ba633a)
+
+- Pester 5.x test suite -- 180+ tests
+- CI/CD pipeline -- GitHub Actions (tests + build + security scan)
+- PSScriptAnalyzer -- zero-warning code quality enforcement
+- Invoke-Build automation -- 12 build tasks
+- Code coverage tracking -- target 80%+, achieved ~85%
+- ConfigManager module: ~90% coverage
+- TaskScheduler module: ~85% coverage
+- Notification Engine test coverage -- deferred (WPF requires live session)
+
 **Goal:** Complete, no-code end-to-end experience including all 14 approved brainstorm features.
 
 ### Core Loop

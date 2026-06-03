@@ -5,6 +5,42 @@
 ## Overview
 Manages the motivational popup lifecycle from display through acceptance, snooze, or dismissal.
 
+## Test Coverage Warning
+
+**This component has zero automated test coverage.**
+
+`DailyMotivation.ps1` runs a WPF window dispatched from a PowerShell `-STA` thread and
+depends on Windows Task Scheduler for invocation. Neither of these can be exercised by
+Pester in a CI/CD environment without a live Windows desktop session.
+
+| Risk | Severity | Mitigation |
+|------|----------|-----------|
+| State machine logic untested | HIGH | Manual TC-003 through TC-020 in `docs/TEST_PLAN.md` |
+| Countdown timer untested | HIGH | Manual TC-007 |
+| Mutex enforcement untested | MEDIUM | Manual: launch two instances simultaneously |
+| Snooze loop untested | HIGH | Manual TC-005, TC-010 |
+| Path validation branch untested | MEDIUM | Manual TC-009, TC-016 |
+
+### Testing Approach Roadmap
+
+To achieve automated coverage of this component, one of these approaches is required:
+
+1. **Extract pure logic from WPF** -- move state machine transitions and countdown logic
+   into a testable module (`NotificationEngine.psm1`), keeping `DailyMotivation.ps1`
+   as a thin WPF host. Pure state machine: fully testable with Pester. WPF host: still
+   manual only, but now a thin wrapper with minimal logic.
+
+2. **UI Automation** -- use Windows UI Automation (UIA) or FlaUI to drive the WPF window
+   from Pester via COM. Requires Windows runner in CI. Complex but achieves full coverage.
+
+3. **Status quo + thorough manual regression** -- maintain TC-003 through TC-020 manually
+   before every release. Low coverage but zero investment.
+
+**Current status:** Status quo (option 3). Option 1 is the recommended path if/when the
+Notification Engine needs modification.
+
+---
+
 ## Popup States
 
 ```

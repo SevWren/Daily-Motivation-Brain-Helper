@@ -254,3 +254,22 @@ Before packaging with any method, confirm these items are resolved:
 - [ ] End-to-end test: Schedule a folder → wait for task to fire → confirm Explorer opens
 - [ ] End-to-end test: Snooze the popup → confirm it reappears after 5 minutes
 - [ ] End-to-end test: Delete a task → confirm it is removed from both `tasks.json` and Windows Task Scheduler
+
+---
+
+## Build System
+
+The project uses **Invoke-Build** (`.build.ps1`) for all build automation.
+
+```powershell
+# Complete release pipeline (recommended for distribution):
+Invoke-Build Release
+
+# This runs: Clean -> PSScriptAnalyzer -> Pester tests -> PS2EXE compile -> ZIP package
+# Output: ./output/DailyMotivation.exe and release ZIP
+```
+
+**Pre-release quality gates** (all must pass before distributing):
+1. `Invoke-Build Analyze` -- zero PSScriptAnalyzer warnings
+2. `Invoke-Build Test` -- all 180+ Pester tests pass
+3. Coverage >= 80% (checked by CI/CD via `.github/workflows/test.yml`)

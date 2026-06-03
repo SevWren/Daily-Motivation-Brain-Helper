@@ -39,3 +39,25 @@
 
 ## Status
 > v1.1 DRAFT
+
+---
+
+## Module-Level Test Coverage Traceability
+
+| Module | Functionality | Test File | Coverage |
+|--------|--------------|-----------|----------|
+| `ConfigManager.psm1` | `Initialize-AppData` directory creation | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | Settings management (get/set/firstRun/lastFolder) | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | Recent folders (FIFO, dedup, 5-item limit) | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | Popup config (all 6 fields) | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | Outcome log (write/read/parse/clear) | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | UTF-8 encoding | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `ConfigManager.psm1` | Corrupted file recovery | `Tests/Unit/ConfigManager.Tests.ps1` | ~90% |
+| `TaskScheduler.psm1` | Task creation (IDs, timestamps, JSON) | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `TaskScheduler.psm1` | Duplicate detection (B-16) | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `TaskScheduler.psm1` | Task retrieval and cross-checking | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `TaskScheduler.psm1` | Task deletion (best-effort) | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `TaskScheduler.psm1` | Status updates (all 5 values) | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `TaskScheduler.psm1` | Network path detection (UNC) | `Tests/Unit/TaskScheduler.Tests.ps1` | ~85% |
+| `DailyMotivation.ps1` | WPF popup display, state machine, buttons | None | **0% -- manual only** |
+| `MainApp.ps1` | WPF window, event handlers, UI interaction | None | **0% -- manual only** |
