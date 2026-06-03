@@ -14,7 +14,7 @@ A Windows desktop app that lets a non-technical user:
 **The north star constraint:** the user never edits a JSON file, a script, or any config.
 All state is managed through the UI. See `docs/SSOT.md` and `docs/NPR.md` for hard rules.
 
-**Distribution target:** single `.exe` via PS2EXE-NG. Run `build.ps1` from the project root.
+**Distribution target:** single `.exe` via PS2EXE-NG. Run `.build.ps1` (Invoke-Build) from the project root.
 
 ---
 
@@ -23,9 +23,24 @@ All state is managed through the UI. See `docs/SSOT.md` and `docs/NPR.md` for ha
 ```
 Daily-Motivation-Brain-Helper/
 ├── CLAUDE.md                   ← you are here
-├── build.ps1                   ← PS2EXE build script; outputs to src\DailyMotivation.exe
+├── .build.ps1                  ← Invoke-Build script; outputs to src\DailyMotivation.exe
+├── Invoke-Tests.ps1            ← test runner with CI support
+├── TESTING.md                  ← testing guide and best practices
+├── MODERN-POWERSHELL-SCAFFOLDING.md ← infrastructure overview
 ├── CLAUDE/skills/              ← agent skills (see ## Agent Skills below)
 ├── docs/                       ← all planning, specs, and architecture docs
+├── Tests/                      ← Pester 5.x test suite (180+ tests)
+│   ├── Unit/
+│   │   ├── ConfigManager.Tests.ps1  ← 100+ tests for ConfigManager
+│   │   └── TaskScheduler.Tests.ps1  ← 80+ tests for TaskScheduler
+│   ├── Integration/
+│   │   └── Initialization.Tests.ps1 ← integration tests (Issues #2-#8)
+│   ├── Fixtures/               ← test data files
+│   └── README.md               ← test suite documentation
+├── .github/workflows/
+│   └── test.yml                ← CI/CD pipeline (GitHub Actions)
+├── .PSScriptAnalyzerSettings.psd1 ← code quality configuration
+├── PesterConfiguration.psd1    ← test framework configuration
 └── src/
     ├── MainApp.ps1             ← WPF entry point; run with -STA
     ├── MainWindow.xaml         ← all UI layout; no code-behind file — handlers in MainApp.ps1
@@ -293,6 +308,9 @@ Read these before making changes in the relevant area:
 | Known bugs and patterns to avoid | `docs/FORENSIC_REVIEW.md` |
 | Distribution packaging | `docs/DISTRIBUTION_STRATEGY.md` |
 | Sprint tasks and priorities | `docs/SPRINT_PLAN.md` |
+| Testing and quality assurance | `TESTING.md`, `Tests/README.md` |
+| Build system and automation | `MODERN-POWERSHELL-SCAFFOLDING.md`, `.build.ps1` |
+| Code quality standards | `.PSScriptAnalyzerSettings.psd1`, `docs/CONTRIBUTING.md` |
 
 ---
 
@@ -313,10 +331,18 @@ docs(changelog): add v1.0-dev entries for Sprint 2
 - Google-style comment blocks for exported functions
 - Type hints on all `param()` blocks
 - No truncation or stubs — write the full implementation
+- All new functions require Pester tests (minimum 80% coverage)
+- All code must pass PSScriptAnalyzer with zero warnings
 
 **No console output in production paths.** All diagnostic output goes to `Write-DLog` (in
 `DailyMotivation.ps1`) or `Write-Verbose` in modules. Never `Write-Host` or `Write-Output`
 from a Task Scheduler context.
+
+**Testing requirements:**
+- Add Pester tests for all new modules/functions in `Tests/Unit/` or `Tests/Integration/`
+- Run `.\Invoke-Tests.ps1` before committing
+- Maintain 80%+ code coverage (check with `.\Invoke-Tests.ps1 -CI`)
+- Follow TDD when adding new features: test first, then implement
 
 ---
 

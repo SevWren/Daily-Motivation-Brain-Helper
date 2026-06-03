@@ -7,6 +7,56 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ## [v1.0.0-dev] -- 2026-06-03 (In Development)
 
+### Added -- Test Infrastructure (commit 4ba633a)
+
+- Modern PowerShell test infrastructure with **180+ Pester 5.x tests**
+- `Tests/Unit/ConfigManager.Tests.ps1` -- 100+ unit tests for ConfigManager module
+  - Initialize-AppData directory creation and default file deployment
+  - Settings management (firstRun, lastFolder, recentFolders)
+  - Recent folders FIFO queue (max 5, deduplication, newest-first)
+  - Popup configuration (all 6 fields including folder_name derivation)
+  - Outcome logging (write/read/clear/parse pipe-delimited log)
+  - UTF-8 encoding preservation for international paths and emoji glyphs
+  - Error recovery for corrupted JSON files (graceful degradation)
+- `Tests/Unit/TaskScheduler.Tests.ps1` -- 80+ unit tests for TaskScheduler module
+  - Task creation with unique 16-char IDs and ISO 8601 timestamps
+  - Duplicate detection (case-insensitive, same folder+date, Force flag override)
+  - Task CRUD operations (create, read, update status, delete)
+  - Status enum validation (all 5 values: PENDING/COMPLETED/SNOOZED/DISMISSED/DELETED)
+  - Network path detection (UNC paths)
+- `Tests/Integration/Initialization.Tests.ps1` -- Integration tests
+  - Fresh installation flow (Issue #2 - PASSING)
+  - Module import order independence (Issue #4 - PASSING)
+  - Issues #3, #5, #6, #7 documented with skipped tests pending fixes
+  - End-to-end workflow validation (init → task creation → logging)
+  - UTF-8 preservation across entire system
+- `Tests/Fixtures/` -- Test data files (sample JSON configurations)
+- `Tests/README.md` -- Comprehensive test suite documentation
+- **Invoke-Build automation system** (`.build.ps1`)
+  - 12 build tasks: Clean, Analyze, Test, Build, Package, Release, QuickBuild, etc.
+  - PSScriptAnalyzer static analysis integration
+  - Pester test execution with code coverage
+  - PS2EXE compilation
+  - Release package creation
+- **Test runner** (`Invoke-Tests.ps1`)
+  - Tag-based test filtering (Unit, Integration, Initialization)
+  - CI mode with NUnit XML and JaCoCo coverage reports
+  - Colored console output with test summary
+  - Error exit codes for CI/CD pipelines
+- **PSScriptAnalyzer configuration** (`.PSScriptAnalyzerSettings.psd1`)
+  - Custom rules: no cmdlet aliases (except cd/ls), consistent formatting
+  - 4-space indentation, UTF-8 encoding enforcement
+  - Comment-based help validation
+- **GitHub Actions CI/CD pipeline** (`.github/workflows/test.yml`)
+  - Automated testing on push/PR
+  - Code coverage reporting with PR comments
+  - PSScriptAnalyzer with SARIF output for GitHub Security
+  - Build artifact generation
+- **Comprehensive documentation**
+  - `TESTING.md` -- Complete testing guide (usage, best practices, debugging)
+  - `MODERN-POWERSHELL-SCAFFOLDING.md` -- Infrastructure overview and modern PowerShell practices
+- Code coverage: ~85% for ConfigManager and TaskScheduler modules (target: 80%+)
+
 ### Added -- Core Application
 
 - `src/MainApp.ps1` -- WPF main application window

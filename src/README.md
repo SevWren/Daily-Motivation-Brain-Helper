@@ -72,3 +72,59 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
 |------|---------|
 | `%TEMP%\DailyMotivation_debug.log` | Popup script trace |
 | `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` | Launcher trace |
+
+## Testing & Build Infrastructure
+
+| File/Directory | Purpose |
+|----------------|---------|
+| `../Tests/` | Pester 5.x test suite (180+ tests) |
+| `../Tests/Unit/ConfigManager.Tests.ps1` | Unit tests for ConfigManager module (100+ tests) |
+| `../Tests/Unit/TaskScheduler.Tests.ps1` | Unit tests for TaskScheduler module (80+ tests) |
+| `../Tests/Integration/Initialization.Tests.ps1` | Integration tests for initialization (Issues #2-#8) |
+| `../Tests/Fixtures/` | Test data files (sample JSON configs) |
+| `../Tests/README.md` | Test suite documentation |
+| `../.build.ps1` | Invoke-Build automation script (12 build tasks) |
+| `../Invoke-Tests.ps1` | Test runner with tag filtering and CI support |
+| `../.PSScriptAnalyzerSettings.psd1` | Code quality rules (enforced in CI) |
+| `../PesterConfiguration.psd1` | Test suite configuration |
+| `../.github/workflows/test.yml` | CI/CD pipeline (GitHub Actions) |
+| `../TESTING.md` | Complete testing guide |
+| `../MODERN-POWERSHELL-SCAFFOLDING.md` | Infrastructure overview |
+
+### Development Workflow
+```powershell
+# Install dependencies
+Invoke-Build InstallDependencies
+
+# Run tests
+..\Invoke-Tests.ps1              # All tests
+..\Invoke-Tests.ps1 -Tag Unit    # Unit tests only
+..\Invoke-Tests.ps1 -CI          # With coverage reports
+
+# Build
+Invoke-Build                     # Full build (clean, analyze, test, build)
+Invoke-Build QuickBuild          # Skip tests
+Invoke-Build Release             # Create release package
+```
+
+### Test Coverage
+- **ConfigManager.psm1**: ~90% coverage
+  - Initialize-AppData (directory creation, defaults)
+  - Settings management (firstRun, lastFolder, recentFolders)
+  - Popup configuration (all 6 fields)
+  - Outcome logging (write/read/parse)
+  - UTF-8 encoding for international paths
+  - Error recovery for corrupted files
+
+- **TaskScheduler.psm1**: ~85% coverage
+  - Task CRUD operations
+  - Duplicate detection (case-insensitive, Force flag)
+  - Status enum validation (5 states)
+  - Network path detection (UNC paths)
+
+- **Integration Tests**: End-to-end initialization scenarios
+  - Fresh installation (Issue #2 - PASSING)
+  - Module import order independence (Issue #4 - PASSING)
+  - Issues #3, #5, #6, #7 (tests skipped, pending fixes)
+
+See `../TESTING.md` for complete testing documentation.

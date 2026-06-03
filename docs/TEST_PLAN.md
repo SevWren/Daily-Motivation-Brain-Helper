@@ -5,12 +5,65 @@
 ## Scope
 All functional requirements in PRD.md (FR-001 through FR-025).
 
+**Automated tests** cover core module functionality (ConfigManager, TaskScheduler, initialization).
+**Manual test cases** below cover end-to-end user workflows and UI interactions.
+
 ## Test Environments
 - Windows 10 (build 19041+)
 - Windows 11
 - PowerShell 5.1
 
-## Original Test Cases
+## Automated Testing
+
+This project uses **Pester 5.x** for automated testing with **180+ tests** covering critical functionality.
+
+### Test Suites
+
+| Suite | Location | Coverage |
+|-------|----------|----------|
+| ConfigManager Unit Tests | `Tests/Unit/ConfigManager.Tests.ps1` | 100+ tests: Initialize-AppData, settings management, recent folders, popup config, outcome logging, UTF-8 encoding, error recovery |
+| TaskScheduler Unit Tests | `Tests/Unit/TaskScheduler.Tests.ps1` | 80+ tests: Task CRUD operations, duplicate detection, status management, network path detection |
+| Integration Tests | `Tests/Integration/Initialization.Tests.ps1` | End-to-end initialization scenarios (Issues #2-#8), module import order, error handling |
+
+### Test Coverage
+- **ConfigManager.psm1**: ~90% coverage
+- **TaskScheduler.psm1**: ~85% coverage
+- **Overall Target**: 80%+ coverage maintained via CI
+
+### Running Automated Tests
+```powershell
+# All tests
+.\Invoke-Tests.ps1
+
+# Unit tests only
+.\Invoke-Tests.ps1 -Tag Unit
+
+# Integration tests only
+.\Invoke-Tests.ps1 -Tag Integration
+
+# CI mode (generates NUnit XML and JaCoCo coverage reports)
+.\Invoke-Tests.ps1 -CI
+```
+
+See `TESTING.md` for complete testing guide.
+
+### Continuous Integration
+- All commits automatically tested via GitHub Actions (`.github/workflows/test.yml`)
+- PR merges blocked if tests fail or PSScriptAnalyzer warnings exist
+- Code coverage tracked (target: 80%+)
+- Test results published as PR comments
+
+### Known Gaps
+- **Notification Engine (DailyMotivation.ps1)**: 0% coverage - WPF popup requires manual testing
+- **UI Components (MainApp.ps1)**: WPF interactions not covered by automated tests
+
+---
+
+## Manual Test Cases
+
+The following test cases require manual execution as they involve UI interaction, Windows Task Scheduler integration, and timing-dependent scenarios.
+
+### Original Test Cases
 
 | ID | Scenario | Expected Result |
 |----|----------|----------------|

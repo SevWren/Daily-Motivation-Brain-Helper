@@ -41,6 +41,25 @@ Daily-Motivation-Brain-Helper/
 |       +-- Register-ShellExtension.ps1    # Compile + register (run as Admin)
 |       +-- ShellBridge.ps1                # PowerShell bridge called by DLL
 |
++-- Tests/                        # Pester 5.x test suite (180+ tests)
+|   +-- Unit/
+|   |   +-- ConfigManager.Tests.ps1     # 100+ tests for ConfigManager module
+|   |   +-- TaskScheduler.Tests.ps1     # 80+ tests for TaskScheduler module
+|   +-- Integration/
+|   |   +-- Initialization.Tests.ps1    # Integration tests (Issues #2-#8)
+|   +-- Fixtures/                # Test data files
+|   +-- README.md                # Test suite documentation
+|
++-- .build.ps1                    # Invoke-Build automation (12 tasks)
++-- Invoke-Tests.ps1              # Test runner with CI support
++-- .PSScriptAnalyzerSettings.psd1  # Code quality configuration
++-- PesterConfiguration.psd1      # Test suite configuration
++-- TESTING.md                    # Testing guide
++-- MODERN-POWERSHELL-SCAFFOLDING.md  # Infrastructure overview
+|
++-- .github/workflows/
+|   +-- test.yml                  # CI/CD pipeline (automated tests)
+|
 +-- docs/                         # All planning and specification documents
     +-- README.md                 # Document index
     +-- SPRINT_PLAN.md            # 16-task sprint plan (4 sprints)
@@ -104,6 +123,47 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainAp
 | Explorer Shell Extension | Right-click any folder to schedule it |
 | Named Mutex | Prevents duplicate popups |
 | %APPDATA% Config | User never edits any file |
+
+---
+
+## Testing & Development
+
+### Running Tests
+```powershell
+# All tests (180+ tests across unit and integration suites)
+.\Invoke-Tests.ps1
+
+# Unit tests only
+.\Invoke-Tests.ps1 -Tag Unit
+
+# Integration tests only
+.\Invoke-Tests.ps1 -Tag Integration
+
+# CI mode with coverage reports
+.\Invoke-Tests.ps1 -CI
+```
+
+### Building
+```powershell
+# Install development dependencies
+Invoke-Build InstallDependencies
+
+# Full build (clean, analyze, test, build)
+Invoke-Build
+
+# Quick build (skip tests)
+Invoke-Build QuickBuild
+
+# Create release package
+Invoke-Build Release
+```
+
+### Test Coverage
+- **ConfigManager.psm1**: ~90% coverage (100+ tests)
+- **TaskScheduler.psm1**: ~85% coverage (80+ tests)
+- **Integration**: End-to-end scenarios for initialization bugs
+
+See [TESTING.md](TESTING.md) and [MODERN-POWERSHELL-SCAFFOLDING.md](MODERN-POWERSHELL-SCAFFOLDING.md) for details.
 
 ---
 
