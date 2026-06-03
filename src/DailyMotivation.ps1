@@ -447,14 +447,21 @@ $rePickBtn.Add_Click({
         $newPath = $dialog.SelectedPath
         Write-DLog "Re-pick: $newPath"
         try {
-            $c = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $c = Get-Content $configPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
             $c.explorer_path = $newPath
             $c.folder_name   = Split-Path -Leaf $newPath
-            $c | ConvertTo-Json | Set-Content $configPath -Encoding UTF8
-        } catch { Write-DLog "Config update failed: $_" "WARN" }
-        $script:newExplorerPath = $newPath
-        $script:openExplorer    = $true
-        $window.Close()
+            $c | ConvertTo-Json | Set-Content $configPath -Encoding UTF8 -ErrorAction Stop
+            # Only update state if the write succeeded (ERR-002)
+            $script:newExplorerPath = $newPath
+            $script:openExplorer    = $true
+            $window.Close()
+        } catch {
+            Write-DLog "Config update failed: $_" "ERROR"
+            [System.Windows.MessageBox]::Show(
+                "Could not save the new folder path. Your change was not stored.`n`n$($_.Exception.Message)",
+                "Save Failed", "OK", "Error")
+            # Do NOT close the popup -- let the user retry
+        }
     }
 })
 
@@ -477,7 +484,13 @@ $effectivePath = if ($script:newExplorerPath) { $script:newExplorerPath } else {
 if ($script:openExplorer -and $effectivePath -and $effectivePath -ne "") {
     Write-DLog "Launching Explorer: $effectivePath"
     try { Start-Process "explorer.exe" -ArgumentList $effectivePath -ErrorAction Stop; Write-DLog "Explorer launched" }
-    catch { Write-DLog "Explorer launch failed: $_" "ERROR" }
+    catch {
+        Write-DLog "Explorer launch failed: $_" "ERROR"
+        # ERR-004: inform the user rather than silently failing
+        [System.Windows.MessageBox]::Show(
+            "Could not open the folder:`n$effectivePath`n`n$($_.Exception.Message)",
+            "Error Opening Folder", "OK", "Error")
+    }
 }
 
 # --- Write structured log ---

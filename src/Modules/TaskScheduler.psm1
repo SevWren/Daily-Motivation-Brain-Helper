@@ -140,7 +140,14 @@ function Remove-MotivationTask {
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
     if (-not $target) { return $false }
 
-    Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction SilentlyContinue
+    # BUG-009: detect deletion failure so orphaned tasks don't keep firing
+    try {
+        Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
+    } catch {
+        # Task may not exist (already fired or manually removed) — not a fatal error.
+        # Log but continue so the tasks.json entry is still cleaned up.
+        Write-Warning "Remove-MotivationTask: Unregister-ScheduledTask failed for '$($target.task_name)': $_"
+    }
 
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
     Save-TasksJson $tasks
