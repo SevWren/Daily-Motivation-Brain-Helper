@@ -61,11 +61,13 @@ function New-MotivationTask {
     }
 
     # --- Generate task ID (GAP-007: retry on GUID collision — near-impossible but defensive) ---
-    $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+    # GAP-007: Use 16-char GUID substring (~1-in-18T collision) instead of 8-char (~1-in-4B).
+    # Retry loop kept as additional defence; 5 attempts remains reasonable.
+    $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,16)
     $taskName = "$script:TaskPrefix$taskId"
     $attempts = 0
     while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
-        $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,8)
+        $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,16)
         $taskName = "$script:TaskPrefix$taskId"
         $attempts++
     }
@@ -88,10 +90,17 @@ function New-MotivationTask {
     # Register with RunLevel Highest for network targets so the task has the best chance
     # of succeeding. On standard user accounts this equals the user's highest available
     # privilege (no UAC prompt); on admin accounts it runs elevated.
-    $isNetworkPath = $FolderPath -match '^\\\\' -or (
-        $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':' -and
-        (try { [System.IO.DriveInfo]::new([string]$FolderPath[0]).DriveType -eq [System.IO.DriveType]::Network } catch { $false })
-    )
+    # GAP-010: UNC paths must start with exactly two backslashes followed by a server name char.
+    # Mapped drives: cache DriveInfo to avoid repeated constructor calls for the same path.
+    $isUncPath    = $FolderPath -match '^\\\\[^\\]'
+    $isMappedDrive = $false
+    if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        try {
+            $driveInfo     = [System.IO.DriveInfo]::new([string]$FolderPath[0])
+            $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
+        } catch { $isMappedDrive = $false }
+    }
+    $isNetworkPath = $isUncPath -or $isMappedDrive
     $runLevel = if ($isNetworkPath) { 'Highest' } else { 'Limited' }
 
     $principal = New-ScheduledTaskPrincipal `

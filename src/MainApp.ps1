@@ -286,7 +286,7 @@ function Do-Schedule {
 # =============================================================================
 function Get-RandomMessage {
     $messagesPath = Join-Path $env:APPDATA "DailyMotivationBrainHelper\messages.json"
-    $srcPath      = Join-Path $scriptDir "data\messages.json"
+    $srcPath      = if (-not [string]::IsNullOrEmpty($scriptDir)) { Join-Path $scriptDir "data\messages.json" } else { $null }
 
     # Copy bundled messages on first run (ERR-005b: ensure dest dir exists first)
     if (-not (Test-Path $messagesPath) -and (Test-Path $srcPath)) {

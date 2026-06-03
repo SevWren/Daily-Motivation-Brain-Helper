@@ -384,7 +384,7 @@ if (-not $script:pathMissing) {
                 $script:openExplorer = $true
                 $window.Close()
             }
-        } catch { Write-DLog "Timer error: $_" "ERROR"; $timer.Stop(); $window.Close() }
+        } catch { Write-DLog "Timer error: $_" "ERROR"; $timer.Stop(); if (-not $script:windowClosed -and $window.IsLoaded) { $script:windowClosed = $true; $window.Close() } }
     })
     $timer.Start()
     Write-DLog "Countdown timer started"
