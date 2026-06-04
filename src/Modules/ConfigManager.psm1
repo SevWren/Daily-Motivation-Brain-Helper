@@ -50,6 +50,15 @@ function Initialize-AppData {
     Falls back to %TEMP%\DailyMotivationBrainHelper\ if %APPDATA% is unavailable (GAP-003).
     Call at every app startup.
     #>
+    # Re-resolve paths from the current $env:APPDATA value so that test environments
+    # that redirect $env:APPDATA after module import still work correctly (FIX-001).
+    $script:AppDataDir   = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+    $script:ConfigPath   = Join-Path $script:AppDataDir "popup_config.json"
+    $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
+    $script:MessagesPath = Join-Path $script:AppDataDir "messages.json"
+    $script:SettingsPath = Join-Path $script:AppDataDir "app_settings.json"
+    $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+
     if (-not (Test-Path $script:AppDataDir)) {
         try {
             New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
@@ -135,8 +144,8 @@ function Set-LastFolder {
 
 function Get-RecentFolders {
     $folders = (Get-AppSettings).recentFolders
-    if ($null -eq $folders) { return @() }
-    return $folders
+    if ($null -eq $folders) { return ,@() }
+    return ,@($folders)
 }
 
 function Add-RecentFolder {
@@ -146,9 +155,11 @@ function Add-RecentFolder {
     param([string]$FolderPath)
     $s = Get-AppSettings
     # BUG-001: ConvertFrom-Json returns PSCustomObject arrays, not [string[]].
-    # Force-enumerate through @() and filter nulls before constructing the List.
+    # Build the List explicitly to avoid casting an empty/null pipeline output,
+    # which would yield a null List rather than an empty one (FIX-002).
     $raw = if ($null -eq $s.recentFolders) { @() } else { @($s.recentFolders) }
-    $existing = [System.Collections.Generic.List[string]]($raw | Where-Object { $_ })
+    $existing = [System.Collections.Generic.List[string]]::new()
+    foreach ($item in $raw) { if ($item) { $existing.Add([string]$item) } }
     # Remove if already present, then prepend
     $existing.Remove($FolderPath) | Out-Null
     $existing.Insert(0, $FolderPath)
@@ -207,10 +218,10 @@ function Get-OutcomeLog {
     Returns parsed log entries as objects, newest first, max $Limit entries.
     #>
     param([int]$Limit = 30)
-    if (-not (Test-Path $script:LogPath)) { return @() }
+    if (-not (Test-Path $script:LogPath)) { return ,@() }
     $lines = @(Get-Content $script:LogPath -Encoding UTF8 | Where-Object { $_ -match '^\[' } | Select-Object -Last $Limit)
     # UB-003: guard against null/empty before reversing
-    if (-not $lines -or $lines.Count -eq 0) { return @() }
+    if (-not $lines -or $lines.Count -eq 0) { return ,@() }
     $entries = foreach ($line in [Linq.Enumerable]::Reverse([string[]]$lines)) {
         if (-not $line) { continue }   # skip null elements
         $parts = $line -split '\s*\|\s*'

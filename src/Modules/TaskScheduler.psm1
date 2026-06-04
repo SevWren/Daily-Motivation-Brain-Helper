@@ -12,15 +12,21 @@ $script:LauncherPath = Join-Path (Split-Path $PSScriptRoot -Parent) "LaunchMotiv
 # --- Helper: load tasks.json ---
 function Get-TasksJson {
     $path = Join-Path $env:APPDATA "DailyMotivationBrainHelper\tasks.json"
-    if (-not (Test-Path $path)) { return @() }
-    try { return @(Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }
-    catch { return @() }
+    if (-not (Test-Path $path)) { return ,@() }
+    try { return ,@(Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }
+    catch { return ,@() }
 }
 
 function Save-TasksJson {
     param([object[]]$Tasks)
     $path = Join-Path $env:APPDATA "DailyMotivationBrainHelper\tasks.json"
-    $Tasks | ConvertTo-Json -Depth 4 | Set-Content -Path $path -Encoding UTF8
+    # FIX-003: piping an empty array through the pipeline produces no output, so
+    # ConvertTo-Json writes "null" rather than "[]". Handle the empty case explicitly.
+    if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
+        '[]' | Set-Content -Path $path -Encoding UTF8
+    } else {
+        ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $path -Encoding UTF8
+    }
 }
 
 function New-MotivationTask {
@@ -80,8 +86,9 @@ function New-MotivationTask {
 
     $trigger = New-ScheduledTaskTrigger -Once -At $TriggerTime
 
+    # -StartWhenAvailable: run at next logon if missed (NPR-004)
     $settings = New-ScheduledTaskSettingsSet `
-        -StartWhenAvailable      `    # run at next logon if missed (NPR-004)
+        -StartWhenAvailable `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
         -MultipleInstances IgnoreNew
 
@@ -146,7 +153,10 @@ function Get-MotivationTasks {
     Returns all tasks from tasks.json, cross-checked against Windows Task Scheduler.
     Tasks no longer present in the scheduler are marked DELETED.
     #>
-    $tasks = Get-TasksJson
+    # FIX-004: wrap in @() so that a single-item JSON object is always an array,
+    # and use the comma operator on return to prevent PowerShell from unrolling
+    # an empty array to $null through the pipeline.
+    $tasks = @(Get-TasksJson)
     foreach ($t in $tasks) {
         if ($t.status -eq "PENDING") {
             try {
@@ -165,7 +175,7 @@ function Get-MotivationTasks {
         }
     }
     Save-TasksJson $tasks
-    return $tasks
+    return ,$tasks
 }
 
 function Remove-MotivationTask {
