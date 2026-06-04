@@ -27,3 +27,5 @@ Output/
 # Temporary files
 *.tmp
 ~$*
+docs/archive/
+test_output.txt
