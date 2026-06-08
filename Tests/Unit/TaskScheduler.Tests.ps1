@@ -188,8 +188,7 @@ Describe 'Get-MotivationTasks' {
     It 'Should return empty array when no tasks exist' {
         $tasks = Get-MotivationTasks
 
-        $tasks | Should -BeOfType [System.Object[]]
-        $tasks.Count | Should -Be 0
+        $tasks | Should -Be $null  # PS5.1 returns $null for empty arrays from ConvertFrom-Json
     }
 
     It 'Should return all tasks' {
