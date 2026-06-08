@@ -65,7 +65,6 @@ Daily-Motivation-Brain-Helper/
     +-- SPRINT_PLAN.md            # 16-task sprint plan (4 sprints)
     +-- FEATURE_BRAINSTORM.md     # 14 approved features + approval record
     +-- DOC_IMPACT_ANALYSIS.md    # Impact analysis (17 docs, 132 changes)
-    +-- GAP_ANALYSIS.md           # Multi-agent gap analysis vs. prototype
     +-- NEXT_STEPS.md             # Original 13-task backlog
     +-- PRD.md                    # Product Requirements (FR-001 -- FR-025)
     +-- USER_STORIES.md           # US-001 -- US-018
@@ -79,6 +78,7 @@ Daily-Motivation-Brain-Helper/
 ## Installation
 
 ### Requirements
+
 - Windows 10 (build 19041+) or Windows 11
 - PowerShell 5.1 (included with Windows)
 - .NET Framework 4.x (included with Windows)
@@ -89,46 +89,48 @@ Daily-Motivation-Brain-Helper/
 **1.** Extract to a folder, e.g. `C:\DailyMotivation\`
 
 **2.** Right-click `UpdateScheduledTask.ps1` -- Run with PowerShell (as Administrator)  
-   This copies modules to `%APPDATA%` and initializes config files.
+ This copies modules to `%APPDATA%` and initializes config files.
 
 **3.** Run the app:
+
 ```powershell
 powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainApp.ps1"
 ```
 
 **4.** (Optional) Install Explorer right-click integration:  
-   Right-click `src\ShellExtension\Register-ShellExtension.ps1` -- Run as Administrator
+ Right-click `src\ShellExtension\Register-ShellExtension.ps1` -- Run as Administrator
 
 ---
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| Folder Picker + Drag-Drop | Select via dialog or drag from Explorer |
-| Schedule Today or Tomorrow | Option shown when before 2 PM |
-| Remember Last Folder | One-click reschedule banner on next launch |
-| Recent Folders List | Top 5 previously scheduled folders |
-| Undo Schedule | 30-second grace period after scheduling |
-| Duplicate Warning | Warns before creating a duplicate task |
-| Motivational Popup | 10 default messages, random selection |
-| Folder Name in Popup | "Opening: FolderName" subtitle |
-| Snooze Duration Choice | 5 / 15 / 30 / 60 minute options |
-| Dismiss for Today | Cancel all re-triggers without opening folder |
-| Moved Folder Re-Pick | Re-pick if folder was renamed/moved |
-| First-Run Welcome Screen | One-time onboarding overlay |
-| Tooltips on All Controls | Plain-English hover text on every button |
-| Task History Viewer | In-app log of past outcomes |
-| Task Management | View and delete scheduled tasks |
-| Explorer Shell Extension | Right-click any folder to schedule it |
-| Named Mutex | Prevents duplicate popups |
-| %APPDATA% Config | User never edits any file |
+| Feature                    | Description                                   |
+| -------------------------- | --------------------------------------------- |
+| Folder Picker + Drag-Drop  | Select via dialog or drag from Explorer       |
+| Schedule Today or Tomorrow | Option shown when before 2 PM                 |
+| Remember Last Folder       | One-click reschedule banner on next launch    |
+| Recent Folders List        | Top 5 previously scheduled folders            |
+| Undo Schedule              | 30-second grace period after scheduling       |
+| Duplicate Warning          | Warns before creating a duplicate task        |
+| Motivational Popup         | 10 default messages, random selection         |
+| Folder Name in Popup       | "Opening: FolderName" subtitle                |
+| Snooze Duration Choice     | 5 / 15 / 30 / 60 minute options               |
+| Dismiss for Today          | Cancel all re-triggers without opening folder |
+| Moved Folder Re-Pick       | Re-pick if folder was renamed/moved           |
+| First-Run Welcome Screen   | One-time onboarding overlay                   |
+| Tooltips on All Controls   | Plain-English hover text on every button      |
+| Task History Viewer        | In-app log of past outcomes                   |
+| Task Management            | View and delete scheduled tasks               |
+| Explorer Shell Extension   | Right-click any folder to schedule it         |
+| Named Mutex                | Prevents duplicate popups                     |
+| %APPDATA% Config           | User never edits any file                     |
 
 ---
 
 ## Testing & Development
 
 ### Running Tests
+
 ```powershell
 # All tests (180+ tests across unit and integration suites)
 .\Invoke-Tests.ps1
@@ -144,6 +146,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainAp
 ```
 
 ### Building
+
 ```powershell
 # Install development dependencies
 Invoke-Build InstallDependencies
@@ -159,6 +162,7 @@ Invoke-Build Release
 ```
 
 ### Test Coverage
+
 - **ConfigManager.psm1**: ~90% coverage (100+ tests)
 - **TaskScheduler.psm1**: ~85% coverage (80+ tests)
 - **Integration**: End-to-end scenarios for initialization bugs
@@ -169,11 +173,11 @@ See [TESTING.md](TESTING.md) and [Tests/README.md](Tests/README.md) for details.
 
 ## Diagnostics
 
-| File | Purpose |
-|------|---------|
-| `%TEMP%\DailyMotivation_debug.log` | Popup script debug trace |
-| `%APPDATA%\DailyMotivationBrainHelper\popup_log.txt` | Outcome history (pipe-delimited) |
-| `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` | Launcher log |
+| File                                                  | Purpose                          |
+| ----------------------------------------------------- | -------------------------------- |
+| `%TEMP%\DailyMotivation_debug.log`                    | Popup script debug trace         |
+| `%APPDATA%\DailyMotivationBrainHelper\popup_log.txt`  | Outcome history (pipe-delimited) |
+| `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` | Launcher log                     |
 
 ---
 
