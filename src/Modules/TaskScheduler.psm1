@@ -1,7 +1,7 @@
 # =============================================================================
 # TaskScheduler.psm1
 # Wrapper around Windows Task Scheduler for Daily Motivation Brain Helper.
-# All task operations go through this module — no direct schtasks calls elsewhere.
+# All task operations go through this module - no direct schtasks calls elsewhere.
 # =============================================================================
 
 $script:TaskPrefix   = "DailyMotivation_"
@@ -12,16 +12,22 @@ $script:LauncherPath = Join-Path (Split-Path $PSScriptRoot -Parent) "LaunchMotiv
 # --- Helper: load tasks.json ---
 function Get-TasksJson {
     $path = Join-Path $env:APPDATA "DailyMotivationBrainHelper\tasks.json"
-    if (-not (Test-Path $path)) { return ,@() }
-    try { return ,@(Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json) }
-    catch { return ,@() }
+    if (-not (Test-Path $path)) { return @() }
+    try {
+        $result = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        # FIX-003: PowerShell 5.1 returns $null for "[]", and the comma operator wraps $null in array.
+        # Return a clean empty array for both $null and actual empty results.
+        if ($null -eq $result) { return @() }
+        return @($result)
+    }
+    catch { return @() }
 }
 
 function Save-TasksJson {
     param([object[]]$Tasks)
     $path = Join-Path $env:APPDATA "DailyMotivationBrainHelper\tasks.json"
-    # FIX-003: piping an empty array through the pipeline produces no output, so
-    # ConvertTo-Json writes "null" rather than "[]". Handle the empty case explicitly.
+    # FIX-003: Handle null/empty cases explicitly. PowerShell's ConvertTo-Json on $null
+    # or an array containing $null produces "null" or "[[]]" instead of "[]".
     if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
         '[]' | Set-Content -Path $path -Encoding UTF8
     } else {
@@ -57,6 +63,7 @@ function New-MotivationTask {
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
+            $_.folder_path -and $_.folder_path.Length -gt 0 -and
             [System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -eq $normalizedInput -and
             ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date -and
             $_.status -eq "PENDING"
@@ -66,8 +73,7 @@ function New-MotivationTask {
         }
     }
 
-    # --- Generate task ID (GAP-007: retry on GUID collision — near-impossible but defensive) ---
-    # GAP-007: Use 16-char GUID substring (~1-in-18T collision) instead of 8-char (~1-in-4B).
+    # --- Generate task ID (GAP-007: retry on GUID collision - near-impossible but defensive) ---
     # Retry loop kept as additional defence; 5 attempts remains reasonable.
     $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0,16)
     $taskName = "$script:TaskPrefix$taskId"
@@ -86,7 +92,7 @@ function New-MotivationTask {
 
     $trigger = New-ScheduledTaskTrigger -Once -At $TriggerTime
 
-    # -StartWhenAvailable: run at next logon if missed (NPR-004)
+    # - StartWhenAvailable: run at next logon if missed (NPR-004)
     $settings = New-ScheduledTaskSettingsSet `
         -StartWhenAvailable `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
@@ -122,14 +128,14 @@ function New-MotivationTask {
             -Trigger   $trigger    `
             -Settings  $settings   `
             -Principal $principal  `
-            -Description "Daily Motivation Brain Helper — $FolderPath" `
+            -Description "Daily Motivation Brain Helper - $FolderPath" `
             -Force | Out-Null
     } catch {
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
     }
 
     # --- Persist to tasks.json ---
-    $tasks   = Get-TasksJson
+    $tasks = @(Get-TasksJson)
     $newTask = [PSCustomObject]@{
         task_id                 = $taskId
         task_name               = $taskName
@@ -141,7 +147,7 @@ function New-MotivationTask {
         snooze_count            = 0
         snooze_duration_minutes = 5
     }
-    $tasks += $newTask
+    $tasks = $tasks + $newTask
     Save-TasksJson $tasks
 
     return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false; IsNetworkPath = $isNetworkPath }
@@ -153,23 +159,22 @@ function Get-MotivationTasks {
     Returns all tasks from tasks.json, cross-checked against Windows Task Scheduler.
     Tasks no longer present in the scheduler are marked DELETED.
     #>
-    # FIX-004: wrap in @() so that a single-item JSON object is always an array,
-    # and use the comma operator on return to prevent PowerShell from unrolling
-    # an empty array to $null through the pipeline.
     $tasks = @(Get-TasksJson)
     foreach ($t in $tasks) {
+        # Skip null or malformed entries
+        if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
         if ($t.status -eq "PENDING") {
             try {
                 $wt = Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop
-                # Task exists in scheduler — status stays PENDING
+                # Task exists in scheduler - status stays PENDING
             } catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                # ObjectNotFoundException: task is genuinely gone — mark deleted (ERR-008)
+                # ObjectNotFoundException: task is genuinely gone - mark deleted (ERR-008)
                 $t.status = "DELETED"
             } catch [System.UnauthorizedAccessException] {
-                # Access denied: task exists but we can't read it — do NOT mark deleted (ERR-008)
-                Write-Warning "Get-MotivationTasks: access denied reading task '$($t.task_name)' — skipping status update."
+                # Access denied: task exists but we can't read it - do NOT mark deleted (ERR-008)
+                Write-Warning "Get-MotivationTasks: access denied reading task '$($t.task_name)' - skipping status update."
             } catch {
-                # Unknown error — treat as possibly-still-present, log and skip
+                # Unknown error - treat as possibly-still-present, log and skip
                 Write-Warning "Get-MotivationTasks: unexpected error for '$($t.task_name)': $_"
             }
         }
@@ -193,7 +198,7 @@ function Remove-MotivationTask {
     try {
         Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
     } catch {
-        # Task may not exist (already fired or manually removed) — not a fatal error.
+        # Task may not exist (already fired or manually removed) - not a fatal error.
         # Log but continue so the tasks.json entry is still cleaned up.
         Write-Warning "Remove-MotivationTask: Unregister-ScheduledTask failed for '$($target.task_name)': $_"
     }
