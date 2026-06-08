@@ -121,5 +121,4 @@ the requirement is validated by manual test cases in `docs/TEST_PLAN.md`.
 | FR-022 | Named mutex (single popup) | Manual only | SSOT-006 manual verification |
 | FR-025 | Shell extension right-click | Manual only | Manual install + context menu check |
 
-**Coverage summary:** 9/25 requirements (36%) have automated Pester validation.
-The unvalidated requirements are UI-driven and require a live Windows WPF session to test.
+**Coverage summary:** 9/25 requirements (36%) have automated Pester validation. 16 requirements are UI-driven and require live Windows WPF session for manual testing. The non-UI modules achieve 85.39% code coverage.
