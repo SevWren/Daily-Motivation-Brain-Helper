@@ -143,8 +143,9 @@ function Set-LastFolder {
 }
 
 function Get-RecentFolders {
-    $folders = (Get-AppSettings).recentFolders
-    if ($null -eq $folders) { return ,@() }
+    $settings = Get-AppSettings
+    $folders = $settings.recentFolders
+    if ($null -eq $folders) { return @() }
     return ,@($folders)
 }
 
@@ -160,8 +161,8 @@ function Add-RecentFolder {
     $raw = if ($null -eq $s.recentFolders) { @() } else { @($s.recentFolders) }
     $existing = [System.Collections.Generic.List[string]]::new()
     foreach ($item in $raw) { if ($item) { $existing.Add([string]$item) } }
-    # Remove if already present, then prepend
-    $existing.Remove($FolderPath) | Out-Null
+    # Remove if already present (case-insensitive), then prepend
+    $existing.RemoveAll({ param($x) $x -and $x.Equals($FolderPath, [System.StringComparison]::OrdinalIgnoreCase) }) | Out-Null
     $existing.Insert(0, $FolderPath)
     if ($existing.Count -gt 5) { $existing = $existing[0..4] }
     $s.recentFolders = $existing
@@ -218,10 +219,10 @@ function Get-OutcomeLog {
     Returns parsed log entries as objects, newest first, max $Limit entries.
     #>
     param([int]$Limit = 30)
-    if (-not (Test-Path $script:LogPath)) { return ,@() }
+    if (-not (Test-Path $script:LogPath)) { return @() }
     $lines = @(Get-Content $script:LogPath -Encoding UTF8 | Where-Object { $_ -match '^\[' } | Select-Object -Last $Limit)
     # UB-003: guard against null/empty before reversing
-    if (-not $lines -or $lines.Count -eq 0) { return ,@() }
+    if (-not $lines -or $lines.Count -eq 0) { return @() }
     $entries = foreach ($line in [Linq.Enumerable]::Reverse([string[]]$lines)) {
         if (-not $line) { continue }   # skip null elements
         $parts = $line -split '\s*\|\s*'
@@ -240,7 +241,7 @@ function Get-OutcomeLog {
             Write-Verbose "Get-OutcomeLog: skipping malformed line: $line"
         }
     }
-    return $entries
+    return ,@($entries)
 }
 
 function Clear-OutcomeLog {
