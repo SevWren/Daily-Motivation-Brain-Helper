@@ -1,5 +1,7 @@
 # Installation Guide
 
+**Last Reviewed**: 2026-06-09
+
 ## Requirements
 - Windows 10 (build 19041) or Windows 11
 - PowerShell 5.1 (included with Windows)

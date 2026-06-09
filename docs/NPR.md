@@ -1,5 +1,7 @@
 # Non-Product Requirements (NPR)
 
+**Last Reviewed**: 2026-06-09
+
 ## NPR-001 — Simplicity
 The user must never be required to edit:
 - JSON or YAML files

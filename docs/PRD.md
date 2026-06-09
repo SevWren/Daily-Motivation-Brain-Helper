@@ -1,6 +1,7 @@
 # Product Requirements Document (PRD)
 
 **Last Updated:** 2026-06-03
+**Last Reviewed**: 2026-06-09
 **Version:** 1.1 — updated for approved brainstorm features B-01 through B-19
 
 ---

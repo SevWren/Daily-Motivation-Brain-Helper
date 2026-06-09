@@ -1,5 +1,7 @@
 # Vision
 
+**Last Reviewed**: 2026-06-09
+
 ## One-Line Vision
 The simplest possible way to open tomorrow's work folder — with a burst of motivation.
 

@@ -1,6 +1,7 @@
 # Notification Engine Specification
 
 **Last Updated:** 2026-06-03
+**Last Reviewed**: 2026-06-09
 
 ## Overview
 Manages the motivational popup lifecycle from display through acceptance, snooze, or dismissal.

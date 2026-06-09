@@ -1,5 +1,7 @@
 # Issue tracker: GitHub
 
+**Last Reviewed**: 2026-06-09
+
 Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
 ## Conventions

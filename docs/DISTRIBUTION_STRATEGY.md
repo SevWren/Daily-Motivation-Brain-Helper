@@ -2,6 +2,7 @@
 # Daily-Motivation-Brain-Helper — Single-File Distribution Options
 
 **Date:** 2026-06-03
+**Last Reviewed**: 2026-06-09
 **Goal:** End user downloads **one file**, double-clicks it, picks a folder, and the app handles everything else. No extraction steps. No script editing. No command prompt.
 
 ---

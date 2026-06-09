@@ -1,6 +1,7 @@
 # Task Scheduler Specification
 
 **Last Updated:** 2026-06-03
+**Last Reviewed**: 2026-06-09
 
 ## Overview
 The Task Scheduler Module wraps Windows Task Scheduler to create, query, and delete scheduled tasks without user interaction with the Task Scheduler UI.

@@ -1,5 +1,7 @@
 # Contributing
 
+**Last Reviewed**: 2026-06-09
+
 ## Reporting Issues
 Open an issue on GitHub with:
 - Windows version

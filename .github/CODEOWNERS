@@ -1,0 +1,21 @@
+# Default owner for everything
+* @SevWren
+
+# Documentation
+/docs/ @SevWren
+*.md @SevWren
+
+# Source code
+/src/ @SevWren
+*.ps1 @SevWren
+*.psm1 @SevWren
+
+# Tests
+/Tests/ @SevWren
+
+# Build system
+/.build.ps1 @SevWren
+/build.ps1 @SevWren
+
+# CI/CD
+/.github/ @SevWren

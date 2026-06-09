@@ -1,5 +1,7 @@
 # Motivation System Specification
 
+**Last Reviewed**: 2026-06-09
+
 ## Overview
 The Motivation System manages the library of motivational messages displayed in popups.
 

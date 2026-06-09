@@ -1,5 +1,7 @@
 # Project Charter
 
+**Last Reviewed**: 2026-06-09
+
 ## Project Name
 
 Daily Motivation Brain Helper

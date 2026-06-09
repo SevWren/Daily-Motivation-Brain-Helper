@@ -1,5 +1,7 @@
 # Use Cases
 
+**Last Reviewed**: 2026-06-09
+
 ## UC-001 — End of Day Scheduling
 **Actor:** User  
 **Precondition:** Application is installed and running  

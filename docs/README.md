@@ -1,5 +1,7 @@
 # Daily Motivation Brain Helper — Documentation Index
 
+**Last Reviewed**: 2026-06-09
+
 > A no-code daily folder opener with motivational popup for Windows.
 > Schedule tomorrow's folder in 3 clicks. No scripts. No config files. No code.
 

@@ -1,5 +1,7 @@
 # HIGH-LEVEL: SYSTEM ARCHITECTURE
 
+**Last Reviewed**: 2026-06-09
+
 ### 1.1 System Architecture Diagram
 
 ```ascii

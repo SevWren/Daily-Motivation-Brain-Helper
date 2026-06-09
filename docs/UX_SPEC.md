@@ -1,6 +1,7 @@
 # UX Specification
 
 **Last Updated:** 2026-06-03
+**Last Reviewed**: 2026-06-09
 
 ## Design Principles
 1. **Zero learning curve** — if a user needs to read instructions, the UI has failed
