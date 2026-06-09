@@ -65,7 +65,7 @@ task Analyze {
     $filesToAnalyze = @(
         Get-ChildItem -Path $script:Config.SourcePath -Filter *.ps1 -Recurse
         Get-ChildItem -Path $script:Config.SourcePath -Filter *.psm1 -Recurse
-    )
+    ).FullName
 
     $settingsPath = Join-Path $script:Config.ProjectRoot '.PSScriptAnalyzerSettings.psd1'
     $analyzerParams = @{
@@ -79,10 +79,53 @@ task Analyze {
     }
 
     $results = Invoke-ScriptAnalyzer @analyzerParams
-
+    
+    # Export results to SARIF format for GitHub Code Scanning
+    $sarifPath = Join-Path $script:Config.ProjectRoot 'scriptanalyzer-results.sarif'
     if ($results) {
         Write-Build Yellow "PSScriptAnalyzer found $($results.Count) issue(s):"
         $results | Format-Table -AutoSize | Out-String | Write-Build
+
+        # Convert results to SARIF format
+        $sarif = @{
+            version = "2.1.0"
+            runs = @(
+                @{
+                    tool = @{
+                        driver = @{
+                            name = "PSScriptAnalyzer"
+                            version = (Get-Module PSScriptAnalyzer | Select-Object -First 1).Version.ToString()
+                            informationUri = "https://github.com/PowerShell/PSScriptAnalyzer"
+                        }
+                    }
+                    results = @($results | ForEach-Object {
+                        @{
+                            ruleId = $_.RuleName
+                            message = @{
+                                text = $_.Message
+                            }
+                            locations = @(
+                                @{
+                                    physicalLocation = @{
+                                        artifactLocation = @{
+                                            uri = $_.ScriptPath.Replace((Get-Location).Path, "").TrimStart("\")
+                                        }
+                                        region = @{
+                                            startLine = $_.Line
+                                            startColumn = $_.Column
+                                        }
+                                    }
+                                }
+                            )
+                            level = if ($_.Severity -eq 'Error') { "error" } elseif ($_.Severity -eq 'Warning') { "warning" } else { "note" }
+                        }
+                    })
+                }
+            )
+        }
+        
+        $sarif | ConvertTo-Json -Depth 10 | Set-Content -Path $sarifPath -Encoding UTF8
+        Write-Build Cyan "SARIF results exported to: $sarifPath"
 
         $errors = $results | Where-Object Severity -eq 'Error'
         if ($errors) {
@@ -90,6 +133,26 @@ task Analyze {
         }
     } else {
         Write-Build Green "✅ PSScriptAnalyzer: No issues found"
+        
+        # Create empty SARIF file for consistency
+        $emptySarif = @{
+            version = "2.1.0"
+            runs = @(
+                @{
+                    tool = @{
+                        driver = @{
+                            name = "PSScriptAnalyzer"
+                            version = (Get-Module PSScriptAnalyzer | Select-Object -First 1).Version.ToString()
+                            informationUri = "https://github.com/PowerShell/PSScriptAnalyzer"
+                        }
+                    }
+                    results = @()
+                }
+            )
+        }
+        
+        $emptySarif | ConvertTo-Json -Depth 10 | Set-Content -Path $sarifPath -Encoding UTF8
+        Write-Build Cyan "Empty SARIF results exported to: $sarifPath"
     }
 }
 
