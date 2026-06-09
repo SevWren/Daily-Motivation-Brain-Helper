@@ -22,7 +22,7 @@ This means:
 
 ## Critical Prerequisites (Must Fix Before Any Packaging Works)
 
-Regardless of which distribution method is chosen, these two issues from `FORENSIC_REVIEW.md` must be resolved first, or the packaged `.exe` will launch and silently do nothing:
+Regardless of which distribution method is chosen, these critical issues must be resolved first, or the packaged `.exe` will launch and silently do nothing:
 
 | ID | File | Issue |
 |----|------|-------|
@@ -238,7 +238,7 @@ MSIX provides the best OS integration, automatic updates, and clean uninstall. T
 |-------|--------|-----------|
 | **MVP (now)** | PS2EXE-NG | Leverages existing codebase. Single `.exe`. No licensing cost. 1–2 weeks. Acceptable for early users who expect to click through SmartScreen. |
 | **Bridge (optional)** | Warp | If PS2EXE-NG hits compatibility or AV blocking issues in testing, Warp is a 1–3 day fallback with zero code changes. Requires commercial license evaluation. |
-| **v1.0 (production)** | C# Rewrite + .NET 8 | Correct long-term architecture. Eliminates the majority of findings from `FORENSIC_REVIEW.md` at the root level. Produces a signable, AV-clean binary. No SmartScreen. Best user experience. |
+| **v1.0 (production)** | C# Rewrite + .NET 8 | Correct long-term architecture. Eliminates the majority of code quality issues at the root level. Produces a signable, AV-clean binary. No SmartScreen. Best user experience. |
 
 ---
 

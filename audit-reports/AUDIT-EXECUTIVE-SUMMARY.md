@@ -21,8 +21,7 @@ The Daily-Motivation-Brain-Helper repository demonstrates **exceptional document
 1. **BUILD SYSTEM BROKEN** (DC-001, SC-005): Build output path mismatch creates non-functional compiled executables
 2. **ADMIN ELEVATION BUG** (DC-002): Incorrect `-requireAdmin` flag violates NPR-003 requirement
 3. **AGENTS.MD MISSING** (CG-001): No multi-agent workflow governance document exists
-4. **FORENSIC_REVIEW.MD MISSING** (DK-008): Critical dependency blocking distribution planning
-5. **ARCHITECTURE.MD STALE** (DK-009): Root architecture.md describes wrong project (Python image pipeline)
+4. **ARCHITECTURE.MD STALE** (DK-009): Root architecture.md describes wrong project (Python image pipeline)
 
 ### Findings Summary
 
@@ -67,7 +66,6 @@ The Daily-Motivation-Brain-Helper repository demonstrates **exceptional document
 
 5. **HIGH**: 10 dead knowledge findings (DK-001–DK-010)
    - 5 broken links in documentation
-   - Missing FORENSIC_REVIEW.md blocks distribution planning
    - Stale architecture.md describes wrong project
    - **Impact**: Documentation trust eroded; critical dependencies missing
    - **Resolution**: Fix all broken links; create missing docs; remove/redirect stale docs
@@ -96,7 +94,7 @@ The Daily-Motivation-Brain-Helper repository demonstrates **exceptional document
 
 ❌ **Contradictory Build Scripts**: Two build systems (build.ps1 vs .build.ps1) with different output locations and admin requirements
 
-❌ **Missing Governance Artifacts**: AGENTS.md, FORENSIC_REVIEW.md, DOC_IMPACT_ANALYSIS.md, NEXT_STEPS.md all referenced but missing
+❌ **Missing Governance Artifacts**: AGENTS.md, DOC_IMPACT_ANALYSIS.md, NEXT_STEPS.md all referenced but missing
 
 ❌ **Stale Architecture Documentation**: Root architecture.md describes Python image pipeline (wrong project)
 
@@ -119,10 +117,9 @@ The Daily-Motivation-Brain-Helper repository demonstrates **exceptional document
 | **P1.2** | Remove admin elevation requirement (DC-002) | Developer | 1 hour | ✅ BLOCKER |
 | **P1.3** | Create AGENTS.md (CG-001) | Product Owner | 4 hours | High Priority |
 | **P1.4** | Fix broken links (DK-001–DK-005) | Developer | 3 hours | Medium |
-| **P1.5** | Create FORENSIC_REVIEW.md (DK-008) | Tech Lead | 6 hours | High Priority |
-| **P1.6** | Remove/redirect stale architecture.md (DK-009) | Developer | 1 hour | Medium |
-| **P1.7** | Add freshness markers to all docs (CG-010) | Developer | 4 hours | Medium |
-| **Total Phase 1** | | | **23 hours** | 2 blockers resolved |
+| **P1.5** | Remove/redirect stale architecture.md (DK-009) | Developer | 1 hour | Medium |
+| **P1.6** | Add freshness markers to all docs (CG-010) | Developer | 4 hours | Medium |
+| **Total Phase 1** | | | **17 hours** | 2 blockers resolved |
 
 ### Phase 2: HIGH-PRIORITY (Sprint 2 — 3 weeks)
 **Goal**: Production readiness, security, operational excellence
@@ -147,7 +144,7 @@ The Daily-Motivation-Brain-Helper repository demonstrates **exceptional document
 | **P3.4** | Enhance GLOSSARY.md (GD-004) | Documentation | 3 hours |
 | **Total Phase 3** | | | **27 hours** |
 
-**Total Remediation Effort**: 110 hours (≈ 2.75 FTE-weeks)
+**Total Remediation Effort**: 104 hours (≈ 2.6 FTE-weeks)
 **Recommended Timeline**: 8 weeks (Phases 1-2 parallel, Phase 3 final polish)
 
 ---

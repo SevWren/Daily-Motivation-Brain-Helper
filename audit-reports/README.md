@@ -83,13 +83,12 @@
 
 ## 🚀 Remediation Roadmap
 
-### Phase 1: IMMEDIATE (2 weeks — 23 hours)
+### Phase 1: IMMEDIATE (2 weeks — 17 hours)
 **Goal**: Unblock v1.1 release + establish governance
 
 - Fix build blockers (5 hours)
 - Create AGENTS.md (4 hours)
 - Fix broken links (3 hours)
-- Create FORENSIC_REVIEW.md (6 hours)
 - Remove stale architecture.md (1 hour)
 - Add freshness markers (4 hours)
 
@@ -110,7 +109,7 @@
 - Create INCIDENT_RESPONSE.md (6 hours)
 - Enhance GLOSSARY.md (3 hours)
 
-**Total Remediation**: 110 hours (≈ 2.75 FTE-weeks) over 7-8 weeks
+**Total Remediation**: 104 hours (≈ 2.6 FTE-weeks) over 7-8 weeks
 
 ---
 
@@ -159,7 +158,7 @@
 
 ❌ **Build System Non-Functional**: Path mismatch creates broken executables (BLOCKER)
 ❌ **Contradictory Build Scripts**: Two systems with different outputs
-❌ **Missing Governance**: AGENTS.md, FORENSIC_REVIEW.md, others referenced but missing
+❌ **Missing Governance**: AGENTS.md and other governance docs referenced but missing
 ❌ **Stale Docs**: Root architecture.md describes wrong project
 ❌ **WPF Test Gap**: 0% automated coverage for user-facing components
 ❌ **Broken Links**: 5+ broken internal links

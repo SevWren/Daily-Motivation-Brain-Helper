@@ -37,7 +37,6 @@ if (-not (Get-Command Invoke-ps2exe -ErrorAction SilentlyContinue)) {
 Invoke-ps2exe `
     -inputFile   $inputFile  `
     -outputFile  $outputFile `
-    -requireAdmin            `
     -noConsole               `
     -title       "Daily Motivation Brain Helper" `
     -version     "1.0.0.0"  `

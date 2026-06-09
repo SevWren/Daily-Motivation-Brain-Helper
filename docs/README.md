@@ -35,4 +35,3 @@
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
 | [../TESTING.md](../TESTING.md) | Test coverage guide and how to run tests |
 | [../Tests/README.md](../Tests/README.md) | Test suite documentation |
-| [reports/](reports/) | Historical session reports archive |

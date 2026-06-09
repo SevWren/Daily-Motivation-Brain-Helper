@@ -264,48 +264,6 @@ All internal links should resolve successfully.
 
 ---
 
-## HIGH-PRIORITY FIX #3: Missing FORENSIC_REVIEW.md (DK-008)
-
-**Severity**: HIGH
-**Category**: Distribution Planning
-**Assigned To**: [TECH LEAD]
-**Effort**: 6 hours
-**Deadline**: Sprint 1 (2 weeks)
-
-### Problem
-
-`docs/DISTRIBUTION_STRATEGY.md` references `FORENSIC_REVIEW.md` at lines 25 and 241:
-- "these two issues from FORENSIC_REVIEW.md must be resolved first" (GAP-002, ERR-017)
-- "Eliminates the majority of findings from FORENSIC_REVIEW.md"
-
-**File does not exist**; distribution planning is blocked.
-
-### Impact
-
-- Cannot finalize distribution strategy
-- Critical implementation issues (GAP-002, ERR-017) are referenced but unexplained
-- Developers cannot understand risk scope
-
-### Resolution
-
-**Create**: `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/docs/FORENSIC_REVIEW.md`
-
-**Required Sections**:
-1. Overview of forensic analysis (what was reviewed, when, by whom)
-2. GAP-002 description (what issue? what impact?)
-3. ERR-017 description (what error? what mitigation?)
-4. All findings from forensic review (categorized by severity)
-5. Recommendations for distribution strategy
-6. Resolution status for each finding
-
-### Verification
-
-- File exists and is linked from DISTRIBUTION_STRATEGY.md
-- GAP-002 and ERR-017 are fully documented
-- Distribution strategy can proceed with forensic analysis complete
-
----
-
 ## HIGH-PRIORITY FIX #4: Stale architecture.md (DK-009)
 
 **Severity**: HIGH
@@ -376,11 +334,7 @@ Before releasing v1.1, verify all fixes complete:
   - All 5 broken links resolved
   - Markdown link checker passes
 
-- [ ] **HIGH-PRIORITY #3**: FORENSIC_REVIEW.md created (DK-008)
-  - GAP-002 and ERR-017 documented
-  - Distribution strategy unblocked
-
-- [ ] **HIGH-PRIORITY #4**: Stale architecture.md removed (DK-009)
+- [ ] **HIGH-PRIORITY #3**: Stale architecture.md removed (DK-009)
   - Root-level file deleted or deprecated
   - Canonical architecture docs clarified
 

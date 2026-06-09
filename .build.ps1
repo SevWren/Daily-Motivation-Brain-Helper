@@ -175,17 +175,15 @@ task Build {
 
     # Copy dependencies
     Write-Build Cyan "Copying dependencies..."
-    $outputSrcPath = Join-Path $script:Config.OutputPath 'src'
-    New-Item -ItemType Directory -Path $outputSrcPath -Force | Out-Null
 
     # Copy Modules
     Copy-Item -Path (Join-Path $script:Config.SourcePath 'Modules') `
-              -Destination $outputSrcPath -Recurse -Force
+              -Destination $script:Config.OutputPath -Recurse -Force
 
     # Copy data
     if (Test-Path (Join-Path $script:Config.SourcePath 'data')) {
         Copy-Item -Path (Join-Path $script:Config.SourcePath 'data') `
-                  -Destination $outputSrcPath -Recurse -Force
+                  -Destination $script:Config.OutputPath -Recurse -Force
     }
 
     # Copy LaunchMotivation.bat

@@ -165,7 +165,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "src\DailyMotivation.ps1"
 
 ## Critical Gotchas
 
-These are the highest-value lessons from `docs/FORENSIC_REVIEW.md`. Don't repeat them.
+These are the highest-value lessons learned during development. Don't repeat them.
 
 ### 1. WPF requires `-STA` — always
 Every PowerShell invocation that loads WPF must include `-STA`. Without it, WPF crashes with
@@ -305,7 +305,6 @@ Read these before making changes in the relevant area:
 | Feature requirements | `docs/PRD.md` (FR-001 through FR-025) |
 | Acceptance criteria / test cases | `docs/ACCEPTANCE_CRITERIA.md`, `docs/TEST_PLAN.md` |
 | Architecture / module boundaries | `docs/ARCHITECTURE.md` |
-| Known bugs and patterns to avoid | `docs/FORENSIC_REVIEW.md` |
 | Distribution packaging | `docs/DISTRIBUTION_STRATEGY.md` |
 | Sprint tasks and priorities | `docs/SPRINT_PLAN.md` |
 | Testing and quality assurance | `TESTING.md`, `Tests/README.md` |

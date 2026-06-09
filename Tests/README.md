@@ -237,6 +237,5 @@ All tests should:
 
 ## Related Documentation
 
-- [CLAUDE.md](../CLAUDE.md) - Project conventions
-- [INITIALIZATION-BUG-ANALYSIS](../docs/reports/INITIALIZATION-BUG-ANALYSIS-2026-06-03.md) - Bug analysis and test requirements
+- [CLAUDE.MD](../CLAUDE.MD) - Project conventions
 - [GitHub Issues #2-#8](https://github.com/SevWren/Daily-Motivation-Brain-Helper/issues) - Initialization system fixes

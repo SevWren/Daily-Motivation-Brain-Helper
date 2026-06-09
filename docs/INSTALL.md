@@ -7,7 +7,7 @@
 - No internet connection required
 
 ## Step 1 — Download
-Download the latest release ZIP from the [Releases](../releases) page.
+Download the latest release ZIP from the [Releases](https://github.com/SevWren/Daily-Motivation-Brain-Helper/releases) page.
 
 ## Step 2 — Extract
 Extract the ZIP to a folder, for example: `C:\daily_moti\`
