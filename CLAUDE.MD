@@ -230,6 +230,94 @@ to the user via this helper.
 
 ---
 
+## ⚠️ CRITICAL: PowerShell 5.1 vs PowerShell 7 (pwsh)
+
+**This is a POWERSHELL 5.1 project. NOT PowerShell 7 / PowerShell Core.**
+
+Every `.ps1` and `.psm1` file declares `#Requires -Version 5.1`. This constraint is non-negotiable and enforced across:
+- Local development (run with `powershell.exe`, not `pwsh.exe`)
+- GitHub Actions CI/CD (use `shell: powershell`, not `shell: pwsh`)
+- Distribution (compiled as single `.exe` targeting Windows PowerShell 5.1 runtime)
+
+### Why This Matters
+
+**DO NOT use `pwsh`** (PowerShell Core 7.x) anywhere in this project. It is a different runtime with different behavior:
+
+| Aspect | PowerShell 5.1 (Windows PowerShell) | pwsh (PowerShell Core 7+) |
+|--------|-----|-----|
+| **Platform** | Windows only | Cross-platform (Windows, macOS, Linux) |
+| **Default in GitHub Actions** | `shell: powershell` | `shell: pwsh` |
+| **Module compatibility** | Windows modules only | Limited compatibility layer |
+| **WPF support** | ✅ Fully supported | ❌ Not supported (would break UI) |
+| **COM interop** | ✅ Fully supported | Limited |
+| **Windows Task Scheduler** | ✅ Direct integration | ⚠️ Requires workarounds |
+| **Target audience** | Windows sysadmins (5.1) | Modern cross-platform users (7+) |
+
+### Where This Breaks Things
+
+1. **GitHub Actions workflows** — Using `shell: pwsh` would:
+   - Test code against the wrong runtime
+   - Miss breaking changes between 5.1 and 7.x
+   - Potentially pass CI but fail when users run the `.exe` locally
+
+2. **Local development** — Using `pwsh.exe` instead of `powershell.exe` would:
+   - Create inconsistency between dev environment and CI
+   - Mask compatibility bugs that only surface in 5.1
+   - Make debugging CI failures impossible
+
+3. **WPF UI** — PowerShell Core doesn't support WPF — this app would not run
+
+### The Correct Way
+
+**Local development:**
+```powershell
+# CORRECT - runs in Windows PowerShell 5.1
+powershell.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
+
+# WRONG - runs in PowerShell Core 7+, will fail
+pwsh.exe -STA -ExecutionPolicy Bypass -File "src\MainApp.ps1"
+```
+
+**GitHub Actions workflows:**
+```yaml
+# CORRECT - tests in Windows PowerShell 5.1
+- name: Run Tests
+  shell: powershell
+  run: |
+    Invoke-Build Test
+
+# WRONG - tests in PowerShell Core 7+
+- name: Run Tests
+  shell: pwsh
+  run: |
+    Invoke-Build Test
+```
+
+**Scripts and entry points:**
+```powershell
+# CORRECT - declares 5.1 requirement
+#Requires -Version 5.1
+Set-StrictMode -Version Latest
+
+# Also correct - calls Windows PowerShell explicitly
+& powershell.exe -STA -File $scriptPath
+
+# WRONG - no version declaration (ambiguous)
+# (script without #Requires)
+
+# WRONG - calls pwsh (wrong runtime)
+& pwsh.exe -File $scriptPath
+```
+
+### Enforcement
+
+- ✅ Every script must have `#Requires -Version 5.1` at the top
+- ✅ All workflow files use `shell: powershell` (not `pwsh`)
+- ✅ All invocations use `powershell.exe` (not `pwsh.exe`)
+- ✅ Code review will flag any use of `pwsh` as a blocker
+
+---
+
 ## Task Scheduler Record Format
 
 Tasks in `tasks.json` follow this schema:
