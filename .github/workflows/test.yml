@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PowerShell modules
-        shell: pwsh
+        shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
@@ -25,19 +25,19 @@ jobs:
           Install-Module -Name InvokeBuild -Force
 
       - name: Show environment
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
           Write-Host "Pester Version: $((Get-Module -ListAvailable Pester | Select-Object -First 1).Version)"
           Write-Host "PSScriptAnalyzer Version: $((Get-Module -ListAvailable PSScriptAnalyzer | Select-Object -First 1).Version)"
 
       - name: Run PSScriptAnalyzer
-        shell: pwsh
+        shell: powershell
         run: |
           Invoke-Build Analyze
 
       - name: Run Tests
-        shell: pwsh
+        shell: powershell
         run: |
           Invoke-Build Test
 
@@ -83,14 +83,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PowerShell modules
-        shell: pwsh
+        shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name ps2exe -Force
           Install-Module -Name InvokeBuild -Force
 
       - name: Build
-        shell: pwsh
+        shell: powershell
         run: |
           Invoke-Build Build
 
@@ -109,14 +109,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup PowerShell modules
-        shell: pwsh
+        shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -Force
           Install-Module -Name InvokeBuild -Force
 
       - name: Run PSScriptAnalyzer
-        shell: pwsh
+        shell: powershell
         run: |
           Invoke-Build Analyze
 
