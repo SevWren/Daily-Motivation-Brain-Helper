@@ -2,7 +2,7 @@ name: Test Suite
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, project-restart ]
   pull_request:
     branches: [ main, develop ]
   workflow_dispatch:
@@ -16,30 +16,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell modules
+      - name: Install Pester
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
-          Install-Module -Name PSScriptAnalyzer -Force
-          Install-Module -Name InvokeBuild -Force
 
       - name: Show environment
         shell: powershell
         run: |
-          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
-          Write-Host "Pester Version: $((Get-Module -ListAvailable Pester | Select-Object -First 1).Version)"
-          Write-Host "PSScriptAnalyzer Version: $((Get-Module -ListAvailable PSScriptAnalyzer | Select-Object -First 1).Version)"
+          Write-Host "PowerShell $($PSVersionTable.PSVersion)"
+          Write-Host "Pester $((Get-Module -ListAvailable Pester | Select-Object -First 1).Version)"
 
-      - name: Run PSScriptAnalyzer
+      - name: Run tests with coverage
         shell: powershell
         run: |
-          Invoke-Build Analyze
-
-      - name: Run Tests
-        shell: powershell
-        run: |
-          Invoke-Build Test
+          .\Invoke-Tests.ps1 -CI -Coverage $true
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -73,33 +65,6 @@ jobs:
           recreate: true
           path: code-coverage-results.md
 
-  build:
-    name: Build Executables
-    runs-on: windows-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup PowerShell modules
-        shell: powershell
-        run: |
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name ps2exe -Force
-          Install-Module -Name InvokeBuild -Force
-
-      - name: Build
-        shell: powershell
-        run: |
-          Invoke-Build Build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: executables
-          path: Output/*.exe
-
   analyze:
     name: Static Analysis
     runs-on: windows-latest
@@ -108,20 +73,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell modules
+      - name: Install PSScriptAnalyzer
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
           Install-Module -Name PSScriptAnalyzer -Force
-          Install-Module -Name InvokeBuild -Force
 
       - name: Run PSScriptAnalyzer
         shell: powershell
         run: |
-          Invoke-Build Analyze
+          Invoke-ScriptAnalyzer -Path DailyMotivation.ps1 `
+            -Settings .PSScriptAnalyzerSettings.psd1 `
+            -Severity Warning,Error
 
-      - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+  build:
+    name: Build EXE
+    runs-on: windows-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ps2exe
+        shell: powershell
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name ps2exe -Force
+
+      - name: Build DailyMotivation.exe
+        shell: powershell
+        run: |
+          .\build.ps1
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: scriptanalyzer-results.sarif
+          name: DailyMotivation-exe
+          path: DailyMotivation.exe
