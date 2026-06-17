@@ -1,28 +1,26 @@
 @{
     Run = @{
-        Path = 'Tests'
-        Exit = $true
+        Path    = 'Tests'
+        Exit    = $true
         PassThru = $true
     }
     Filter = @{
-        Tag = @()
+        Tag        = @()
         ExcludeTag = @()
     }
     Output = @{
         Verbosity = 'Detailed'
     }
     TestResult = @{
-        Enabled = $true
+        Enabled      = $true
         OutputFormat = 'NUnitXml'
-        OutputPath = 'TestResults.xml'
+        OutputPath   = 'TestResults.xml'
     }
     CodeCoverage = @{
-        Enabled = $true
-        Path = @(
-            'src/Modules/*.psm1'
-        )
+        Enabled      = $true
+        Path         = @('DailyMotivation.ps1')
         OutputFormat = 'JaCoCo'
-        OutputPath = 'coverage.xml'
+        OutputPath   = 'coverage.xml'
     }
     Should = @{
         ErrorAction = 'Stop'

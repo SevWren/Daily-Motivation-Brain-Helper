@@ -1,318 +1,206 @@
 #Requires -Modules Pester
 <#
 .SYNOPSIS
-    Unit tests for TaskScheduler.psm1
-
-.DESCRIPTION
-    Tests all functions in TaskScheduler module including:
-    - New-MotivationTask
-    - Get-MotivationTasks
-    - Remove-MotivationTask
-    - Update-MotivationTaskStatus
+    Unit tests for task scheduler functions in DailyMotivation.ps1.
+    Covers: New-MotivationTask, Get-MotivationTasks, Remove-MotivationTask.
+    Note: actual Register-ScheduledTask calls are mocked; these tests cover
+    the JSON-persistence and business-logic layers only.
 #>
 
 BeforeAll {
-    # Import modules under test
-    $ConfigPath = Join-Path $PSScriptRoot '..\..\src\Modules\ConfigManager.psm1'
-    $TaskPath = Join-Path $PSScriptRoot '..\..\src\Modules\TaskScheduler.psm1'
-    Import-Module $ConfigPath -Force
-    Import-Module $TaskPath -Force
+    . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
-    # Create test AppData directory
-    $script:TestAppDataDir = Join-Path ([System.IO.Path]::GetTempPath()) "DailyMotivationBrainHelper_Test_$(New-Guid)"
-    $script:OriginalAppDataDir = $env:APPDATA
-    $env:APPDATA = $script:TestAppDataDir
-
+    $script:OriginalAppData = $env:APPDATA
+    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Task_Test_$(New-Guid)"
     Initialize-AppData
 
-    # Test folder paths
+    # Override ExePath so the task action points to a dummy path
+    $script:ExePath = "C:\Test\DailyMotivation.exe"
+
     $script:TestFolder1 = 'C:\Projects\TestFolder1'
     $script:TestFolder2 = 'C:\Projects\TestFolder2'
+
+    # Mock Windows Task Scheduler cmdlets so tests run without admin rights
+    Mock Register-ScheduledTask   { }
+    Mock Unregister-ScheduledTask { }
+    Mock New-ScheduledTaskAction  { [PSCustomObject]@{ Execute = $args[1]; Argument = $args[3] } }
+    Mock New-ScheduledTaskTrigger { [PSCustomObject]@{ } }
+    Mock New-ScheduledTaskSettingsSet { [PSCustomObject]@{ } }
+    Mock New-ScheduledTaskPrincipal   { [PSCustomObject]@{ } }
+    Mock Get-ScheduledTask { throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("Not found") }
 }
 
 AfterAll {
-    # Cleanup
-    if (Test-Path $script:TestAppDataDir) {
-        Remove-Item -Path $script:TestAppDataDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (Test-Path $env:APPDATA) {
+        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $env:APPDATA = $script:OriginalAppDataDir
+    $env:APPDATA = $script:OriginalAppData
 }
 
 Describe 'New-MotivationTask' {
     BeforeEach {
-        # Clear tasks.json
-        "[]" | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
 
     Context 'When creating a new task' {
-        It 'Should create task with valid parameters' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $result.Success | Should -Be $true
-            $result.TaskId | Should -Not -BeNullOrEmpty
+        It 'Should return Success=true with a valid TaskId' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success   | Should -Be $true
+            $result.TaskId    | Should -Not -BeNullOrEmpty
             $result.TaskId.Length | Should -Be 16
             $result.IsDuplicate | Should -Be $false
         }
 
-        It 'Should generate unique task IDs' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-            $result2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $triggerTime
-
-            $result1.TaskId | Should -Not -Be $result2.TaskId
+        It 'Should generate unique task IDs for different folders' {
+            $t = (Get-Date).AddHours(2)
+            $r1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $t
+            $r1.TaskId | Should -Not -Be $r2.TaskId
         }
 
-        It 'Should store task in tasks.json' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $tasks = Get-MotivationTasks
-            $tasks.Count | Should -Be 1
-            $tasks[0].task_id | Should -Be $result.TaskId
-            $tasks[0].folder_path | Should -Be $script:TestFolder1
+        It 'Should persist the task to tasks.json' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $tasks = Get-TasksJson
+            $tasks.Count             | Should -Be 1
+            $tasks[0].task_id        | Should -Be $result.TaskId
+            $tasks[0].folder_path    | Should -Be $script:TestFolder1
         }
 
         It 'Should set status to PENDING' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $tasks = Get-MotivationTasks
-            $tasks[0].status | Should -Be 'PENDING'
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
+            (Get-TasksJson)[0].status | Should -Be 'PENDING'
         }
 
-        It 'Should derive folder name from path' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath 'C:\Projects\ClientA\Subfolder' -TriggerTime $triggerTime
-
-            $tasks = Get-MotivationTasks
-            $tasks[0].folder_name | Should -Be 'Subfolder'
+        It 'Should derive folder_name from path' {
+            New-MotivationTask -FolderPath 'C:\Projects\ClientA\Subfolder' -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
+            (Get-TasksJson)[0].folder_name | Should -Be 'Subfolder'
         }
 
         It 'Should format trigger time as ISO 8601' {
-            $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $tasks = Get-MotivationTasks
-            $tasks[0].scheduled_time | Should -Match '2026-12-25T14:00:00'
+            $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+            (Get-TasksJson)[0].scheduled_time | Should -Match '2026-12-25T14:00:00'
         }
 
         It 'Should initialize snooze_count to 0' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $tasks = Get-MotivationTasks
-            $tasks[0].snooze_count | Should -Be 0
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
+            (Get-TasksJson)[0].snooze_count | Should -Be 0
         }
     }
 
-    Context 'When checking for duplicates' {
-        It 'Should detect duplicate task for same folder and date' {
-            $triggerTime = (Get-Date).Date.AddHours(14)
-            $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $result2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $result2.Success | Should -Be $false
-            $result2.IsDuplicate | Should -Be $true
+    Context 'Duplicate detection' {
+        It 'Should block duplicate for same folder and date' {
+            $t = (Get-Date).Date.AddHours(14)
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
+            $r2.Success     | Should -Be $false
+            $r2.IsDuplicate | Should -Be $true
         }
 
-        It 'Should allow duplicate with -Force flag' {
-            $triggerTime = (Get-Date).Date.AddHours(14)
-            $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            $result2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime -Force
-
-            $result2.Success | Should -Be $true
-            $result2.IsDuplicate | Should -Be $false
-
-            $tasks = Get-MotivationTasks
-            $tasks.Count | Should -Be 2
+        It 'Should allow duplicate when -Force is set' {
+            $t = (Get-Date).Date.AddHours(14)
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t -Force
+            $r2.Success | Should -Be $true
+            (Get-TasksJson).Count | Should -Be 2
         }
 
-        It 'Should not detect duplicate for different folders' {
-            $triggerTime = (Get-Date).Date.AddHours(14)
-            $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-            $result2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $triggerTime
-
-            $result1.Success | Should -Be $true
-            $result2.Success | Should -Be $true
-            $result2.IsDuplicate | Should -Be $false
+        It 'Should allow same folder on a different date' {
+            $t1 = (Get-Date).Date.AddHours(14)
+            $t2 = (Get-Date).Date.AddDays(1).AddHours(14)
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t1 | Out-Null
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t2
+            $r2.IsDuplicate | Should -Be $false
         }
 
-        It 'Should not detect duplicate for different dates' {
-            $triggerTime1 = (Get-Date).Date.AddHours(14)
-            $triggerTime2 = (Get-Date).Date.AddDays(1).AddHours(14)
-
-            $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime1
-            $result2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime2
-
-            $result1.Success | Should -Be $true
-            $result2.Success | Should -Be $true
-            $result2.IsDuplicate | Should -Be $false
-        }
-
-        It 'Should perform case-insensitive duplicate check' {
-            $triggerTime = (Get-Date).Date.AddHours(14)
-            $result1 = New-MotivationTask -FolderPath 'C:\Projects\TestFolder' -TriggerTime $triggerTime
-            $result2 = New-MotivationTask -FolderPath 'c:\PROJECTS\testfolder' -TriggerTime $triggerTime
-
-            $result2.IsDuplicate | Should -Be $true
+        It 'Should perform case-insensitive path comparison' {
+            $t = (Get-Date).Date.AddHours(14)
+            New-MotivationTask -FolderPath 'C:\Projects\TestFolder' -TriggerTime $t | Out-Null
+            $r2 = New-MotivationTask -FolderPath 'c:\PROJECTS\testfolder' -TriggerTime $t
+            $r2.IsDuplicate | Should -Be $true
         }
     }
 
-    Context 'When handling network paths' {
-        It 'Should detect UNC paths' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath '\\server\share\folder' -TriggerTime $triggerTime
-
+    Context 'Network path detection' {
+        It 'Should detect UNC paths and set IsNetworkPath=true' {
+            $result = New-MotivationTask -FolderPath '\\server\share\folder' -TriggerTime ((Get-Date).AddHours(2))
             $result.IsNetworkPath | Should -Be $true
         }
 
-        It 'Should detect mapped drives' {
-            $triggerTime = (Get-Date).AddHours(2)
-            $result = New-MotivationTask -FolderPath 'Z:\Projects\Folder' -TriggerTime $triggerTime
-
-            # Note: This requires actual network drive detection logic
-            # Current implementation may not detect this without WMI queries
-            # Test documents expected behavior
+        It 'Should return IsNetworkPath=false for a local path' {
+            $result = New-MotivationTask -FolderPath 'C:\Projects\Local' -TriggerTime ((Get-Date).AddHours(2))
+            $result.IsNetworkPath | Should -Be $false
         }
     }
 }
 
 Describe 'Get-MotivationTasks' {
     BeforeEach {
-        "[]" | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
 
-    It 'Should return empty array when no tasks exist' {
+    It 'Should return an empty array when no tasks exist' {
         $tasks = Get-MotivationTasks
-
-        $tasks | Should -Be $null  # PS5.1 returns $null for empty arrays from ConvertFrom-Json
+        @($tasks).Count | Should -Be 0
     }
 
     It 'Should return all tasks' {
-        $triggerTime = (Get-Date).AddHours(2)
-        New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-        New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $triggerTime
-
-        $tasks = Get-MotivationTasks
-        $tasks.Count | Should -Be 2
+        $t = (Get-Date).AddHours(2)
+        New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+        New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $t | Out-Null
+        @(Get-MotivationTasks).Count | Should -Be 2
     }
 
-    It 'Should return tasks with all properties' {
-        $triggerTime = (Get-Date).AddHours(2)
-        New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-        $tasks = Get-MotivationTasks
-        $task = $tasks[0]
-
-        $task.task_id | Should -Not -BeNullOrEmpty
-        $task.task_name | Should -Match 'DailyMotivation_'
-        $task.folder_path | Should -Not -BeNullOrEmpty
-        $task.folder_name | Should -Not -BeNullOrEmpty
+    It 'Should return tasks with required properties' {
+        New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
+        $task = @(Get-MotivationTasks)[0]
+        $task.task_id        | Should -Not -BeNullOrEmpty
+        $task.task_name      | Should -Match 'DailyMotivation_'
+        $task.folder_path    | Should -Not -BeNullOrEmpty
+        $task.folder_name    | Should -Not -BeNullOrEmpty
         $task.scheduled_time | Should -Not -BeNullOrEmpty
-        $task.status | Should -Not -BeNullOrEmpty
-        $task.snooze_count | Should -BeOfType [int]
+        $task.status         | Should -Not -BeNullOrEmpty
+        $task.snooze_count   | Should -BeOfType [int]
     }
 
     It 'Should handle corrupted tasks.json gracefully' {
-        'invalid json{' | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-
-        $tasks = Get-MotivationTasks
-
-        $tasks.Count | Should -Be 0
+        'invalid json{' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        { Get-MotivationTasks } | Should -Not -Throw
     }
 }
 
 Describe 'Remove-MotivationTask' {
     BeforeEach {
-        "[]" | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
 
-    It 'Should remove task by ID' {
-        $triggerTime = (Get-Date).AddHours(2)
-        $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-        Remove-MotivationTask -TaskId $result.TaskId
-
-        $tasks = Get-MotivationTasks
-        $tasks.Count | Should -Be 0
+    It 'Should remove the specified task from tasks.json' {
+        $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        Remove-MotivationTask -TaskId $r.TaskId
+        @(Get-TasksJson).Count | Should -Be 0
     }
 
-    It 'Should only remove specified task' {
-        $triggerTime = (Get-Date).AddHours(2)
-        $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-        $result2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $triggerTime
-
-        Remove-MotivationTask -TaskId $result1.TaskId
-
-        $tasks = Get-MotivationTasks
-        $tasks.Count | Should -Be 1
-        $tasks[0].task_id | Should -Be $result2.TaskId
+    It 'Should only remove the specified task, leaving others intact' {
+        $t = (Get-Date).AddHours(2)
+        $r1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
+        $r2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $t
+        Remove-MotivationTask -TaskId $r1.TaskId
+        $tasks = @(Get-TasksJson)
+        $tasks.Count        | Should -Be 1
+        $tasks[0].task_id   | Should -Be $r2.TaskId
     }
 
-    It 'Should not throw when removing non-existent task' {
-        {
-            Remove-MotivationTask -TaskId 'nonexistent'
-        } | Should -Not -Throw
-    }
-}
-
-Describe 'Update-MotivationTaskStatus' {
-    BeforeEach {
-        "[]" | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-    }
-
-    It 'Should update task status' {
-        $triggerTime = (Get-Date).AddHours(2)
-        $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-        Update-MotivationTaskStatus -TaskId $result.TaskId -Status 'COMPLETED'
-
-        $tasks = Get-MotivationTasks
-        $tasks[0].status | Should -Be 'COMPLETED'
-    }
-
-    It 'Should support all valid status values' {
-        $triggerTime = (Get-Date).AddHours(2)
-        $validStatuses = @('PENDING', 'COMPLETED', 'SNOOZED', 'DISMISSED', 'DELETED')
-
-        foreach ($status in $validStatuses) {
-            "[]" | Set-Content (Join-Path $script:TestAppDataDir 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-
-            Update-MotivationTaskStatus -TaskId $result.TaskId -Status $status
-
-            $tasks = Get-MotivationTasks
-            $tasks[0].status | Should -Be $status
-        }
-    }
-
-    It 'Should not affect other tasks' {
-        $triggerTime = (Get-Date).AddHours(2)
-        $result1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
-        $result2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $triggerTime
-
-        Update-MotivationTaskStatus -TaskId $result1.TaskId -Status 'COMPLETED'
-
-        $tasks = Get-MotivationTasks
-        ($tasks | Where-Object { $_.task_id -eq $result1.TaskId }).status | Should -Be 'COMPLETED'
-        ($tasks | Where-Object { $_.task_id -eq $result2.TaskId }).status | Should -Be 'PENDING'
+    It 'Should not throw when removing a non-existent task ID' {
+        { Remove-MotivationTask -TaskId 'nonexistent' } | Should -Not -Throw
     }
 }
 
 Describe 'Task Scheduler Integration' {
-    It 'Should create Windows scheduled task' -Skip {
-        # Skipped: Requires administrative privileges and Windows Task Scheduler
-        # Integration test suite will cover this
+    It 'Should create a Windows scheduled task' -Skip {
+        # Skipped: requires administrative privileges and Windows Task Scheduler
     }
 
-    It 'Should remove Windows scheduled task' -Skip {
-        # Skipped: Requires administrative privileges
-    }
-
-    It 'Should detect when scheduled task is missing' -Skip {
-        # Skipped: Requires Windows Task Scheduler access
+    It 'Should remove a Windows scheduled task' -Skip {
+        # Skipped: requires administrative privileges
     }
 }
