@@ -269,7 +269,7 @@ function Save-TasksJson {
     $path = $script:TasksPath
     # FIX-003: explicit null/empty handling to avoid "null" or broken JSON
     if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
-        '[]' | Set-Content -Path $path -Encoding UTF8
+        Set-Content -Path $path -Value '[]' -Encoding UTF8 -NoNewline
     }
     else {
         ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $path -Encoding UTF8
@@ -302,58 +302,78 @@ function New-MotivationTask {
         }
     }
 
-    # Generate task ID with collision retry (GAP-007)
-    $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-    $taskName = "DailyMotivation_$taskId"
-    $attempts = 0
-    while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
+    # Use platform adapter if available (for cross-platform testing)
+    if ($script:Platform) {
+        # Platform adapter handles task scheduling
+        $taskResult = $script:Platform.ScheduleTask(@{
+            FolderPath = $FolderPath
+            TriggerTime = $TriggerTime
+            ExePath = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
+        })
+
+        if (-not $taskResult.Success) {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Platform adapter failed" }
+        }
+
+        $taskId = $taskResult.TaskId
+        $taskName = "DailyMotivation_$taskId"
+        $isNetworkPath = $false  # Platform adapter doesn't need network path detection
+    }
+    else {
+        # Windows-specific Task Scheduler logic
+        # Generate task ID with collision retry (GAP-007)
         $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
         $taskName = "DailyMotivation_$taskId"
-        $attempts++
-    }
-
-    # Task Scheduler action: call this exe directly with /popup
-    # $script:ExePath is set at entry point to $MyInvocation.MyCommand.Path
-    # Tests override $script:ExePath before calling this function
-    $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
-    $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
-
-    $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
-    $settings = New-ScheduledTaskSettingsSet `
-        -StartWhenAvailable `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
-        -MultipleInstances IgnoreNew
-
-    # GAP-010: network path detection for RunLevel assignment
-    $isUncPath     = $FolderPath -match '^\\\\[^\\]'
-    $isMappedDrive = $false
-    if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
-        try {
-            $driveInfo     = [System.IO.DriveInfo]::new([string]$FolderPath[0])
-            $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
+        $attempts = 0
+        while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
+            $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+            $taskName = "DailyMotivation_$taskId"
+            $attempts++
         }
-        catch { $isMappedDrive = $false }
-    }
-    $isNetworkPath = $isUncPath -or $isMappedDrive
-    $runLevel      = if ($isNetworkPath) { 'Highest' } else { 'Limited' }
 
-    $principal = New-ScheduledTaskPrincipal `
-        -UserId    $env:USERNAME `
-        -LogonType Interactive   `
-        -RunLevel  $runLevel
+        # Task Scheduler action: call this exe directly with /popup
+        # $script:ExePath is set at entry point to $MyInvocation.MyCommand.Path
+        # Tests override $script:ExePath before calling this function
+        $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
+        $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
 
-    try {
-        Register-ScheduledTask `
-            -TaskName    $taskName  `
-            -Action      $action    `
-            -Trigger     $trigger   `
-            -Settings    $settings  `
-            -Principal   $principal `
-            -Description "Daily Motivation Brain Helper - $FolderPath" `
-            -Force | Out-Null
-    }
-    catch {
-        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
+        $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
+        $settings = New-ScheduledTaskSettingsSet `
+            -StartWhenAvailable `
+            -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
+            -MultipleInstances IgnoreNew
+
+        # GAP-010: network path detection for RunLevel assignment
+        $isUncPath     = $FolderPath -match '^\\\\[^\\]'
+        $isMappedDrive = $false
+        if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+            try {
+                $driveInfo     = [System.IO.DriveInfo]::new([string]$FolderPath[0])
+                $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
+            }
+            catch { $isMappedDrive = $false }
+        }
+        $isNetworkPath = $isUncPath -or $isMappedDrive
+        $runLevel      = if ($isNetworkPath) { 'Highest' } else { 'Limited' }
+
+        $principal = New-ScheduledTaskPrincipal `
+            -UserId    $env:USERNAME `
+            -LogonType Interactive   `
+            -RunLevel  $runLevel
+
+        try {
+            Register-ScheduledTask `
+                -TaskName    $taskName  `
+                -Action      $action    `
+                -Trigger     $trigger   `
+                -Settings    $settings  `
+                -Principal   $principal `
+                -Description "Daily Motivation Brain Helper - $FolderPath" `
+                -Force | Out-Null
+        }
+        catch {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
+        }
     }
 
     # Persist to tasks.json
@@ -376,24 +396,28 @@ function New-MotivationTask {
 
 function Get-MotivationTasks {
     $tasks = @(Get-TasksJson)
-    foreach ($t in $tasks) {
-        if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
-        if ($t.status -eq "PENDING") {
-            try {
-                Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop | Out-Null
-            }
-            catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                $t.status = "DELETED"   # task genuinely gone (ERR-008)
-            }
-            catch [System.UnauthorizedAccessException] {
-                Write-Warning "Get-MotivationTasks: access denied reading '$($t.task_name)'"
-            }
-            catch {
-                Write-Warning "Get-MotivationTasks: unexpected error for '$($t.task_name)': $_"
+
+    # Skip task reconciliation if platform adapter is active (tests/headless mode)
+    if (-not $script:Platform) {
+        foreach ($t in $tasks) {
+            if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
+            if ($t.status -eq "PENDING") {
+                try {
+                    Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop | Out-Null
+                }
+                catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+                    $t.status = "DELETED"   # task genuinely gone (ERR-008)
+                }
+                catch [System.UnauthorizedAccessException] {
+                    Write-Warning "Get-MotivationTasks: access denied reading '$($t.task_name)'"
+                }
+                catch {
+                    Write-Warning "Get-MotivationTasks: unexpected error for '$($t.task_name)': $_"
+                }
             }
         }
+        Save-TasksJson $tasks
     }
-    Save-TasksJson $tasks
     return ,$tasks
 }
 
@@ -403,11 +427,18 @@ function Remove-MotivationTask {
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
     if (-not $target) { return $false }
 
-    try {
-        Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
+    # Use platform adapter if available (for cross-platform testing)
+    if ($script:Platform) {
+        $script:Platform.UnscheduleTask($TaskId)
     }
-    catch {
-        Write-Warning "Remove-MotivationTask: '$($target.task_name)': $_"
+    else {
+        # Windows-specific Task Scheduler logic
+        try {
+            Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Remove-MotivationTask: '$($target.task_name)': $_"
+        }
     }
 
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
