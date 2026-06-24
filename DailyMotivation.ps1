@@ -114,11 +114,23 @@ class HeadlessPlatform {
 
 function Initialize-AppData {
     <#
-    Creates %APPDATA%\DailyMotivationBrainHelper\ and default config files.
-    Falls back to %TEMP% if %APPDATA% is unavailable (GAP-003).
-    Re-resolves all paths from current $env:APPDATA so test redirects work (FIX-001).
+    Creates platform-specific app data directory and default config files.
+    Uses platform adapter if available (for cross-platform testing).
+    Falls back to %APPDATA% on Windows, $HOME/.local/share on Linux.
+    Re-resolves all paths from current environment so test redirects work (FIX-001).
     #>
-    $script:AppDataDir   = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+    # Use platform adapter if injected (for testing), otherwise use environment
+    if ($script:Platform) {
+        $script:AppDataDir = $script:Platform.GetAppDataPath()
+    }
+    elseif ($env:APPDATA) {
+        $script:AppDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+    }
+    else {
+        # Linux fallback: XDG Base Directory spec
+        $baseDir = if ($env:HOME) { $env:HOME } else { "~" }
+        $script:AppDataDir = Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
+    }
     $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
     $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
     $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
@@ -129,7 +141,7 @@ function Initialize-AppData {
             New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
         }
         catch {
-            $fallback = Join-Path $env:TEMP "DailyMotivationBrainHelper"
+            $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
             New-Item -ItemType Directory -Path $fallback -Force | Out-Null
             $script:AppDataDir   = $fallback
@@ -162,7 +174,7 @@ function Initialize-AppData {
 
     # tasks.json
     if (-not (Test-Path $script:TasksPath)) {
-        "[]" | Set-Content -Path $script:TasksPath -Encoding UTF8
+        Set-Content -Path $script:TasksPath -Value "[]" -Encoding UTF8 -NoNewline
     }
 }
 
