@@ -24,9 +24,11 @@ param(
 )
 
 # ============================================================
-# SECTION 2: Assembly loading + debug log
+# SECTION 2: Debug logging + platform detection
 # ============================================================
-$script:DebugLog = Join-Path $env:TEMP "DailyMotivation_debug.log"
+# Cross-platform temp directory resolution
+$script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
+$script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug.log"
 
 function Write-DLog {
     param([string]$Msg, [string]$Level = "INFO")
@@ -34,20 +36,75 @@ function Write-DLog {
     Add-Content -Path $script:DebugLog -Value $line -ErrorAction SilentlyContinue
 }
 
-Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) ======"
+# Platform detection
+$script:IsWindowsPlatform = $PSVersionTable.PSVersion.Major -ge 6 ? $IsWindows : $true
 
+# Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
-try {
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
-    Add-Type -AssemblyName System.Windows.Forms
-    $script:AssembliesLoaded = $true
-    Write-DLog "Assemblies loaded OK"
-}
-catch {
-    Write-DLog "Assembly load failed: $_" "WARN"
-    if (-not $NoRun) {
+
+function Initialize-WindowsAssemblies {
+    if ($script:AssembliesLoaded) { return }
+    try {
+        Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:AssembliesLoaded = $true
+        Write-DLog "Assemblies loaded OK"
+    }
+    catch {
+        Write-DLog "Assembly load failed: $_" "WARN"
         Write-Error "Could not load UI components (.NET Framework required): $_"
         exit 1
+    }
+}
+
+# ============================================================
+# SECTION 2.5: Platform Abstraction (for cross-platform testing)
+# ============================================================
+
+<#
+.SYNOPSIS
+    Platform abstraction seam for OS-agnostic PowerShell 7 testing.
+
+.DESCRIPTION
+    HeadlessPlatform adapter enables tests to run on Linux CI without Windows dependencies.
+    Per architecture-report.html Candidate 3 (Strong recommendation).
+
+    Future: WindowsPlatform adapter will encapsulate all Windows-specific APIs
+    (WPF, Task Scheduler, Registry, explorer.exe).
+#>
+
+class HeadlessPlatform {
+    [string] GetAppDataPath() {
+        # Return cross-platform test directory
+        $baseDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
+        return Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
+    }
+
+    [void] OpenFolder([string]$path) {
+        # No-op for headless testing
+        Write-DLog "HeadlessPlatform: OpenFolder($path) - no-op"
+    }
+
+    [hashtable] ScheduleTask([hashtable]$params) {
+        # Mock task scheduling
+        Write-DLog "HeadlessPlatform: ScheduleTask - mock"
+        return @{ Success = $true; TaskId = "headless-mock-" + [guid]::NewGuid().ToString("N").Substring(0, 16) }
+    }
+
+    [void] UnscheduleTask([string]$taskId) {
+        # No-op for headless testing
+        Write-DLog "HeadlessPlatform: UnscheduleTask($taskId) - no-op"
+    }
+
+    [void] RegisterContextMenu([string]$exePath) {
+        # No-op for headless testing
+        Write-DLog "HeadlessPlatform: RegisterContextMenu($exePath) - no-op"
+    }
+
+    [string] ShowDialog([string]$message, [string]$title, [string]$buttons, [string]$icon) {
+        # Return default button for headless testing
+        Write-DLog "HeadlessPlatform: ShowDialog - returning default"
+        return "OK"
     }
 }
 
@@ -1442,6 +1499,13 @@ function Get-RandomMessage {
 # (-NoRun switch skips this block; used when dot-sourcing in tests)
 # ============================================================
 if (-not $NoRun) {
+    # Load Windows assemblies (WPF, WinForms) - required for UI modes
+    if ($script:IsWindowsPlatform) {
+        Initialize-WindowsAssemblies
+    }
+
+    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$($script:IsWindowsPlatform ? 'Windows' : 'Linux') ======"
+
     # Capture exe path for Task Scheduler action and context menu registration.
     # PS2EXE sets $MyInvocation.MyCommand.Path to the compiled .exe path.
     # In tests: set $script:ExePath = "test-override.exe" before calling New-MotivationTask.
