@@ -44,10 +44,8 @@ Describe "Initialize-AppData with platform adapter" -Tag "Unit", "Config", "Plat
             # Script variables should be set
             $script:AppDataDir | Should -Not -BeNullOrEmpty
 
-            # On Linux, should use platform-provided path
-            if (-not $script:IsWindowsPlatform) {
-                $script:AppDataDir | Should -BeLike "*/.local/share/DailyMotivationBrainHelper"
-            }
+            # When env:APPDATA is set (test isolation), platform adapter should respect it
+            $script:AppDataDir | Should -BeLike "*DailyMotivationBrainHelper"
         }
 
         It "creates config.json in platform-specific directory" {

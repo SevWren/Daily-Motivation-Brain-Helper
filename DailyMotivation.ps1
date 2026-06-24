@@ -75,7 +75,11 @@ function Initialize-WindowsAssemblies {
 
 class HeadlessPlatform {
     [string] GetAppDataPath() {
-        # Return cross-platform test directory
+        # Return test-specific directory if APPDATA is set (for test isolation),
+        # otherwise return cross-platform default directory
+        if ($env:APPDATA) {
+            return Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+        }
         $baseDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
         return Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
     }
@@ -444,6 +448,102 @@ function Remove-MotivationTask {
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
     Save-TasksJson $tasks
     return $true
+}
+
+function Invoke-FolderScheduling {
+    <#
+    .SYNOPSIS
+        Schedules a folder for motivational popup with business logic extracted from UI.
+    .DESCRIPTION
+        Core scheduling logic extracted from Show-MainWindow's Do-Schedule nested function.
+        Handles folder validation, duplicate detection, task creation, and popup config setup.
+        UI concerns (MessageBox, task list refresh, undo timer) remain in the caller.
+    .PARAMETER FolderPath
+        The folder path to schedule.
+    .PARAMETER TriggerTime
+        When the popup should trigger.
+    .PARAMETER Force
+        Bypass duplicate detection and schedule anyway.
+    .OUTPUTS
+        Hashtable with Success, TaskId, IsDuplicate, IsNetworkPath keys.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$FolderPath,
+        [Parameter(Mandatory)][datetime]$TriggerTime,
+        [switch]$Force
+    )
+
+    # Detect network paths (UNC or mapped drives)
+    $isUncPath = $FolderPath -match '^\\\\[^\\]'
+    $isMappedDrive = $false
+    if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        try {
+            $driveInfo = [System.IO.DriveInfo]::new([string]$FolderPath[0])
+            $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
+        }
+        catch { $isMappedDrive = $false }
+    }
+    $isNetworkPath = $isUncPath -or $isMappedDrive
+
+    # Validate folder path (skip for UNC paths which might not be accessible)
+    if (-not $isUncPath -and -not (Test-Path $FolderPath -PathType Container)) {
+        return @{
+            Success = $false
+            TaskId = $null
+            IsDuplicate = $false
+            IsNetworkPath = $isNetworkPath
+            Error = "Folder not found: $FolderPath"
+        }
+    }
+
+    # Get random motivational message
+    $msg = Get-RandomMessage
+
+    # Attempt to create task
+    $result = New-MotivationTask -FolderPath $FolderPath -TriggerTime $TriggerTime
+
+    # Handle duplicate detection
+    if ($result.IsDuplicate) {
+        if (-not $Force) {
+            # Return duplicate status, let caller decide (e.g., show confirmation dialog)
+            return @{
+                Success = $false
+                TaskId = $null
+                IsDuplicate = $true
+                IsNetworkPath = $isNetworkPath
+            }
+        }
+        # Force scheduling despite duplicate
+        $result = New-MotivationTask -FolderPath $FolderPath -TriggerTime $TriggerTime -Force
+    }
+
+    # Check if task creation succeeded
+    if (-not $result.Success) {
+        return @{
+            Success = $false
+            TaskId = $null
+            IsDuplicate = $false
+            IsNetworkPath = $isNetworkPath
+            Error = $result.Error
+        }
+    }
+
+    # Write popup config for the scheduled task
+    Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
+        -ExplorerPath $FolderPath -TaskId $result.TaskId
+
+    # REQ-010: Register context menu on successful scheduling
+    if ($script:ExePath) {
+        Register-ContextMenu -ExePath $script:ExePath
+    }
+
+    # Return success with all metadata
+    return @{
+        Success = $true
+        TaskId = $result.TaskId
+        IsDuplicate = $false
+        IsNetworkPath = $isNetworkPath
+    }
 }
 
 # ============================================================
@@ -917,41 +1017,46 @@ function Show-MainWindow {
 
     function Do-Schedule {
         param([string]$FolderPath)
-        if (-not (Test-Path $FolderPath -PathType Container)) {
-            [System.Windows.MessageBox]::Show("Folder not found: $FolderPath",
-                "Invalid Folder", "OK", "Warning") | Out-Null
+        $triggerTime = Get-ScheduleTime
+
+        # Attempt to schedule the folder (business logic extracted to Invoke-FolderScheduling)
+        $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime
+
+        # Handle validation errors
+        if (-not $result.Success -and -not $result.IsDuplicate) {
+            if ($result.Error) {
+                [System.Windows.MessageBox]::Show($result.Error, "Invalid Folder", "OK", "Warning") | Out-Null
+            }
+            else {
+                Show-ErrorDialog "Could not create the scheduled task."
+            }
             return
         }
-        $triggerTime = Get-ScheduleTime
-        $msg         = Get-RandomMessage
-        $result      = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime
 
+        # Handle duplicate detection with user confirmation
         if ($result.IsDuplicate) {
             $dateLabel = $triggerTime.ToString("dddd, MMMM d")
             $confirm = [System.Windows.MessageBox]::Show(
                 "This folder is already scheduled for $dateLabel.`n`nSchedule again anyway?",
                 "Already Scheduled", "YesNo", "Question")
             if ($confirm -eq "No") { return }
-            $result = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime -Force
+
+            # Force scheduling despite duplicate
+            $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime -Force
+            if (-not $result.Success) {
+                Show-ErrorDialog "Could not create the scheduled task.`n$($result.Error)"
+                return
+            }
         }
 
-        if (-not $result.Success) {
-            Show-ErrorDialog "Could not create the scheduled task.`n$($result.Error)"
-            return
-        }
-
+        # Show network path warning if applicable
         if ($result.IsNetworkPath) {
             [System.Windows.MessageBox]::Show(
                 "Scheduled, but '$FolderPath' is a network location. The popup may fail if the share is unavailable at trigger time.`n`nTip: Use a UNC path instead of a mapped drive letter.",
                 "Network Path Warning", "OK", "Warning") | Out-Null
         }
 
-        Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
-            -ExplorerPath $FolderPath -TaskId $result.TaskId
-
-        # REQ-010: register context menu on first schedule
-        if ($script:ExePath) { Register-ContextMenu -ExePath $script:ExePath }
-
+        # Update UI
         Refresh-TaskList
         $dateLabel = $triggerTime.ToString("dddd 'at' h:mm tt")
         Start-UndoTimer -TaskId $result.TaskId -ScheduledFor $dateLabel
