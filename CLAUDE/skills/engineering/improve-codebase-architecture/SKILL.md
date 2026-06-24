@@ -44,7 +44,7 @@ Apply the **deletion test** to anything you suspect is shallow.
 
 ### 2. Present candidates as an HTML report
 
-Write a self-contained HTML file to the OS temp directory. For each candidate:
+Write a self-contained HTML file to `/tmp/architecture-report-{timestamp}.html` (temporary analysis, not part of repository). For each candidate:
 
 - **Files** — which files/modules are involved
 - **Problem** — why the current architecture is causing friction

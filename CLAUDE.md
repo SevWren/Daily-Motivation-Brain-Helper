@@ -60,6 +60,36 @@ Requires `ps2exe` module: `Install-Module ps2exe -Scope CurrentUser`
 
 Tests dot-source the script with `-NoRun` — no exe required to run tests.
 
+### Linux/Unix Test Environment Setup
+
+When running tests on Linux/Unix (including CI environments), PowerShell 7 must be installed. The following automated setup is required:
+
+```bash
+# Detect OS and install PowerShell 7 if on Linux/Unix
+if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
+    if ! command -v pwsh &> /dev/null; then
+        echo "Installing PowerShell 7 to $HOME/.powershell..."
+        mkdir -p "$HOME/.powershell"
+        cd "$HOME/.powershell"
+
+        # Download and extract PowerShell 7
+        if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            wget -q https://github.com/PowerShell/PowerShell/releases/download/v7.4.2/powershell-7.4.2-linux-x64.tar.gz
+            tar -xzf powershell-7.4.2-linux-x64.tar.gz
+        elif [[ "$OSTYPE" == "darwin"* ]]; then
+            wget -q https://github.com/PowerShell/PowerShell/releases/download/v7.4.2/powershell-7.4.2-osx-x64.tar.gz
+            tar -xzf powershell-7.4.2-osx-x64.tar.gz
+        fi
+
+        # Add to PATH
+        export PATH="$HOME/.powershell:$PATH"
+        echo "PowerShell 7 installed successfully."
+    fi
+fi
+```
+
+**Note:** The test suite is designed to run on Linux through platform abstraction. The app itself remains Windows 10 only (WPF, Task Scheduler, registry, Explorer context menu all require Windows).
+
 ## Key Design Constraints
 
 - PowerShell 5.1 / .NET 4.x only (no PS 6+/7+ features, no `pwsh`)
