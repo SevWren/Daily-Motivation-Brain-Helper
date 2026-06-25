@@ -95,15 +95,9 @@ Describe 'New-MotivationTask' {
             $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             $actual = (Get-TasksJson)[0].scheduled_time
-            # Debug: Show actual value and test regex
-            Write-Host "[DEBUG] Actual value: '$actual'"
-            Write-Host "[DEBUG] Length: $($actual.Length)"
-            Write-Host "[DEBUG] Bytes: $([System.Text.Encoding]::UTF8.GetBytes($actual) -join ',')"
-            Write-Host "[DEBUG] Simple match test: $($actual -match '2026-12-25T14:00:00')"
-            Write-Host "[DEBUG] With escape: $($actual -match '2026-12-25T14:00:00\.\d+')"
-            Write-Host "[DEBUG] With optional: $($actual -match '2026-12-25T14:00:00(\.\d+)?')"
-            # Accept both formats (with or without fractional seconds)
-            $actual | Should -Match '^2026-12-25T14:00:00'
+            # Accept both Windows (.0000000) and Linux (no fractional seconds) formats
+            # Both are valid ISO 8601 timestamps
+            $actual | Should -BeLike '2026-12-25T14:00:00*'
         }
 
         It 'Should initialize snooze_count to 0' {
