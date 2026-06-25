@@ -39,6 +39,9 @@ function Write-DLog {
 # Platform detection
 $script:IsWindowsPlatform = $PSVersionTable.PSVersion.Major -ge 6 ? $IsWindows : $true
 
+# Platform adapter (null by default, tests can inject HeadlessPlatform)
+$script:Platform = $null
+
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
 
@@ -75,13 +78,16 @@ function Initialize-WindowsAssemblies {
 
 class HeadlessPlatform {
     [string] GetAppDataPath() {
-        # Return test-specific directory if APPDATA is set (for test isolation),
-        # otherwise return cross-platform default directory
-        if ($env:APPDATA) {
-            return Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+        # Always return Unix-style cross-platform path for testing
+        # Simulate Linux XDG Base Directory spec even when running on Windows
+        # This allows tests to verify cross-platform behavior
+        if ($env:HOME -and $env:HOME -notlike "C:\*") {
+            # Running on actual Linux/Unix or HOME is set to Unix-style path
+            return Join-Path $env:HOME ".local/share/DailyMotivationBrainHelper"
         }
-        $baseDir = if ($env:HOME) { $env:HOME } else { $env:USERPROFILE }
-        return Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
+        # Running on Windows - return Unix-style path for test compatibility
+        # Use /tmp as base to avoid Windows-specific paths (C:\, AppData, etc.)
+        return "/tmp/.local/share/DailyMotivationBrainHelper"
     }
 
     [void] OpenFolder([string]$path) {
@@ -296,6 +302,8 @@ function New-MotivationTask {
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
+            # Check property exists first (guard against malformed/legacy task objects)
+            ($null -ne $_ -and $_.PSObject.Properties['folder_path']) -and
             $_.folder_path -and $_.folder_path.Length -gt 0 -and
             [System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -eq $normalizedInput -and
             ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date -and
