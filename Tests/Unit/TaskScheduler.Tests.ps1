@@ -27,8 +27,34 @@ BeforeAll {
     Mock New-ScheduledTaskTrigger { [PSCustomObject]@{ } }
     Mock New-ScheduledTaskSettingsSet { [PSCustomObject]@{ } }
     Mock New-ScheduledTaskPrincipal   { [PSCustomObject]@{ } }
-    # Return $null instead of throwing to simulate task not found (ErrorAction SilentlyContinue doesn't catch exceptions)
-    Mock Get-ScheduledTask { return $null }
+    # Mock Get-ScheduledTask to behave like the real cmdlet when task doesn't exist
+    # Real cmdlet with -ErrorAction SilentlyContinue returns $null (doesn't throw)
+    # Real cmdlet with -ErrorAction Stop throws CimJobException
+    Mock Get-ScheduledTask {
+        param([string]$TaskName, [string]$ErrorAction)
+
+        # Check if any task exists in tasks.json with this name
+        $tasks = @(Get-TasksJson)
+        $exists = $tasks | Where-Object { $_.task_name -eq $TaskName }
+
+        if ($exists) {
+            # Return a mock scheduled task object
+            return [PSCustomObject]@{
+                TaskName = $TaskName
+                State = "Ready"
+            }
+        }
+
+        # Task doesn't exist - behavior depends on ErrorAction
+        # When ErrorAction is SilentlyContinue, cmdlet returns nothing (not throw)
+        # When ErrorAction is Stop, cmdlet throws
+        if ($ErrorAction -eq 'Stop') {
+            throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("Not found")
+        }
+
+        # SilentlyContinue or default - return nothing
+        return $null
+    }
 }
 
 AfterAll {

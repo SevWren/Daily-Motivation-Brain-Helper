@@ -1,5 +1,56 @@
 # CLAUDE.md — Daily Motivation Brain Helper
 
+## CRITICAL: Testing Environment Requirements
+
+**⚠️ AI AGENTS MUST READ THIS FIRST ⚠️**
+
+This application is **Windows 10 only** at runtime. The test suite has **two incompatible execution environments:**
+
+1. **Windows 10 PowerShell 5.1/7** (PRIMARY) - Where test baselines originate
+2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
+
+### Test Validation Rules for AI Agents
+
+**🚨 CRITICAL RULE: DO NOT assume test fixes are valid based solely on tests passing in a Unix/Linux environment.**
+
+- Test baselines were created on Windows 10 with Windows-specific paths, registry operations, and Task Scheduler behavior
+- Tests passing in the Linux sandbox **DO NOT** guarantee they will pass on Windows 10
+- Mock behavior differs between Windows and Linux (especially for Task Scheduler, Registry, and CIM exceptions)
+- Platform abstraction tests (`*.Platform.Tests.ps1`) are designed for Linux; regular tests are designed for Windows
+
+### Required Validation Process
+
+Before declaring any test fix "successful":
+
+1. ✅ **MUST** verify tests pass on **Windows 10 PowerShell 5.1 or 7** (the target platform)
+2. ✅ **MUST** review Windows-specific test log output (not Linux sandbox output)
+3. ✅ **MUST** understand the difference between:
+   - Platform tests (HeadlessPlatform injection) - run on Linux
+   - Regular unit tests (Windows API mocks) - run on Windows
+4. ⚠️ **DO NOT** commit changes that only work in the Linux sandbox
+5. ⚠️ **DO NOT** assume mock behavior is equivalent between Windows and Linux
+
+### Windows-Specific Test Dependencies
+
+These tests **REQUIRE** Windows 10 to validate correctly:
+
+- `TaskScheduler.Tests.ps1` - Mocks Windows Task Scheduler cmdlets (`Register-ScheduledTask`, `Get-ScheduledTask`)
+- `ContextMenu.Tests.ps1` - Uses Windows registry (`HKCU:\` provider)
+- Integration tests - Validate Task Scheduler integration on Windows
+
+### Platform Abstraction Tests (Linux-Safe)
+
+These tests CAN run on Linux with HeadlessPlatform:
+
+- `Config.Platform.Tests.ps1`
+- `TaskScheduler.Platform.Tests.ps1`
+- `PlatformAdapter.Tests.ps1`
+- `FolderScheduling.Tests.ps1`
+
+**Bottom Line:** If you're working in a Linux sandbox, your test results **do not represent Windows 10 behavior**. Always request Windows test logs before declaring fixes complete.
+
+---
+
 ## Architecture
 
 **One file, one exe.**
