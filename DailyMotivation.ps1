@@ -761,6 +761,14 @@ function Invoke-FolderScheduling {
 
 function Register-ContextMenu {
     param([string]$ExePath)
+    # Guard: only register when invoked from a compiled .exe, not the source .ps1.
+    # If the script is run directly (pwsh .\DailyMotivation.ps1), $MyInvocation.MyCommand.Path
+    # is the .ps1 path. Storing that in the registry causes "This app can't run on your PC"
+    # when Explorer invokes the verb, because Windows tries to execute a text file as a PE.
+    if (-not $ExePath -or $ExePath -notmatch '\.exe$') {
+        Write-DLog "Register-ContextMenu: skipped — ExePath is not a compiled exe ('$ExePath'). Run the compiled DailyMotivation.exe to register the context menu." "WARN"
+        return
+    }
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
     try {
