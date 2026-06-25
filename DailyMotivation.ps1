@@ -398,31 +398,42 @@ function New-MotivationTask {
     return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false; IsNetworkPath = $isNetworkPath }
 }
 
-function Get-MotivationTasks {
-    $tasks = @(Get-TasksJson)
+function Sync-TaskStatuses {
+    # Explicit reconciliation: check Windows Task Scheduler and update task statuses
+    # Call this function when you need up-to-date status from the OS
+    # Skip reconciliation if platform adapter is active (tests/headless mode)
+    if ($script:Platform) { return }
 
-    # Skip task reconciliation if platform adapter is active (tests/headless mode)
-    if (-not $script:Platform) {
-        foreach ($t in $tasks) {
-            if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
-            if ($t.status -eq "PENDING") {
-                try {
-                    Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop | Out-Null
-                }
-                catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                    $t.status = "DELETED"   # task genuinely gone (ERR-008)
-                }
-                catch [System.UnauthorizedAccessException] {
-                    Write-Warning "Get-MotivationTasks: access denied reading '$($t.task_name)'"
-                }
-                catch {
-                    Write-Warning "Get-MotivationTasks: unexpected error for '$($t.task_name)': $_"
-                }
+    $tasks = @(Get-TasksJson)
+    $changed = $false
+
+    foreach ($t in $tasks) {
+        if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
+        if ($t.status -eq "PENDING") {
+            try {
+                Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop | Out-Null
+            }
+            catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+                $t.status = "DELETED"   # task genuinely gone (ERR-008)
+                $changed = $true
+            }
+            catch [System.UnauthorizedAccessException] {
+                Write-Warning "Sync-TaskStatuses: access denied reading '$($t.task_name)'"
+            }
+            catch {
+                Write-Warning "Sync-TaskStatuses: unexpected error for '$($t.task_name)': $_"
             }
         }
+    }
+
+    if ($changed) {
         Save-TasksJson $tasks
     }
-    return ,$tasks
+}
+
+function Get-MotivationTasks {
+    # Pure reader - returns tasks from disk without side effects
+    return @(Get-TasksJson)
 }
 
 function Remove-MotivationTask {
@@ -448,6 +459,124 @@ function Remove-MotivationTask {
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
     Save-TasksJson $tasks
     return $true
+}
+
+# ============================================================================
+# BUSINESS LOGIC - Hoisted from UI functions for testability
+# ============================================================================
+
+function Get-ScheduleTime {
+    param(
+        [Parameter(Mandatory)]
+        [object]$TodayRadioControl
+    )
+    $cfg  = Get-Config
+    $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
+    if ($TodayRadioControl.IsVisible -and $TodayRadioControl.IsChecked) {
+        return (Get-Date).Date.AddHours($hour)
+    }
+    return (Get-Date).Date.AddDays(1).AddHours($hour)
+}
+
+function Update-TaskListUI {
+    param(
+        [Parameter(Mandatory)]
+        [object]$TaskListControl,
+        [Parameter(Mandatory)]
+        [object]$NoTasksLabelControl
+    )
+    $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
+    $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
+    $TaskListControl.ItemsSource          = $pending
+    $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
+}
+
+function Get-HistoryData {
+    if (-not (Test-Path $script:LogPath)) { return @() }
+    $lines = @(Get-Content $script:LogPath -Encoding UTF8 |
+        Where-Object { $_ -match '^\[' } |
+        Select-Object -Last 30)
+    if (-not $lines -or $lines.Count -eq 0) { return @() }
+
+    $items = foreach ($line in $lines) {
+        $parts = $line -split '\s*\|\s*'
+        if ($parts.Count -ge 5) {
+            $outcome = $parts[4].Trim()
+            [PSCustomObject]@{
+                Timestamp      = $parts[0].Trim('[', ']')
+                FolderName     = $parts[2].Trim()
+                OutcomeDisplay = $outcome
+                OutcomeColor   = switch ($outcome) {
+                    "Opened"    { "#52B788" }
+                    "Dismissed" { "#E07A5F" }
+                    default     { "#8888A8" }
+                }
+            }
+        }
+    }
+    return @($items)
+}
+
+function Update-HistoryUI {
+    param(
+        [Parameter(Mandatory)]
+        [object]$HistoryListControl
+    )
+    $items = Get-HistoryData
+    $HistoryListControl.ItemsSource = $items
+}
+
+function Start-UndoTimer {
+    param(
+        [Parameter(Mandatory)]
+        [string]$TaskId,
+        [Parameter(Mandatory)]
+        [string]$ScheduledFor,
+        [Parameter(Mandatory)]
+        [object]$UndoLabelControl,
+        [Parameter(Mandatory)]
+        [object]$UndoProgressControl,
+        [Parameter(Mandatory)]
+        [object]$UndoBannerControl
+    )
+    $script:lastTaskId     = $TaskId
+    $script:undoSeconds    = 30
+    $UndoLabelControl.Text        = "Scheduled for $ScheduledFor - undo in 30s"
+    $UndoProgressControl.Value    = 30
+    $UndoBannerControl.Visibility = "Visible"
+    $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
+    $script:undoTimer.Interval = [System.TimeSpan]::FromSeconds(1)
+    $script:undoTimer.Add_Tick({
+            $script:undoSeconds--
+            $UndoProgressControl.Value = $script:undoSeconds
+            $UndoLabelControl.Text     = "Scheduled - undo in $($script:undoSeconds)s"
+            if ($script:undoSeconds -le 0) {
+                $script:undoTimer.Stop()
+                $UndoBannerControl.Visibility = "Collapsed"
+                $script:lastTaskId     = $null
+            }
+        })
+    $script:undoTimer.Start()
+}
+
+function Stop-UndoTimer {
+    param(
+        [Parameter(Mandatory)]
+        [object]$UndoBannerControl
+    )
+    if ($script:undoTimer) { $script:undoTimer.Stop(); $script:undoTimer = $null }
+    $UndoBannerControl.Visibility = "Collapsed"
+}
+
+function Set-SnoozeDuration {
+    param(
+        [Parameter(Mandatory)]
+        [int]$Minutes,
+        [Parameter(Mandatory)]
+        [object]$SnoozeBtnControl
+    )
+    $script:snoozeMinutes       = $Minutes
+    $SnoozeBtnControl.Content   = "Snooze $(if ($Minutes -lt 60) { "${Minutes}m" } else { '1h' })"
 }
 
 function Invoke-FolderScheduling {
@@ -947,77 +1076,9 @@ function Show-MainWindow {
         $scheduleBtn.IsEnabled        = $true
     }
 
-    function Get-ScheduleTime {
-        $cfg  = Get-Config
-        $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
-        if ($todayRadio.IsVisible -and $todayRadio.IsChecked) {
-            return (Get-Date).Date.AddHours($hour)
-        }
-        return (Get-Date).Date.AddDays(1).AddHours($hour)
-    }
-
-    function Refresh-TaskList {
-        $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
-        $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
-        $taskList.ItemsSource    = $pending
-        $noTasksLabel.Visibility = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
-    }
-
-    function Refresh-History {
-        if (-not (Test-Path $script:LogPath)) { return }
-        $lines = @(Get-Content $script:LogPath -Encoding UTF8 |
-            Where-Object { $_ -match '^\[' } |
-            Select-Object -Last 30)
-        if (-not $lines -or $lines.Count -eq 0) { $historyList.ItemsSource = @(); return }
-        $items = foreach ($line in $lines) {
-            $parts = $line -split '\s*\|\s*'
-            if ($parts.Count -ge 5) {
-                $outcome = $parts[4].Trim()
-                [PSCustomObject]@{
-                    Timestamp      = $parts[0].Trim('[', ']')
-                    FolderName     = $parts[2].Trim()
-                    OutcomeDisplay = $outcome
-                    OutcomeColor   = switch ($outcome) {
-                        "Opened"    { "#52B788" }
-                        "Dismissed" { "#E07A5F" }
-                        default     { "#8888A8" }
-                    }
-                }
-            }
-        }
-        $historyList.ItemsSource = @($items)
-    }
-
-    function Start-UndoTimer {
-        param([string]$TaskId, [string]$ScheduledFor)
-        $script:lastTaskId     = $TaskId
-        $script:undoSeconds    = 30
-        $undoLabel.Text        = "Scheduled for $ScheduledFor - undo in 30s"
-        $undoProgress.Value    = 30
-        $undoBanner.Visibility = "Visible"
-        $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
-        $script:undoTimer.Interval = [System.TimeSpan]::FromSeconds(1)
-        $script:undoTimer.Add_Tick({
-                $script:undoSeconds--
-                $undoProgress.Value = $script:undoSeconds
-                $undoLabel.Text     = "Scheduled - undo in $($script:undoSeconds)s"
-                if ($script:undoSeconds -le 0) {
-                    $script:undoTimer.Stop()
-                    $undoBanner.Visibility = "Collapsed"
-                    $script:lastTaskId     = $null
-                }
-            })
-        $script:undoTimer.Start()
-    }
-
-    function Stop-UndoTimer {
-        if ($script:undoTimer) { $script:undoTimer.Stop(); $script:undoTimer = $null }
-        $undoBanner.Visibility = "Collapsed"
-    }
-
     function Do-Schedule {
         param([string]$FolderPath)
-        $triggerTime = Get-ScheduleTime
+        $triggerTime = Get-ScheduleTime -TodayRadioControl $todayRadio
 
         # Attempt to schedule the folder (business logic extracted to Invoke-FolderScheduling)
         $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime
@@ -1057,9 +1118,9 @@ function Show-MainWindow {
         }
 
         # Update UI
-        Refresh-TaskList
+        Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
         $dateLabel = $triggerTime.ToString("dddd 'at' h:mm tt")
-        Start-UndoTimer -TaskId $result.TaskId -ScheduledFor $dateLabel
+        Start-UndoTimer -TaskId $result.TaskId -ScheduledFor $dateLabel -UndoLabelControl $undoLabel -UndoProgressControl $undoProgress -UndoBannerControl $undoBanner
     }
 
     # Show Today radio only before trigger hour
@@ -1104,10 +1165,10 @@ function Show-MainWindow {
 
     $undoBtn.Add_Click({
             if ($script:lastTaskId) {
-                Stop-UndoTimer
+                Stop-UndoTimer -UndoBannerControl $undoBanner
                 Remove-MotivationTask -TaskId $script:lastTaskId
                 $script:lastTaskId     = $null
-                Refresh-TaskList
+                Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
             }
         })
@@ -1125,7 +1186,7 @@ function Show-MainWindow {
                     "Confirm Delete", "YesNo", "Warning")
                 if ($confirm -eq "Yes") {
                     Remove-MotivationTask -TaskId $container.Tag
-                    Refresh-TaskList
+                    Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 }
             }
         })
@@ -1136,7 +1197,7 @@ function Show-MainWindow {
                 $historyToggleBtn.Content = "View History"
             }
             else {
-                Refresh-History
+                Update-HistoryUI -HistoryListControl $historyList
                 $historyPanel.Visibility  = "Visible"
                 $historyToggleBtn.Content = "Hide History"
             }
@@ -1148,11 +1209,13 @@ function Show-MainWindow {
                 "Clear History", "YesNo", "Question")
             if ($confirm -eq "Yes") {
                 if (Test-Path $script:LogPath) { Clear-Content $script:LogPath }
-                Refresh-History
+                Update-HistoryUI -HistoryListControl $historyList
             }
         })
 
-    Refresh-TaskList
+    # Reconcile task statuses with Windows Task Scheduler before displaying
+    Sync-TaskStatuses
+    Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
     $window.ShowDialog() | Out-Null
 }
 
@@ -1492,15 +1555,10 @@ function Show-PopupWindow {
     # Snooze duration helpers
     $snoozeDropBtn.Add_Click({ $snoozeDropBtn.ContextMenu.IsOpen = $true })
 
-    function Set-SnoozeDuration {
-        param([int]$Minutes)
-        $script:snoozeMinutes  = $Minutes
-        $snoozeBtn.Content     = "Snooze $(if ($Minutes -lt 60) { "${Minutes}m" } else { '1h' })"
-    }
-    $snooze5.Add_Click({  Set-SnoozeDuration 5  })
-    $snooze15.Add_Click({ Set-SnoozeDuration 15 })
-    $snooze30.Add_Click({ Set-SnoozeDuration 30 })
-    $snooze60.Add_Click({ Set-SnoozeDuration 60 })
+    $snooze5.Add_Click({  Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn  })
+    $snooze15.Add_Click({ Set-SnoozeDuration -Minutes 15 -SnoozeBtnControl $snoozeBtn })
+    $snooze30.Add_Click({ Set-SnoozeDuration -Minutes 30 -SnoozeBtnControl $snoozeBtn })
+    $snooze60.Add_Click({ Set-SnoozeDuration -Minutes 60 -SnoozeBtnControl $snoozeBtn })
 
     # Snooze button
     $snoozeBtn.Add_Click({
