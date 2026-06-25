@@ -94,7 +94,7 @@ Describe 'New-MotivationTask' {
         It 'Should format trigger time as ISO 8601' {
             $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
-            (Get-TasksJson)[0].scheduled_time | Should -Match '2026-12-25T14:00:00'
+            (Get-TasksJson)[0].scheduled_time | Should -Match '2026-12-25T14:00:00(\.\d+)?'
         }
 
         It 'Should initialize snooze_count to 0' {
@@ -175,7 +175,9 @@ Describe 'Get-MotivationTasks' {
         $task.folder_name    | Should -Not -BeNullOrEmpty
         $task.scheduled_time | Should -Not -BeNullOrEmpty
         $task.status         | Should -Not -BeNullOrEmpty
-        $task.snooze_count   | Should -BeOfType [int]
+        # Accept both [int] and [long] types (platform-specific JSON deserialization)
+        $task.snooze_count.GetType().Name | Should -BeIn @('Int32', 'Int64')
+        $task.snooze_count   | Should -Be 0
     }
 
     It 'Should handle corrupted tasks.json gracefully' {
