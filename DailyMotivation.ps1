@@ -803,8 +803,8 @@ function Unregister-ContextMenu {
             <Setter Property="Foreground"   Value="#0D1117"/>
             <Setter Property="FontSize"     Value="13"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding"      Value="18,8"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding"      Value="20,10"/>
             <Setter Property="Cursor"       Value="Hand"/>
             <Setter Property="Opacity"      Value="1"/>
             <Setter Property="Template">
@@ -830,7 +830,7 @@ function Unregister-ContextMenu {
             <Setter Property="FontSize"     Value="12"/>
             <Setter Property="BorderBrush"  Value="#2A2A42"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding"      Value="14,6"/>
+            <Setter Property="Padding"      Value="15,7"/>
             <Setter Property="Cursor"       Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -838,7 +838,7 @@ function Unregister-ContextMenu {
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="6">
+                                CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -851,7 +851,7 @@ function Unregister-ContextMenu {
         <StackPanel>
 
             <!-- Header accent bar -->
-            <Border Background="#00BCD4" Height="3" CornerRadius="2" Margin="0,0,0,20"/>
+            <Border Background="#00BCD4" Height="3" CornerRadius="2" Margin="20,20,20,20"/>
 
             <!-- Title -->
             <TextBlock Text="Daily Motivation Brain Helper"
@@ -861,7 +861,7 @@ function Unregister-ContextMenu {
             <!-- Last Folder Banner (B-01) - hidden until reimplemented -->
             <Border x:Name="LastFolderBanner"
                     Background="#111B22" BorderBrush="#00BCD4" BorderThickness="1"
-                    CornerRadius="7" Padding="14,10" Margin="0,0,0,16"
+                    CornerRadius="7" Padding="18,14" Margin="0,0,0,16"
                     Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -882,7 +882,7 @@ function Unregister-ContextMenu {
                             ToolTip="Schedule the same folder you used last time"/>
                     <Button x:Name="LastFolderDismissBtn" Grid.Column="2"
                             Content="&#x2715;" Style="{StaticResource SecondaryBtn}"
-                            FontSize="11" Padding="8,5" Width="28"
+                            FontSize="11" Padding="10,7" Width="28"
                             ToolTip="Dismiss this suggestion"/>
                 </Grid>
             </Border>
@@ -913,7 +913,7 @@ function Unregister-ContextMenu {
             <!-- Schedule Time Options -->
             <StackPanel Margin="0,0,0,16">
                 <TextBlock Text="Schedule for:"
-                           FontSize="12" Foreground="#8888A8" Margin="0,0,0,8"/>
+                           FontSize="12" Foreground="#8888A8" Margin="8,8,8,8"/>
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="TodayRadio"
                                  Content="Today at 2:00 PM"
@@ -935,7 +935,7 @@ function Unregister-ContextMenu {
                     Style="{StaticResource PrimaryBtn}"
                     IsEnabled="False"
                     HorizontalAlignment="Left"
-                    Padding="28,10"
+                    Padding="48,30"
                     ToolTip="Create a reminder to open this folder at the scheduled time"/>
 
             <!-- Undo Banner (B-04) -->
