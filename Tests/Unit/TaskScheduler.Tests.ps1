@@ -27,7 +27,8 @@ BeforeAll {
     Mock New-ScheduledTaskTrigger { [PSCustomObject]@{ } }
     Mock New-ScheduledTaskSettingsSet { [PSCustomObject]@{ } }
     Mock New-ScheduledTaskPrincipal   { [PSCustomObject]@{ } }
-    Mock Get-ScheduledTask { throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("Not found") }
+    # Return $null instead of throwing to simulate task not found (ErrorAction SilentlyContinue doesn't catch exceptions)
+    Mock Get-ScheduledTask { return $null }
 }
 
 AfterAll {

@@ -37,7 +37,12 @@ function Write-DLog {
 }
 
 # Platform detection
-$script:IsWindowsPlatform = $PSVersionTable.PSVersion.Major -ge 6 ? $IsWindows : $true
+# Use if-else instead of ternary operator for PowerShell 5.1 compatibility
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+    $script:IsWindowsPlatform = $IsWindows
+} else {
+    $script:IsWindowsPlatform = $true
+}
 
 # Platform adapter (null by default, tests can inject HeadlessPlatform)
 $script:Platform = $null
@@ -584,7 +589,12 @@ function Set-SnoozeDuration {
         [object]$SnoozeBtnControl
     )
     $script:snoozeMinutes       = $Minutes
-    $SnoozeBtnControl.Content   = "Snooze $(if ($Minutes -lt 60) { "${Minutes}m" } else { '1h' })"
+    # Use if-else for PowerShell 5.1 compatibility
+    if ($Minutes -lt 60) {
+        $SnoozeBtnControl.Content = "Snooze ${Minutes}m"
+    } else {
+        $SnoozeBtnControl.Content = "Snooze 1h"
+    }
 }
 
 function Invoke-FolderScheduling {
@@ -1718,7 +1728,9 @@ if (-not $NoRun) {
         Initialize-WindowsAssemblies
     }
 
-    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$($script:IsWindowsPlatform ? 'Windows' : 'Linux') ======"
+    # Use if-else for PowerShell 5.1 compatibility
+    $platformName = if ($script:IsWindowsPlatform) { 'Windows' } else { 'Linux' }
+    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$platformName ======"
 
     # Capture exe path for Task Scheduler action and context menu registration.
     # PS2EXE sets $MyInvocation.MyCommand.Path to the compiled .exe path.
