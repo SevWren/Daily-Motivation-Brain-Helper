@@ -1829,6 +1829,9 @@ if (-not $NoRun) {
             }
         }
         default {
+            # REQ-010: Ensure context menu is registered every time the exe launches.
+            # This self-heals if the user manually deleted the registry key.
+            Register-ContextMenu -ExePath $script:ExePath
             Show-MainWindow
         }
     }
