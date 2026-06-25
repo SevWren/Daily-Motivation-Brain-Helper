@@ -554,6 +554,11 @@ function Start-UndoTimer {
         [Parameter(Mandatory)]
         [object]$UndoBannerControl
     )
+    # Store controls at script scope for timer callback access
+    $script:undoLabelCtrl    = $UndoLabelControl
+    $script:undoProgressCtrl = $UndoProgressControl
+    $script:undoBannerCtrl   = $UndoBannerControl
+
     $script:lastTaskId     = $TaskId
     $script:undoSeconds    = 30
     $UndoLabelControl.Text        = "Scheduled for $ScheduledFor - undo in 30s"
@@ -563,11 +568,11 @@ function Start-UndoTimer {
     $script:undoTimer.Interval = [System.TimeSpan]::FromSeconds(1)
     $script:undoTimer.Add_Tick({
             $script:undoSeconds--
-            $UndoProgressControl.Value = $script:undoSeconds
-            $UndoLabelControl.Text     = "Scheduled - undo in $($script:undoSeconds)s"
+            $script:undoProgressCtrl.Value = $script:undoSeconds
+            $script:undoLabelCtrl.Text     = "Scheduled - undo in $($script:undoSeconds)s"
             if ($script:undoSeconds -le 0) {
                 $script:undoTimer.Stop()
-                $UndoBannerControl.Visibility = "Collapsed"
+                $script:undoBannerCtrl.Visibility = "Collapsed"
                 $script:lastTaskId     = $null
             }
         })
