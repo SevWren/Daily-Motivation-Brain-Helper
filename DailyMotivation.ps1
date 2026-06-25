@@ -359,8 +359,9 @@ function New-MotivationTask {
         $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
         $settings = New-ScheduledTaskSettingsSet `
             -StartWhenAvailable `
-            -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
-            -MultipleInstances IgnoreNew
+            -ExecutionTimeLimit  (New-TimeSpan -Minutes 10) `
+            -MultipleInstances   IgnoreNew `
+            -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 0)
 
         # GAP-010: network path detection for RunLevel assignment
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
@@ -1762,16 +1763,6 @@ function Show-PopupWindow {
                else { "Dismissed" }
     Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name `
         -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
-
-    # Remove the original task now that the popup has been handled.
-    # "Opened"    - task fired and folder was opened; one-shot task is done.
-    # "Snoozed"   - a new snooze task was already created; original must be removed.
-    # "Dismissed" - Dismiss button already called Remove-MotivationTask; safe to call again (no-op).
-    # "PathMissing" - task can never fire usefully; clean it up.
-    if ($config.task_id) {
-        Remove-MotivationTask -TaskId $config.task_id
-        Write-DLog "Post-popup task removed: $($config.task_id) (outcome=$outcome)"
-    }
 
     Write-DLog "====== POPUP COMPLETE: $outcome ======"
 }
