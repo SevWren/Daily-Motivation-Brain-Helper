@@ -21,12 +21,28 @@ BeforeAll {
     $script:TestFolder2 = 'C:\Projects\TestFolder2'
 
     # Mock Windows Task Scheduler cmdlets so tests run without admin rights
-    Mock Register-ScheduledTask   { }
+    # CRITICAL: Named parameters in actual calls are available as variables in mock, NOT in $args
+    Mock Register-ScheduledTask   {
+        Write-Host "[DIAG-002] Register-ScheduledTask called with TaskName=$TaskName"
+        return $null
+    }
     Mock Unregister-ScheduledTask { }
-    Mock New-ScheduledTaskAction  { [PSCustomObject]@{ Execute = $args[1]; Argument = $args[3] } }
-    Mock New-ScheduledTaskTrigger { [PSCustomObject]@{ } }
-    Mock New-ScheduledTaskSettingsSet { [PSCustomObject]@{ } }
-    Mock New-ScheduledTaskPrincipal   { [PSCustomObject]@{ } }
+    Mock New-ScheduledTaskAction  {
+        Write-Host "[DIAG-003] New-ScheduledTaskAction called: Execute=$Execute, Argument=$Argument"
+        return [PSCustomObject]@{ Execute = $Execute; Argument = $Argument }
+    }
+    Mock New-ScheduledTaskTrigger {
+        Write-Host "[DIAG-004] New-ScheduledTaskTrigger called: At=$At"
+        return [PSCustomObject]@{ StartBoundary = $At }
+    }
+    Mock New-ScheduledTaskSettingsSet {
+        Write-Host "[DIAG-005] New-ScheduledTaskSettingsSet called"
+        return [PSCustomObject]@{ }
+    }
+    Mock New-ScheduledTaskPrincipal {
+        Write-Host "[DIAG-006] New-ScheduledTaskPrincipal called: UserId=$UserId, RunLevel=$RunLevel"
+        return [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
+    }
     # Mock Get-ScheduledTask - return $null to simulate task not existing
     # This allows the collision-detection retry loop in New-MotivationTask to work correctly
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
@@ -48,6 +64,9 @@ Describe 'New-MotivationTask' {
     Context 'When creating a new task' {
         It 'Should return Success=true with a valid TaskId' {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            if (-not $result.Success) {
+                Write-Host "[DIAG-001] New-MotivationTask failed with error: $($result.Error)"
+            }
             $result.Success   | Should -Be $true
             $result.TaskId    | Should -Not -BeNullOrEmpty
             $result.TaskId.Length | Should -Be 16
