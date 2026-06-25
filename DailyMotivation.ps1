@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+#Requires -Version 7.0
 # =============================================================================
 # DailyMotivation.ps1 -- Daily Motivation Brain Helper
 # Single-file entry point. All logic, XAML, and data are inline.
@@ -9,8 +9,9 @@
 #   DailyMotivation.exe /popup        -> notification popup (called by Task Scheduler)
 #   DailyMotivation.exe /setfolder "C:\path" -> context menu handler
 #
-# NOTE: ASCII-only string literals where possible; UTF-8 file encoding required
-#       for emoji in XAML &#x...; references (PowerShell 5.1 / .NET 4.x safe).
+# NOTE: Source code runs on PowerShell 7, but compiles to .NET Framework 4.x exe
+#       (ps2exe limitation). Avoid PowerShell 7-only features in runtime code paths.
+#       UTF-8 file encoding required for emoji in XAML &#x...; references.
 # =============================================================================
 
 # ============================================================
@@ -37,10 +38,11 @@ function Write-DLog {
 }
 
 # Platform detection
-# Use if-else instead of ternary operator for PowerShell 5.1 compatibility
+# PowerShell 7+ has $IsWindows variable; compiled exe always runs on Windows
 if ($PSVersionTable.PSVersion.Major -ge 6) {
     $script:IsWindowsPlatform = $IsWindows
 } else {
+    # Fallback for ps2exe compiled exe (.NET Framework 4.x target)
     $script:IsWindowsPlatform = $true
 }
 
@@ -272,7 +274,7 @@ function Get-TasksJson {
     if (-not (Test-Path $path)) { return @() }
     try {
         $result = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
-        # FIX-003: PowerShell 5.1 returns $null for "[]"
+        # FIX-003: Ensure consistent array handling for empty JSON arrays
         if ($null -eq $result) { return @() }
         return @($result)
     }
@@ -589,7 +591,7 @@ function Set-SnoozeDuration {
         [object]$SnoozeBtnControl
     )
     $script:snoozeMinutes       = $Minutes
-    # Use if-else for PowerShell 5.1 compatibility
+    # Use if-else for .NET Framework 4.x compatibility (ps2exe target)
     if ($Minutes -lt 60) {
         $SnoozeBtnControl.Content = "Snooze ${Minutes}m"
     } else {
@@ -1728,7 +1730,7 @@ if (-not $NoRun) {
         Initialize-WindowsAssemblies
     }
 
-    # Use if-else for PowerShell 5.1 compatibility
+    # Use if-else for .NET Framework 4.x compatibility (ps2exe target)
     $platformName = if ($script:IsWindowsPlatform) { 'Windows' } else { 'Linux' }
     Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$platformName ======"
 

@@ -6,7 +6,7 @@
 
 This application is **Windows 10 only** at runtime. The test suite has **two incompatible execution environments:**
 
-1. **Windows 10 PowerShell 5.1/7** (PRIMARY) - Where test baselines originate
+1. **Windows 10 PowerShell 7** (PRIMARY) - Where test baselines originate
 2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
 
 ### Test Validation Rules for AI Agents
@@ -22,7 +22,7 @@ This application is **Windows 10 only** at runtime. The test suite has **two inc
 
 Before declaring any test fix "successful":
 
-1. ✅ **MUST** verify tests pass on **Windows 10 PowerShell 5.1 or 7** (the target platform)
+1. ✅ **MUST** verify tests pass on **Windows 10 PowerShell 7** (the target platform)
 2. ✅ **MUST** review Windows-specific test log output (not Linux sandbox output)
 3. ✅ **MUST** understand the difference between:
    - Platform tests (HeadlessPlatform injection) - run on Linux
@@ -143,13 +143,15 @@ fi
 
 ## Key Design Constraints
 
-- PowerShell 5.1 / .NET 4.x only (no PS 6+/7+ features, no `pwsh`)
+- **Development/Testing**: PowerShell 7 (`pwsh`)
+- **Compiled exe target**: .NET Framework 4.x (ps2exe limitation - WPF/Task Scheduler require .NET Framework)
+- **Source code compatibility**: Must work when compiled to .NET Framework 4.x (avoid PowerShell 7-only features in runtime code paths)
 - STA thread model required for WPF (`-STA` baked in by ps2exe)
 - Named mutex `Global\DailyMotivationBrainHelperPopup` enforces single popup
 - Task Scheduler action calls `$script:ExePath /popup` (captured at runtime via `$MyInvocation.MyCommand.Path`)
 - Tests override `$script:ExePath` before calling `New-MotivationTask`
 - FIX-001: `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time (enables test redirects)
-- FIX-003: `Get-TasksJson` wraps result in `@()` to handle PS 5.1 returning `$null` for `"[]"` JSON
+- FIX-003: `Get-TasksJson` wraps result in `@()` for consistent array handling
 
 ## Requirements Reference
 

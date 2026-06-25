@@ -8,7 +8,7 @@ Download `DailyMotivation.exe` and double-click it. No installation required. No
 
 ## Build from Source
 
-**Requirements:** Windows 10/11, PowerShell 5.1, .NET Framework 4.5+
+**Requirements:** Windows 10/11, PowerShell 7, .NET Framework 4.5+ (for ps2exe target)
 
 ```powershell
 # 1. Install ps2exe (once)
