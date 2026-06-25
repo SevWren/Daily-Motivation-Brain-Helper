@@ -1804,7 +1804,11 @@ if (-not $NoRun) {
     # Capture exe path for Task Scheduler action and context menu registration.
     # PS2EXE sets $MyInvocation.MyCommand.Path to the compiled .exe path.
     # In tests: set $script:ExePath = "test-override.exe" before calling New-MotivationTask.
+    # Fallback to process module path in case ps2exe leaves MyCommand.Path empty.
     $script:ExePath = $MyInvocation.MyCommand.Path
+    if (-not $script:ExePath -or $script:ExePath -notmatch '\.exe$') {
+        $script:ExePath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    }
 
     Initialize-AppData
 
