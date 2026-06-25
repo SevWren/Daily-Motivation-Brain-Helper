@@ -95,8 +95,20 @@ Describe 'New-MotivationTask' {
             $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             $actual = (Get-TasksJson)[0].scheduled_time
-            # Accept both Windows (.0000000) and Linux (no fractional seconds) formats
-            # Both are valid ISO 8601 timestamps
+
+            # Debug: Comprehensive inspection of actual value
+            Write-Host "`n=== DEBUG ISO 8601 TIMESTAMP ===" -ForegroundColor Yellow
+            Write-Host "Actual value: [$actual]" -ForegroundColor Cyan
+            Write-Host "Type: $($actual.GetType().FullName)" -ForegroundColor Cyan
+            Write-Host "Length: $($actual.Length)" -ForegroundColor Cyan
+            Write-Host "Char codes: $([string]::Join(',', [int[]][char[]]$actual))" -ForegroundColor Cyan
+            Write-Host "StartsWith test: $($actual.StartsWith('2026-12-25T14:00:00'))" -ForegroundColor Cyan
+            Write-Host "Contains '2026': $($actual.Contains('2026'))" -ForegroundColor Cyan
+            Write-Host "-like test: $($actual -like '2026-12-25T14:00:00*')" -ForegroundColor Cyan
+            Write-Host "-match test: $($actual -match '^2026-12-25T14:00:00')" -ForegroundColor Cyan
+            Write-Host "=================================`n" -ForegroundColor Yellow
+
+            # Test the value - should start with the expected timestamp
             $actual | Should -BeLike '2026-12-25T14:00:00*'
         }
 
