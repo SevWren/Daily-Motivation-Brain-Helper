@@ -47,7 +47,7 @@ Describe 'Register-ContextMenu' {
         Register-ContextMenu -ExePath $script:TestExe
         $cmdKey = "$($script:VerbKey)\command"
         $cmd = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
-        $cmd | Should -Match [regex]::Escape($script:TestExe)
+        $cmd | Should -Match ([regex]::Escape($script:TestExe))
         $cmd | Should -Match '/setfolder'
         $cmd | Should -Match '"%1"'
     }

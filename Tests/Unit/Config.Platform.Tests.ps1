@@ -27,13 +27,19 @@ AfterAll {
 Describe "Initialize-AppData with platform adapter" -Tag "Unit", "Config", "Platform" {
 
     BeforeEach {
-        # Clean slate for each test
+        # Inject HeadlessPlatform adapter FIRST so we can get the correct path
+        $script:Platform = [HeadlessPlatform]::new()
+
+        # Clean slate for each test - delete BOTH locations to handle platform adapter
         if (Test-Path $script:TestAppData) {
             Remove-Item -Path $script:TestAppData -Recurse -Force
         }
 
-        # Inject HeadlessPlatform adapter
-        $script:Platform = [HeadlessPlatform]::new()
+        # Also clean the HeadlessPlatform path (differs from $env:APPDATA on Windows)
+        $headlessPath = $script:Platform.GetAppDataPath()
+        if (Test-Path $headlessPath) {
+            Remove-Item -Path $headlessPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     Context "When platform adapter is injected" {
