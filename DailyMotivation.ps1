@@ -395,7 +395,7 @@ function New-MotivationTask {
         }
     }
 
-    # Persist to tasks.json
+    # Persist to tasks.json - atomic: rollback OS task if JSON save fails
     $tasks   = @(Get-TasksJson)
     $newTask = [PSCustomObject]@{
         task_id        = $taskId
@@ -408,7 +408,16 @@ function New-MotivationTask {
         snooze_count   = 0
     }
     $tasks = $tasks + $newTask
-    Save-TasksJson $tasks
+    try {
+        Save-TasksJson $tasks
+    }
+    catch {
+        # Rollback: unregister the OS task to keep Task Scheduler and tasks.json in sync
+        if (-not $script:Platform) {
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+        }
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Failed to save task record: $($_.Exception.Message)" }
+    }
 
     return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false; IsNetworkPath = $isNetworkPath }
 }
@@ -422,6 +431,7 @@ function Sync-TaskStatuses {
     $tasks = @(Get-TasksJson)
     $changed = $false
 
+    # Direction 1: JSON → OS Scheduler — mark tasks DELETED if OS task is gone (ERR-008)
     foreach ($t in $tasks) {
         if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
         if ($t.status -eq "PENDING") {
@@ -439,6 +449,50 @@ function Sync-TaskStatuses {
                 Write-Warning "Sync-TaskStatuses: unexpected error for '$($t.task_name)': $_"
             }
         }
+    }
+
+    # Direction 2: OS Scheduler → JSON — recover orphaned OS tasks missing from tasks.json (FIX-SYNC-002)
+    # This handles the case where Register-ScheduledTask succeeded but Save-TasksJson failed,
+    # leaving an OS task with no corresponding record in tasks.json.
+    $knownNames = @($tasks | Where-Object { $null -ne $_ -and $_.PSObject.Properties['task_name'] } | ForEach-Object { $_.task_name })
+    try {
+        $osTasks = @(Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue)
+    }
+    catch { $osTasks = @() }
+
+    foreach ($osTask in $osTasks) {
+        if ($knownNames -contains $osTask.TaskName) { continue }
+
+        # Parse folder_path from Description: "Daily Motivation Brain Helper - {FolderPath}"
+        $folderPath = ''
+        if ($osTask.Description -match '^Daily Motivation Brain Helper - (.+)$') {
+            $folderPath = $Matches[1].Trim()
+        }
+
+        # Parse scheduled time from the first trigger
+        $scheduledTime = ''
+        try {
+            $trigger = $osTask.Triggers | Select-Object -First 1
+            if ($trigger -and $trigger.StartBoundary) {
+                $scheduledTime = ([datetime]$trigger.StartBoundary).ToString("yyyy-MM-ddTHH:mm:ss")
+            }
+        }
+        catch {}
+
+        $recoveredId = $osTask.TaskName -replace '^DailyMotivation_', ''
+        $recovered = [PSCustomObject]@{
+            task_id        = $recoveredId
+            task_name      = $osTask.TaskName
+            folder_path    = $folderPath
+            folder_name    = if ($folderPath) { Split-Path -Leaf $folderPath } else { '' }
+            scheduled_time = $scheduledTime
+            created_at     = (Get-Date -Format "o")
+            status         = "PENDING"
+            snooze_count   = 0
+        }
+        $tasks = $tasks + $recovered
+        $changed = $true
+        Write-DLog "Sync-TaskStatuses: recovered orphaned OS task '$($osTask.TaskName)' into tasks.json"
     }
 
     if ($changed) {
