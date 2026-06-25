@@ -96,20 +96,15 @@ Describe 'New-MotivationTask' {
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             $actual = (Get-TasksJson)[0].scheduled_time
 
-            # Debug: Comprehensive inspection of actual value
-            Write-Host "`n=== DEBUG ISO 8601 TIMESTAMP ===" -ForegroundColor Yellow
-            Write-Host "Actual value: [$actual]" -ForegroundColor Cyan
-            Write-Host "Type: $($actual.GetType().FullName)" -ForegroundColor Cyan
-            Write-Host "Length: $($actual.Length)" -ForegroundColor Cyan
-            Write-Host "Char codes: $([string]::Join(',', [int[]][char[]]$actual))" -ForegroundColor Cyan
-            Write-Host "StartsWith test: $($actual.StartsWith('2026-12-25T14:00:00'))" -ForegroundColor Cyan
-            Write-Host "Contains '2026': $($actual.Contains('2026'))" -ForegroundColor Cyan
-            Write-Host "-like test: $($actual -like '2026-12-25T14:00:00*')" -ForegroundColor Cyan
-            Write-Host "-match test: $($actual -match '^2026-12-25T14:00:00')" -ForegroundColor Cyan
-            Write-Host "=================================`n" -ForegroundColor Yellow
-
-            # Test the value - should start with the expected timestamp
-            $actual | Should -BeLike '2026-12-25T14:00:00*'
+            # PowerShell ConvertFrom-Json automatically converts ISO 8601 strings to DateTime objects
+            # Verify the DateTime value matches what we expect
+            $actual | Should -BeOfType [DateTime]
+            $actual.Year | Should -Be 2026
+            $actual.Month | Should -Be 12
+            $actual.Day | Should -Be 25
+            $actual.Hour | Should -Be 14
+            $actual.Minute | Should -Be 0
+            $actual.Second | Should -Be 0
         }
 
         It 'Should initialize snooze_count to 0' {
