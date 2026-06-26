@@ -570,7 +570,8 @@ function Update-TaskListUI {
     $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
     $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
     # SS-F-01: format ISO timestamp to human-readable; SS-F-06: humanize hyphenated folder name
-    $displayTasks = $pending | ForEach-Object {
+    # Wrap in @() so a single task doesn't collapse to a bare PSCustomObject (IEnumerable required)
+    $displayTasks = @($pending | ForEach-Object {
         $t = $_
         $displayTime = try {
             ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt")
@@ -586,7 +587,7 @@ function Update-TaskListUI {
             display_time = $displayTime
             status       = $t.status
         }
-    }
+    })
     $TaskListControl.ItemsSource          = $displayTasks
     $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
 }
