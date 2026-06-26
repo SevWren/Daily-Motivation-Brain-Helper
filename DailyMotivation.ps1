@@ -1758,7 +1758,7 @@ function Show-PopupWindow {
     # trigger expires naturally; manually-run tasks are never considered "expired".
     if ($config.task_id -and $config.task_id -ne "") {
         Write-DLog "Removing originating task: $($config.task_id)"
-        Remove-MotivationTask -TaskId $config.task_id
+        Remove-MotivationTask -TaskId $config.task_id | Out-Null
     }
 
     # Post-close: open Explorer (REQ-009)
