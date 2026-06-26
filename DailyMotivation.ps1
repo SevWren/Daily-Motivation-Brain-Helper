@@ -602,15 +602,18 @@ function Get-HistoryData {
     $items = foreach ($line in $lines) {
         $parts = $line -split '\s*\|\s*'
         if ($parts.Count -ge 5) {
-            $outcome = $parts[4].Trim()
+            $outcome        = $parts[4].Trim()
+            $outcomeDisplay = if ($outcome -eq "PathMissing") { "Path Missing" } else { $outcome }
             [PSCustomObject]@{
                 Timestamp      = $parts[0].Trim('[', ']')
                 FolderName     = $parts[2].Trim()
-                OutcomeDisplay = $outcome
+                OutcomeDisplay = $outcomeDisplay
                 OutcomeColor   = switch ($outcome) {
-                    "Opened"    { "#52B788" }
-                    "Dismissed" { "#E07A5F" }
-                    default     { "#8888A8" }
+                    "Opened"      { "#52B788" }
+                    "Dismissed"   { "#E07A5F" }
+                    "Snoozed"     { "#F4A261" }
+                    "PathMissing" { "#E07A5F" }
+                    default       { "#8888A8" }
                 }
             }
         }
@@ -645,9 +648,10 @@ function Start-UndoTimer {
     $script:undoProgressCtrl = $UndoProgressControl
     $script:undoBannerCtrl   = $UndoBannerControl
 
-    $script:lastTaskId     = $TaskId
-    $script:undoSeconds    = 30
-    $UndoLabelControl.Text        = "Scheduled for $ScheduledFor - undo in 30s"
+    $script:lastTaskId       = $TaskId
+    $script:undoSeconds      = 30
+    $script:undoScheduledFor = $ScheduledFor
+    $UndoLabelControl.Text        = "✓ Scheduled for $ScheduledFor - undo in 30s"
     $UndoProgressControl.Value    = 30
     $UndoBannerControl.Visibility = "Visible"
     $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
@@ -655,11 +659,12 @@ function Start-UndoTimer {
     $script:undoTimer.Add_Tick({
             $script:undoSeconds--
             $script:undoProgressCtrl.Value = $script:undoSeconds
-            $script:undoLabelCtrl.Text     = "Scheduled - undo in $($script:undoSeconds)s"
+            $script:undoLabelCtrl.Text     = "✓ Scheduled for $script:undoScheduledFor - undo in $($script:undoSeconds)s"
             if ($script:undoSeconds -le 0) {
                 $script:undoTimer.Stop()
                 $script:undoBannerCtrl.Visibility = "Collapsed"
-                $script:lastTaskId     = $null
+                $script:lastTaskId       = $null
+                $script:undoScheduledFor = $null
             }
         })
     $script:undoTimer.Start()
@@ -952,8 +957,8 @@ function Unregister-ContextMenu {
                         <TextBlock Text="&#x1F4A1; Schedule same folder as last time?"
                                    FontSize="12" Foreground="#00BCD4" FontWeight="SemiBold"/>
                         <TextBlock x:Name="LastFolderPath"
-                                   FontSize="11" Foreground="#6666A0"
-                                   TextTrimming="CharacterEllipsis" MaxWidth="240"/>
+                                   FontSize="11" Foreground="#8888A8"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="280"/>
                     </StackPanel>
                     <Button x:Name="LastFolderYesBtn" Grid.Column="1"
                             Content="Yes, Schedule" Style="{StaticResource PrimaryBtn}"
@@ -961,7 +966,7 @@ function Unregister-ContextMenu {
                             ToolTip="Schedule the same folder you used last time"/>
                     <Button x:Name="LastFolderDismissBtn" Grid.Column="2"
                             Content="&#x2715;" Style="{StaticResource SecondaryBtn}"
-                            FontSize="11" Padding="10,7" Width="28"
+                            FontSize="11" Padding="0" Width="32"
                             ToolTip="Dismiss this suggestion"/>
                 </Grid>
             </Border>
@@ -986,7 +991,7 @@ function Unregister-ContextMenu {
                                Text="No folder selected"
                                FontSize="11" Foreground="#8888A8"
                                HorizontalAlignment="Left" Margin="0,8,0,0"
-                               TextTrimming="CharacterEllipsis"/>
+                               TextTrimming="CharacterEllipsis" MaxWidth="420"/>
                 </StackPanel>
             </Border>
 
@@ -1021,7 +1026,7 @@ function Unregister-ContextMenu {
             <!-- Undo Banner (B-04) -->
             <Border x:Name="UndoBanner"
                     Background="#0E2A1A" BorderBrush="#2D6A4F" BorderThickness="1"
-                    CornerRadius="7" Padding="14,10" Margin="0,14,0,0"
+                    CornerRadius="7" Padding="14,10" Margin="0,14,0,14"
                     Visibility="Collapsed">
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -1047,7 +1052,7 @@ function Unregister-ContextMenu {
             </Border>
 
             <!-- Divider (SS-F-08: raised to 3:1 contrast) -->
-            <Border Background="#3A3A5A" Height="1" Margin="0,16,0,16"/>
+            <Border Background="#3A3A5A" Height="1" Margin="0,20,0,20"/>
 
             <!-- Recent Folders (B-02) - hidden until reimplemented -->
             <StackPanel x:Name="RecentFoldersPanel" Visibility="Collapsed" Margin="0,0,0,16">
@@ -1081,37 +1086,39 @@ function Unregister-ContextMenu {
             <!-- Scheduled Tasks (SS-F-07: header given more weight than body labels) -->
             <TextBlock Text="Scheduled Tasks"
                        FontSize="13" FontWeight="Bold" Foreground="#C8C8E8" Margin="0,0,0,10"/>
-            <ItemsControl x:Name="TaskList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding folder_name}" FontSize="12" Foreground="#C8C8E8"/>
-                                <TextBlock Text="{Binding display_time}" FontSize="10" Foreground="#8888A8"/>
-                            </StackPanel>
-                            <!-- PENDING badge (SS-F-03: cyan \u2192 neutral; SS-I-02: no cyan overload) -->
-                            <Border Grid.Column="1"
-                                    Background="#1F1F30" CornerRadius="4" Padding="6,2" Margin="8,0">
-                                <TextBlock Text="{Binding status}" FontSize="10" Foreground="#7A7A9A"/>
-                            </Border>
-                            <Button Grid.Column="2" Tag="{Binding task_id}"
-                                    Content="&#x2715;"
-                                    Style="{StaticResource SecondaryBtn}"
-                                    Width="28" Padding="0"
-                                    ToolTip="Remove this scheduled task permanently"/>
-                        </Grid>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="TaskList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding folder_name}" FontSize="12" Foreground="#C8C8E8"/>
+                                    <TextBlock Text="{Binding display_time}" FontSize="10" Foreground="#8888A8"/>
+                                </StackPanel>
+                                <!-- PENDING badge (SS-F-03: cyan → neutral; SS-I-02: no cyan overload) -->
+                                <Border Grid.Column="1"
+                                        Background="#1F1F30" CornerRadius="4" Padding="6,2" Margin="8,0">
+                                    <TextBlock Text="{Binding status}" FontSize="10" Foreground="#7A7A9A"/>
+                                </Border>
+                                <Button Grid.Column="2" Tag="{Binding task_id}"
+                                        Content="&#x2715;"
+                                        Style="{StaticResource SecondaryBtn}"
+                                        Width="28" Padding="0"
+                                        ToolTip="Remove this scheduled task permanently"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
             <TextBlock x:Name="NoTasksLabel"
                        Text="No tasks scheduled."
                        FontSize="11" Foreground="#6A6A8A"
-                       Margin="0,8,0,0" Visibility="Visible"/>
+                       Margin="0,8,0,0" Visibility="Collapsed"/>
 
             <!-- History Toggle (SS-G-01: no emoji hack; SS-G-03: stretch not orphaned) -->
             <Button x:Name="HistoryToggleBtn"
@@ -1124,7 +1131,7 @@ function Unregister-ContextMenu {
             <!-- History panel -->
             <Border x:Name="HistoryPanel"
                     Background="#0A0A14" BorderBrush="#2A2A42" BorderThickness="1"
-                    CornerRadius="7" Padding="14,12" Margin="0,8,0,0"
+                    CornerRadius="7" Padding="14,12" Margin="0,8,0,8"
                     Visibility="Collapsed">
                 <StackPanel>
                     <Grid>
@@ -1135,24 +1142,26 @@ function Unregister-ContextMenu {
                                 FontSize="10" Padding="8,3"
                                 ToolTip="Clear all history entries"/>
                     </Grid>
-                    <ItemsControl x:Name="HistoryList" Margin="0,8,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,3">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="130"/>
-                                        <ColumnDefinition Width="120"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Timestamp}" FontSize="10" Foreground="#8888A8" VerticalAlignment="Center"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding FolderName}" FontSize="11" Foreground="#C8C8E8" VerticalAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="2" Text="{Binding OutcomeDisplay}" FontSize="11" VerticalAlignment="Center"
-                                               Foreground="{Binding OutcomeColor}"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                        <ItemsControl x:Name="HistoryList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,3">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="80"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Timestamp}" FontSize="10" Foreground="#8888A8" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding FolderName}" FontSize="11" Foreground="#C8C8E8" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" ToolTip="{Binding FolderName}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding OutcomeDisplay}" FontSize="11" VerticalAlignment="Center"
+                                                   Foreground="{Binding OutcomeColor}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
 
@@ -1238,6 +1247,12 @@ function Show-MainWindow {
 
     function Do-Schedule {
         param([string]$FolderPath)
+        # Re-evaluate Today radio visibility at schedule time (A10-ISSUE-05)
+        if ($todayRadio.Visibility -eq "Visible" -and (Get-Date).Hour -ge $hour) {
+            $todayRadio.Visibility  = "Collapsed"
+            $todayRadio.IsChecked   = $false
+            $tomorrowRadio.IsChecked = $true
+        }
         $triggerTime = Get-ScheduleTime -TodayRadioControl $todayRadio
 
         # Attempt to schedule the folder (business logic extracted to Invoke-FolderScheduling)
@@ -1283,9 +1298,13 @@ function Show-MainWindow {
         Start-UndoTimer -TaskId $result.TaskId -ScheduledFor $dateLabel -UndoLabelControl $undoLabel -UndoProgressControl $undoProgress -UndoBannerControl $undoBanner
     }
 
-    # Show Today radio only before trigger hour
+    # Show Today radio only before trigger hour; set dynamic labels from config (A3-BUG-02)
     $cfg  = Get-Config
     $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
+    $timeLabel = [datetime]::Today.AddHours($hour).ToString("h:mm tt")
+    $todayRadio.Content    = "Today at $timeLabel"
+    $tomorrowRadio         = Find "TomorrowRadio"
+    $tomorrowRadio.Content = "Tomorrow at $timeLabel"
     if ((Get-Date).Hour -lt $hour) { $todayRadio.Visibility = "Visible" }
 
     # --- Event handlers ---
@@ -1351,16 +1370,35 @@ function Show-MainWindow {
 
     $undoBtn.Add_Click({
             if ($script:lastTaskId) {
+                $removedId = $script:lastTaskId
                 Stop-UndoTimer -UndoBannerControl $undoBanner
-                Remove-MotivationTask -TaskId $script:lastTaskId
-                $script:lastTaskId     = $null
+                Remove-MotivationTask -TaskId $removedId
+                $script:lastTaskId       = $null
+                $script:undoScheduledFor = $null
                 Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
+                # Provide confirmation feedback that undo succeeded (A10-ISSUE-06)
+                $undoLabel.Text        = "Task removed."
+                $undoBanner.Visibility = "Visible"
+                $undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
+                $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(1500)
+                $undoFeedbackTimer.Add_Tick({
+                    $undoFeedbackTimer.Stop()
+                    $undoBanner.Visibility = "Collapsed"
+                })
+                $undoFeedbackTimer.Start()
             }
         })
 
     $taskList.Add_PreviewMouseLeftButtonUp({
             param($s, $e)
+            # Block deletions while an undo grace period is active (A5-BUG-009)
+            if ($script:lastTaskId) {
+                [System.Windows.MessageBox]::Show(
+                    "Please wait until the undo period completes before deleting tasks.",
+                    "Undo in Progress", "OK", "Information") | Out-Null
+                return
+            }
             $container = $e.OriginalSource
             while ($container -and $container -isnot [System.Windows.Controls.Button]) {
                 $container = $container.Parent
@@ -1425,7 +1463,7 @@ function Show-MainWindow {
 
     <Border Background="#14141F" CornerRadius="14" Padding="32,28,32,28">
         <Border.Effect>
-            <DropShadowEffect Color="Black" BlurRadius="48" ShadowDepth="0" Opacity="0.85"/>
+            <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="0" Opacity="0.40"/>
         </Border.Effect>
         <StackPanel>
             <Border Background="#00BCD4" Height="3" CornerRadius="2" Margin="0,0,0,22"/>
@@ -1442,62 +1480,88 @@ function Show-MainWindow {
                 <TextBlock x:Name="BodyText" FontSize="14" Foreground="#8888A8"
                            TextWrapping="Wrap" LineHeight="23" Margin="0,0,0,6"/>
                 <!-- B-12: folder name subtitle -->
-                <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#5A5A7A"
+                <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#8888A8"
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
-                <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
+                <Border Background="#303050" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22">
-                    <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
                                Foreground="#00BCD4" VerticalAlignment="Center"/>
-                    <TextBlock Text="s" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock Text="s" FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <!-- B-11: Dismiss for Today -->
+                    <!-- B-11: Dismiss for Today — TabIndex=3 (lowest priority) -->
                     <Button x:Name="DismissBtn" Content="Dismiss for Today"
-                            Width="130" Height="36" Foreground="#3E3E58" FontSize="11"
-                            Background="#14141F" BorderBrush="#2A2A42" BorderThickness="1"
-                            Cursor="Hand" Margin="0,0,8,0">
+                            Width="148" Height="36" Foreground="#7878A0" FontSize="11"
+                            Background="#14141F" BorderBrush="#555580" BorderThickness="1"
+                            Cursor="Hand" Margin="0,0,8,0" TabIndex="3">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}"
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}"
                                         CornerRadius="7">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1E1E30"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#7878A0"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#28283A"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
                     <!-- B-10: Snooze split-button -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
                         <Button x:Name="SnoozeBtn" Content="Snooze 5m" Height="36"
-                                Foreground="#555570" FontSize="12" FontWeight="SemiBold"
-                                Background="#1C1C2C" BorderBrush="#2A2A42"
-                                BorderThickness="1,1,0,1" Cursor="Hand" Padding="10,0">
+                                Foreground="#8585A5" FontSize="12" FontWeight="SemiBold"
+                                Background="#1C1C2C" BorderBrush="#3A3A5A"
+                                BorderThickness="1,1,0,1" Cursor="Hand" Padding="10,0" TabIndex="1">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                             BorderBrush="{TemplateBinding BorderBrush}"
                                             BorderThickness="{TemplateBinding BorderThickness}"
                                             CornerRadius="7,0,0,7">
                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#252538"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#5A5A7A"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#1A1A28"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Button.Template>
                         </Button>
-                        <Button x:Name="SnoozeDropBtn" Content="v" Width="26" Height="36"
-                                Foreground="#555570" FontSize="10"
-                                Background="#1C1C2C" BorderBrush="#2A2A42" BorderThickness="1"
-                                Cursor="Hand">
+                        <Button x:Name="SnoozeDropBtn" Content="&#x25BE;" Width="28" Height="36"
+                                Foreground="#8585A5" FontSize="13"
+                                Background="#1C1C2C" BorderBrush="#3A3A5A" BorderThickness="1"
+                                Cursor="Hand" TabIndex="2">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
-                                    <Border Background="{TemplateBinding Background}"
+                                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                             BorderBrush="{TemplateBinding BorderBrush}"
                                             BorderThickness="{TemplateBinding BorderThickness}"
                                             CornerRadius="0,7,7,0">
                                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                     </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#252538"/>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#1A1A28"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Button.Template>
                             <Button.ContextMenu>
@@ -1510,15 +1574,23 @@ function Show-MainWindow {
                             </Button.ContextMenu>
                         </Button>
                     </StackPanel>
-                    <!-- Open Folder -->
-                    <Button x:Name="LetsGoBtn" Content="Open Folder >" Width="130" Height="36"
+                    <!-- Open Folder — TabIndex=0 (primary action) -->
+                    <Button x:Name="LetsGoBtn" Content="Open Folder &#x2192;" Width="150" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
-                            Background="#00BCD4" BorderThickness="0" Cursor="Hand">
+                            Background="#00BCD4" BorderThickness="0" Cursor="Hand" TabIndex="0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="7">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#00D4EE"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#00A8BE"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
@@ -1535,33 +1607,50 @@ function Show-MainWindow {
                 </StackPanel>
                 <TextBlock Text="The folder you scheduled was moved or deleted."
                            FontSize="14" Foreground="#8888A8" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#8888A8"
+                <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#9090B8"
                            TextWrapping="Wrap" Margin="0,0,0,22"/>
-                <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
+                <Border Background="#303050" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="PathDismissBtn" Content="Dismiss" Width="100" Height="36"
-                            Foreground="#555570" FontSize="12"
-                            Background="#1C1C2C" BorderBrush="#2A2A42" BorderThickness="1"
+                    <Button x:Name="PathDismissBtn" Content="Close" Width="100" Height="36"
+                            Foreground="#8585A5" FontSize="12"
+                            Background="#1C1C2C" BorderBrush="#3A3A5A" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,10,0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}"
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="{TemplateBinding BorderThickness}"
                                         CornerRadius="7">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#252538"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#5A5A7A"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#1A1A28"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="RePickBtn" Content="Choose New Location" Width="160" Height="36"
+                    <Button x:Name="RePickBtn" Content="Choose New Location" Width="170" Height="36"
                             Foreground="#0D1117" FontSize="12" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="7">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7">
                                     <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#00D4EE"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#00A8BE"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
@@ -1674,7 +1763,8 @@ function Show-PopupWindow {
     if ($script:pathMissing) {
         $normalPanel.Visibility      = "Collapsed"
         $pathMissingPanel.Visibility = "Visible"
-        $missingPathLabel.Text       = "Was looking for: $($config.explorer_path)"
+        $missingPathLabel.Text       = "This folder can't be found: $(Split-Path -Leaf $config.explorer_path)"
+        $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
         $glyphText.Text = $config.glyph
@@ -1686,7 +1776,7 @@ function Show-PopupWindow {
                 $config.explorer_path
             }
             else { $config.folder_name }
-            $folderNameText.Text       = "Opening: $displayName"
+            $folderNameText.Text       = "Folder: $displayName"
             $folderNameText.Visibility = "Visible"
         }
     }
@@ -1700,15 +1790,40 @@ function Show-PopupWindow {
     $script:newExplorerPath = ""
     $script:windowClosed    = $false   # UB-002: guard against queued dispatcher tick
 
-    # Fade-in animation
+    # Fade-in animation with recovery fallback (A6-BUG-01)
     $window.Add_Loaded({
             try {
                 $anim = [System.Windows.Media.Animation.DoubleAnimation]::new(
                     0, 1, [System.Windows.Duration]::new([System.TimeSpan]::FromMilliseconds(300)))
                 $window.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
             }
-            catch { Write-DLog "Fade-in failed: $_" "WARN" }
+            catch {
+                Write-DLog "Fade-in failed: $_" "WARN"
+                $window.Opacity = 1  # ensure visible if animation fails
+            }
+            # Fallback: if opacity is still 0 after 500ms, force it visible
+            $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
+            $fallbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(500)
+            $fallbackTimer.Add_Tick({
+                $fallbackTimer.Stop()
+                if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
+            })
+            $fallbackTimer.Start()
         })
+
+    # Race condition fix: stop countdown on ANY button press before click handler fires (A9-BUG-12)
+    # PreviewMouseDown fires before Click, so this safely cancels the timer first.
+    $cancelCountdown = {
+        param($s, $e)
+        if ($null -ne $timer -and $timer.IsEnabled) {
+            $timer.Stop()
+            Write-DLog "Countdown cancelled by button PreviewMouseDown"
+        }
+    }
+    $letsGoBtn.Add_PreviewMouseDown($cancelCountdown)
+    $dismissBtn.Add_PreviewMouseDown($cancelCountdown)
+    $snoozeBtn.Add_PreviewMouseDown($cancelCountdown)
+    $snoozeDropBtn.Add_PreviewMouseDown($cancelCountdown)
 
     # Countdown timer (normal mode only)
     if (-not $script:pathMissing) {
@@ -1936,7 +2051,12 @@ if (-not $NoRun) {
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
                         -ExplorerPath $FolderPath -TaskId $result.TaskId
-                    # Success is silent — no popup, context menu action completes in background
+                    # Confirm to user that the folder was scheduled (A10-ISSUE-07)
+                    $folderLeaf   = Split-Path -Leaf $FolderPath
+                    $schedDisplay = $triggerTime.ToString("dddd 'at' h:mm tt")
+                    [System.Windows.MessageBox]::Show(
+                        "'$folderLeaf' scheduled for $schedDisplay.",
+                        "Folder Scheduled", "OK", "Information") | Out-Null
                 }
                 elseif ($result.IsDuplicate) {
                     [System.Windows.MessageBox]::Show(
