@@ -569,7 +569,25 @@ function Update-TaskListUI {
     )
     $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
     $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
-    $TaskListControl.ItemsSource          = $pending
+    # SS-F-01: format ISO timestamp to human-readable; SS-F-06: humanize hyphenated folder name
+    $displayTasks = $pending | ForEach-Object {
+        $t = $_
+        $displayTime = try {
+            ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt")
+        } catch { $t.scheduled_time }
+        $displayName = if ($t.folder_name) {
+            # Replace hyphens/underscores with spaces and title-case
+            $n = ($t.folder_name -replace '[-_]', ' ')
+            [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.ToTitleCase($n.ToLower())
+        } else { '' }
+        [PSCustomObject]@{
+            task_id      = $t.task_id
+            folder_name  = $displayName
+            display_time = $displayTime
+            status       = $t.status
+        }
+    }
+    $TaskListControl.ItemsSource          = $displayTasks
     $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
 }
 
@@ -821,63 +839,102 @@ function Unregister-ContextMenu {
         <!-- Base button style -->
         <Style x:Key="PrimaryBtn" TargetType="Button">
             <Setter Property="Background"   Value="#00BCD4"/>
-            <Setter Property="Foreground"   Value="#0D1117"/>
+            <Setter Property="Foreground"   Value="#FFFFFF"/>
             <Setter Property="FontSize"     Value="13"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding"      Value="20,10"/>
             <Setter Property="Cursor"       Value="Hand"/>
-            <Setter Property="Opacity"      Value="1"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="6"
-                                Opacity="{TemplateBinding Opacity}">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="6">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#00D4EE"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Opacity" Value="0.4"/>
+                    <Setter Property="Background" Value="#2A2D36"/>
+                    <Setter Property="Foreground" Value="#5A5F6E"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
 
         <Style x:Key="SecondaryBtn" TargetType="Button">
             <Setter Property="Background"   Value="#1C1C2C"/>
-            <Setter Property="Foreground"   Value="#8888A8"/>
+            <Setter Property="Foreground"   Value="#A0A0C0"/>
             <Setter Property="FontSize"     Value="12"/>
-            <Setter Property="BorderBrush"  Value="#2A2A42"/>
+            <Setter Property="BorderBrush"  Value="#5A5A7A"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding"      Value="15,7"/>
             <Setter Property="Cursor"       Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="10">
+                                CornerRadius="6">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#252538"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#7A7AAA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Dark-aware RadioButton — replaces system BulletChrome (SS-D-01) -->
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground"       Value="#E8E8F4"/>
+            <Setter Property="FontSize"         Value="12"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Grid Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <Ellipse Width="16" Height="16"
+                                         Stroke="#5A5A7A" StrokeThickness="1.5"
+                                         Fill="#1C1C2C"/>
+                                <Ellipse x:Name="Dot" Width="8" Height="8"
+                                         Fill="#00BCD4"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center"
+                                         Visibility="Collapsed"/>
+                            </Grid>
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
     </Window.Resources>
 
-    <Border Background="#0D1117" Padding="28,24,28,24">
+    <Border Background="#0D1117" Padding="28,0,28,24">
         <StackPanel>
 
-            <!-- Header accent bar -->
-            <Border Background="#00BCD4" Height="3" CornerRadius="2" Margin="20,20,20,20"/>
+            <!-- Header accent bar — edge-to-edge, no top dead zone (SS-A-02, SS-B-02) -->
+            <Border Background="#00BCD4" Height="3" Margin="-28,0,-28,16"/>
 
-            <!-- Title -->
-            <TextBlock Text="Daily Motivation Brain Helper"
-                       FontSize="17" FontWeight="Bold" Foreground="#E8E8F4"
-                       Margin="0,0,0,20"/>
+            <!-- Context label — replaces duplicated OS title (SS-A-03) -->
+            <TextBlock Text="Schedule a Folder Reminder"
+                       FontSize="15" FontWeight="SemiBold" Foreground="#C8C8E8"
+                       Margin="0,16,0,16"/>
 
             <!-- Last Folder Banner (B-01) - hidden until reimplemented -->
             <Border x:Name="LastFolderBanner"
@@ -908,25 +965,26 @@ function Unregister-ContextMenu {
                 </Grid>
             </Border>
 
-            <!-- Drop Zone + Select Folder -->
+            <!-- Drop Zone + Select Folder (SS-C-03: visible border; SS-H-02: left-aligned) -->
             <Border x:Name="DropZone"
-                    Background="#111B22" BorderBrush="#2A2A42" BorderThickness="1"
+                    Background="#111B22" BorderBrush="#3A4A5A" BorderThickness="1.5"
                     CornerRadius="8" Padding="20,18" Margin="0,0,0,16"
+                    MinHeight="140"
                     AllowDrop="True">
                 <StackPanel>
                     <TextBlock Text="Drop a folder here, or use the button below"
-                               FontSize="12" Foreground="#4A4A6A"
-                               HorizontalAlignment="Center" Margin="0,0,0,10"
+                               FontSize="12" Foreground="#8888A8"
+                               HorizontalAlignment="Left" Margin="0,0,0,10"
                                ToolTip="Drag any folder from Windows Explorer and drop it here"/>
                     <Button x:Name="SelectFolderBtn"
-                            Content="&#x1F4C2;  Select Folder"
+                            Content="Select Folder"
                             Style="{StaticResource SecondaryBtn}"
-                            HorizontalAlignment="Center" Padding="20,8"
+                            HorizontalAlignment="Left" Padding="20,8"
                             ToolTip="Choose the folder you want to open at the scheduled time"/>
                     <TextBlock x:Name="SelectedPathLabel"
                                Text="No folder selected"
-                               FontSize="11" Foreground="#4A4A6A"
-                               HorizontalAlignment="Center" Margin="0,8,0,0"
+                               FontSize="11" Foreground="#8888A8"
+                               HorizontalAlignment="Left" Margin="0,8,0,0"
                                TextTrimming="CharacterEllipsis"/>
                 </StackPanel>
             </Border>
@@ -934,7 +992,7 @@ function Unregister-ContextMenu {
             <!-- Schedule Time Options -->
             <StackPanel Margin="0,0,0,16">
                 <TextBlock Text="Schedule for:"
-                           FontSize="12" Foreground="#8888A8" Margin="8,8,8,8"/>
+                           FontSize="12" Foreground="#8888A8" Margin="0,0,0,8"/>
                 <StackPanel Orientation="Horizontal">
                     <RadioButton x:Name="TodayRadio"
                                  Content="Today at 2:00 PM"
@@ -950,13 +1008,13 @@ function Unregister-ContextMenu {
                 </StackPanel>
             </StackPanel>
 
-            <!-- Schedule Button -->
+            <!-- Schedule Button (SS-E-01: padding fixed; SS-E-02: stretch) -->
             <Button x:Name="ScheduleBtn"
                     Content="Schedule"
                     Style="{StaticResource PrimaryBtn}"
                     IsEnabled="False"
-                    HorizontalAlignment="Left"
-                    Padding="48,30"
+                    HorizontalAlignment="Stretch"
+                    Padding="20,10"
                     ToolTip="Create a reminder to open this folder at the scheduled time"/>
 
             <!-- Undo Banner (B-04) -->
@@ -987,8 +1045,8 @@ function Unregister-ContextMenu {
                 </Grid>
             </Border>
 
-            <!-- Divider -->
-            <Border Background="#1F1F30" Height="1" Margin="0,20,0,16"/>
+            <!-- Divider (SS-F-08: raised to 3:1 contrast) -->
+            <Border Background="#3A3A5A" Height="1" Margin="0,16,0,16"/>
 
             <!-- Recent Folders (B-02) - hidden until reimplemented -->
             <StackPanel x:Name="RecentFoldersPanel" Visibility="Collapsed" Margin="0,0,0,16">
@@ -1006,7 +1064,7 @@ function Unregister-ContextMenu {
                                 <TextBlock Text="&#x1F4C1;" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding FolderName}" FontSize="12" Foreground="#C8C8E8"/>
-                                    <TextBlock Text="{Binding FolderPath}" FontSize="10" Foreground="#4A4A6A"
+                                    <TextBlock Text="{Binding FolderPath}" FontSize="10" Foreground="#8888A8"
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                                 <Button Grid.Column="2" Tag="{Binding FolderPath}"
@@ -1019,9 +1077,9 @@ function Unregister-ContextMenu {
                 </ItemsControl>
             </StackPanel>
 
-            <!-- Scheduled Tasks -->
+            <!-- Scheduled Tasks (SS-F-07: header given more weight than body labels) -->
             <TextBlock Text="Scheduled Tasks"
-                       FontSize="12" FontWeight="SemiBold" Foreground="#8888A8" Margin="0,0,0,8"/>
+                       FontSize="13" FontWeight="Bold" Foreground="#C8C8E8" Margin="0,0,0,10"/>
             <ItemsControl x:Name="TaskList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
@@ -1033,11 +1091,12 @@ function Unregister-ContextMenu {
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding folder_name}" FontSize="12" Foreground="#C8C8E8"/>
-                                <TextBlock Text="{Binding scheduled_time}" FontSize="10" Foreground="#4A4A6A"/>
+                                <TextBlock Text="{Binding display_time}" FontSize="10" Foreground="#8888A8"/>
                             </StackPanel>
+                            <!-- PENDING badge (SS-F-03: cyan \u2192 neutral; SS-I-02: no cyan overload) -->
                             <Border Grid.Column="1"
-                                    Background="#1A2A3A" CornerRadius="4" Padding="6,2" Margin="8,0">
-                                <TextBlock Text="{Binding status}" FontSize="10" Foreground="#00BCD4"/>
+                                    Background="#1F1F30" CornerRadius="4" Padding="6,2" Margin="8,0">
+                                <TextBlock Text="{Binding status}" FontSize="10" Foreground="#7A7A9A"/>
                             </Border>
                             <Button Grid.Column="2" Tag="{Binding task_id}"
                                     Content="&#x2715;"
@@ -1050,15 +1109,15 @@ function Unregister-ContextMenu {
             </ItemsControl>
             <TextBlock x:Name="NoTasksLabel"
                        Text="No tasks scheduled."
-                       FontSize="11" Foreground="#3A3A5A"
-                       Margin="0,4,0,0" Visibility="Visible"/>
+                       FontSize="11" Foreground="#6A6A8A"
+                       Margin="0,8,0,0" Visibility="Visible"/>
 
-            <!-- History Toggle (B-18) -->
+            <!-- History Toggle (SS-G-01: no emoji hack; SS-G-03: stretch not orphaned) -->
             <Button x:Name="HistoryToggleBtn"
-                    Content="&#x1F4CB;  View History"
+                    Content="View History"
                     Style="{StaticResource SecondaryBtn}"
-                    HorizontalAlignment="Left"
-                    Margin="0,16,0,0" Padding="12,6"
+                    HorizontalAlignment="Stretch"
+                    Margin="0,16,0,0" Padding="12,8"
                     ToolTip="See a log of your past folder openings"/>
 
             <!-- History panel -->
@@ -1084,7 +1143,7 @@ function Unregister-ContextMenu {
                                         <ColumnDefinition Width="120"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding Timestamp}" FontSize="10" Foreground="#4A4A6A" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Timestamp}" FontSize="10" Foreground="#8888A8" VerticalAlignment="Center"/>
                                     <TextBlock Grid.Column="1" Text="{Binding FolderName}" FontSize="11" Foreground="#C8C8E8" VerticalAlignment="Center"
                                                TextTrimming="CharacterEllipsis"/>
                                     <TextBlock Grid.Column="2" Text="{Binding OutcomeDisplay}" FontSize="11" VerticalAlignment="Center"
@@ -1236,6 +1295,28 @@ function Show-MainWindow {
             if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
         })
 
+    # SS-C-05: drag-over visual feedback
+    $script:dropZoneBrushNormal = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#3A4A5A")
+    $script:dropZoneBrushHover  = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#00BCD4")
+    $script:dropZoneBgNormal    = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#111B22")
+    $script:dropZoneBgHover     = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#162028")
+
+    $dropZone.Add_DragEnter({
+            param($s, $e)
+            if ($e.Data.GetDataPresent([System.Windows.DataFormats]::FileDrop)) {
+                $dropZone.BorderBrush  = $script:dropZoneBrushHover
+                $dropZone.Background   = $script:dropZoneBgHover
+                $dropZone.BorderThickness = [System.Windows.Thickness]::new(2)
+            }
+            $e.Handled = $true
+        })
+
+    $dropZone.Add_DragLeave({
+            $dropZone.BorderBrush  = $script:dropZoneBrushNormal
+            $dropZone.Background   = $script:dropZoneBgNormal
+            $dropZone.BorderThickness = [System.Windows.Thickness]::new(1.5)
+        })
+
     $dropZone.Add_PreviewDragOver({
             param($s, $e)
             $e.Effects = if ($e.Data.GetDataPresent([System.Windows.DataFormats]::FileDrop)) {
@@ -1247,6 +1328,10 @@ function Show-MainWindow {
 
     $dropZone.Add_Drop({
             param($s, $e)
+            # Reset drag-over visual state
+            $dropZone.BorderBrush     = $script:dropZoneBrushNormal
+            $dropZone.Background      = $script:dropZoneBgNormal
+            $dropZone.BorderThickness = [System.Windows.Thickness]::new(1.5)
             if ($e.Data.GetDataPresent([System.Windows.DataFormats]::FileDrop)) {
                 $dropped = $e.Data.GetData([System.Windows.DataFormats]::FileDrop)
                 if ($dropped.Count -gt 0 -and (Test-Path $dropped[0] -PathType Container)) {
@@ -1294,7 +1379,7 @@ function Show-MainWindow {
     $historyToggleBtn.Add_Click({
             if ($historyPanel.Visibility -eq "Visible") {
                 $historyPanel.Visibility  = "Collapsed"
-                $historyToggleBtn.Content = "View History"
+                $historyToggleBtn.Content = "View History"   # matches new Content attribute
             }
             else {
                 Update-HistoryUI -HistoryListControl $historyList
@@ -1449,7 +1534,7 @@ function Show-MainWindow {
                 </StackPanel>
                 <TextBlock Text="The folder you scheduled was moved or deleted."
                            FontSize="14" Foreground="#8888A8" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#4A4A6A"
+                <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#8888A8"
                            TextWrapping="Wrap" Margin="0,0,0,22"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
