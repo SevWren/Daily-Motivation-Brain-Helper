@@ -305,6 +305,11 @@ function New-MotivationTask {
         [switch]$Force
     )
 
+    # Sync OS task states before duplicate check so stale ghost entries (tasks that were
+    # written to tasks.json but never actually registered in Task Scheduler due to a
+    # non-terminating error) are marked DELETED and don't block rescheduling.
+    if (-not $script:Platform) { Sync-TaskStatuses }
+
     # Duplicate check (B-16) - case-insensitive path, same date (GAP-006)
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
@@ -394,7 +399,8 @@ function New-MotivationTask {
                 -Settings    $settings  `
                 -Principal   $principal `
                 -Description "Daily Motivation Brain Helper - $FolderPath" `
-                -Force | Out-Null
+                -Force -ErrorAction Stop | Out-Null
+            Write-DLog "Register-ScheduledTask succeeded: $taskName"
         }
         catch {
             Write-DLog "Register-ScheduledTask failed: $($_.Exception.Message)" "ERROR"
