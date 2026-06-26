@@ -361,7 +361,7 @@ function New-MotivationTask {
             -StartWhenAvailable `
             -ExecutionTimeLimit  (New-TimeSpan -Minutes 10) `
             -MultipleInstances   IgnoreNew `
-            -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 0)
+            -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 30)
 
         # GAP-010: network path detection for RunLevel assignment
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
@@ -392,6 +392,7 @@ function New-MotivationTask {
                 -Force | Out-Null
         }
         catch {
+            Write-DLog "Register-ScheduledTask failed: $($_.Exception.Message)" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
         }
     }
@@ -1793,14 +1794,14 @@ function Get-RandomMessage {
 # (-NoRun switch skips this block; used when dot-sourcing in tests)
 # ============================================================
 if (-not $NoRun) {
+    # Use if-else for .NET Framework 4.x compatibility (ps2exe target)
+    $platformName = if ($script:IsWindowsPlatform) { 'Windows' } else { 'Linux' }
+    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$platformName ======"
+
     # Load Windows assemblies (WPF, WinForms) - required for UI modes
     if ($script:IsWindowsPlatform) {
         Initialize-WindowsAssemblies
     }
-
-    # Use if-else for .NET Framework 4.x compatibility (ps2exe target)
-    $platformName = if ($script:IsWindowsPlatform) { 'Windows' } else { 'Linux' }
-    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$platformName ======"
 
     # Capture exe path for Task Scheduler action and context menu registration.
     # PS2EXE sets $MyInvocation.MyCommand.Path to the compiled .exe path.
@@ -1818,12 +1819,14 @@ if (-not $NoRun) {
             Show-PopupWindow
         }
         "/setfolder" {
+            Write-DLog "setfolder: FolderPath='$FolderPath'"
             if ($FolderPath -and (Test-Path $FolderPath -PathType Container)) {
                 $cfg         = Get-Config
                 $triggerHour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
                 $triggerTime = (Get-Date).Date.AddDays(1).AddHours($triggerHour)
                 $msg         = Get-RandomMessage
                 $result      = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime
+                Write-DLog "setfolder: New-MotivationTask result Success=$($result.Success) IsDuplicate=$($result.IsDuplicate) Error='$($result.Error)'"
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
                         -ExplorerPath $FolderPath -TaskId $result.TaskId
@@ -1831,6 +1834,19 @@ if (-not $NoRun) {
                         "Scheduled! '$FolderPath' will open tomorrow at $($triggerHour):00.",
                         "Daily Motivation Brain Helper", "OK", "Information") | Out-Null
                 }
+                elseif ($result.IsDuplicate) {
+                    [System.Windows.MessageBox]::Show(
+                        "'$FolderPath' is already scheduled for tomorrow.",
+                        "Already Scheduled", "OK", "Information") | Out-Null
+                }
+                else {
+                    [System.Windows.MessageBox]::Show(
+                        "Could not schedule '$FolderPath'.`n`n$($result.Error)",
+                        "Schedule Failed", "OK", "Error") | Out-Null
+                }
+            }
+            else {
+                Write-DLog "setfolder: invalid or missing FolderPath '$FolderPath'" "WARN"
             }
         }
         default {
