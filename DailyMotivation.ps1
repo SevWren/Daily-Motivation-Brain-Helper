@@ -1752,6 +1752,15 @@ function Show-PopupWindow {
         }
     }
 
+    # Post-close: remove the originating task from Task Scheduler and tasks.json.
+    # This must happen for ALL outcomes (Open, Countdown, Snooze, Dismiss, PathMissing).
+    # Cannot rely on DeleteExpiredTaskAfter alone — it only fires when the scheduled
+    # trigger expires naturally; manually-run tasks are never considered "expired".
+    if ($config.task_id -and $config.task_id -ne "") {
+        Write-DLog "Removing originating task: $($config.task_id)"
+        Remove-MotivationTask -TaskId $config.task_id
+    }
+
     # Post-close: open Explorer (REQ-009)
     $effectivePath = if ($script:newExplorerPath) { $script:newExplorerPath } else { $config.explorer_path }
     if ($script:openExplorer -and $effectivePath -and $effectivePath -ne "") {
@@ -1841,9 +1850,7 @@ if (-not $NoRun) {
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
                         -ExplorerPath $FolderPath -TaskId $result.TaskId
-                    [System.Windows.MessageBox]::Show(
-                        "Scheduled! '$FolderPath' will open tomorrow at $($triggerHour):00.",
-                        "Daily Motivation Brain Helper", "OK", "Information") | Out-Null
+                    # Success is silent — no popup, context menu action completes in background
                 }
                 elseif ($result.IsDuplicate) {
                     [System.Windows.MessageBox]::Show(
