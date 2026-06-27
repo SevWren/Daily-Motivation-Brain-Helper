@@ -149,10 +149,18 @@ Describe 'Popup Config Functions' {
         (Get-PopupConfig).folder_name | Should -Be 'SubFolder'
     }
 
-    It 'Get-PopupConfig should return null for corrupted file' {
+    It 'Get-PopupConfig should return default object for corrupted file' {
+        # AG8-008: Use strict property-level assertions instead of -BeNullOrEmpty
+        # (empty PSCustomObject would pass BeNullOrEmpty but indicates a different bug).
+        # Get-PopupConfig now returns a default PSCustomObject (AG7-015 fix) instead of $null,
+        # so we verify the returned object has safe default values.
         $cfgPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_config.json'
         'invalid' | Set-Content $cfgPath -Encoding UTF8
-        Get-PopupConfig | Should -BeNullOrEmpty
+        $result = Get-PopupConfig
+        $result                | Should -Not -Be $null
+        $result.glyph          | Should -Be '[+]'
+        $result.explorer_path  | Should -Be ''
+        $result.task_id        | Should -Be ''
     }
 }
 

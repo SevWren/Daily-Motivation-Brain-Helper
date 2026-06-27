@@ -157,6 +157,67 @@ Describe 'New-MotivationTask' {
             $result.IsNetworkPath | Should -Be $false
         }
     }
+
+    Context 'Collision detection retry loop' {
+        # AG8-004: Test that the retry loop actually executes when the first task name collides.
+        # The mock returns a fake task on the first call (simulating collision), then $null.
+        It 'Should retry and generate a new task ID on task name collision' {
+            $callCount = 0
+            Mock Get-ScheduledTask {
+                $script:callCount++
+                if ($script:callCount -eq 1) {
+                    # Simulate collision — task already exists
+                    return [PSCustomObject]@{ TaskName = 'DailyMotivation_collision' }
+                }
+                return $null  # Second call: no collision, new ID is unique
+            }
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            $script:callCount | Should -BeGreaterOrEqual 2  # retry loop executed
+        }
+
+        AfterEach {
+            # Restore default mock (no collision)
+            Mock Get-ScheduledTask { return $null }
+        }
+    }
+
+    Context 'Error paths' {
+        # AG8-012: Test error scenarios that were previously untested (happy-path only).
+
+        It 'Should return Success=false and not persist task when Register-ScheduledTask throws' {
+            Mock Register-ScheduledTask { throw 'Access Denied' }
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success     | Should -Be $false
+            $result.IsDuplicate | Should -Be $false
+            $result.Error       | Should -Not -BeNullOrEmpty
+            # Task must NOT have been persisted to tasks.json
+            @(Get-TasksJson).Count | Should -Be 0
+        }
+
+        It 'Should call Unregister-ScheduledTask rollback when Save-TasksJson fails' {
+            # Simulate a write failure by locking out the tasks.json path
+            Mock Save-TasksJson { throw 'Disk full' }
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
+            Should -Invoke Unregister-ScheduledTask -Times 1 -Exactly
+        }
+
+        AfterEach {
+            # Restore mocks to defaults
+            Mock Register-ScheduledTask { return $null }
+            Mock Save-TasksJson {
+                param([object[]]$Tasks)
+                $path     = $script:TasksPath
+                $tempPath = $path + ".tmp"
+                if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
+                    Set-Content -Path $tempPath -Value '[]' -Encoding UTF8 -NoNewline -ErrorAction Stop
+                } else {
+                    ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
+                }
+                Move-Item -Path $tempPath -Destination $path -Force -ErrorAction Stop
+            }
+        }
+    }
 }
 
 Describe 'Get-MotivationTasks' {
@@ -191,8 +252,13 @@ Describe 'Get-MotivationTasks' {
     }
 
     It 'Should handle corrupted tasks.json gracefully' {
+        # AG8-002: Verify return value, not just that the function doesn't throw.
+        # Must return an empty array (not $null or garbage) on corrupt input.
         'invalid json{' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-        { Get-MotivationTasks } | Should -Not -Throw
+        $result = $null
+        { $result = Get-MotivationTasks } | Should -Not -Throw
+        $result         | Should -Not -Be $null
+        @($result).Count | Should -Be 0
     }
 }
 

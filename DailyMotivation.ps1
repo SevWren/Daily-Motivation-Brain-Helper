@@ -53,18 +53,41 @@ $script:Platform = $null
 $script:AssembliesLoaded = $false
 
 function Initialize-WindowsAssemblies {
+    # AG12-006: Split WPF and WinForms loads so WinForms can be used as a fallback
+    # error-display mechanism when WPF fails, instead of a silent hard exit.
     if ($script:AssembliesLoaded) { return }
+    $wpfErr = $null
+    $script:WpfLoaded   = $false
+    $script:FormsLoaded = $false
+
     try {
         Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase
-        Add-Type -AssemblyName System.Windows.Forms
-        $script:AssembliesLoaded = $true
-        Write-DLog "Assemblies loaded OK"
+        $script:WpfLoaded = $true
     }
-    catch {
-        Write-DLog "Assembly load failed: $_" "WARN"
-        Write-Error "Could not load UI components (.NET Framework required): $_"
+    catch { $wpfErr = $_ }
+
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:FormsLoaded = $true
+    }
+    catch { Write-DLog "WinForms assembly load failed: $_" "WARN" }
+
+    if (-not $script:WpfLoaded) {
+        $errMsg = "Could not load WPF UI components (.NET Framework 4.x required). The application cannot display its interface.`n`nDetails: $wpfErr"
+        Write-DLog "WPF assembly load failed: $wpfErr" "ERROR"
+        if ($script:FormsLoaded) {
+            [System.Windows.Forms.MessageBox]::Show($errMsg, "Daily Motivation Brain Helper",
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+        }
+        else {
+            [Console]::Error.WriteLine($errMsg)
+        }
         exit 1
     }
+
+    $script:AssembliesLoaded = $true
+    Write-DLog "Assemblies loaded OK (WPF=$($script:WpfLoaded) WinForms=$($script:FormsLoaded))"
 }
 
 # ============================================================
@@ -197,7 +220,21 @@ function Initialize-AppData {
 
 function Get-Config {
     try {
-        return Get-Content $script:ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $cfg = Get-Content $script:ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        # AG7-006: Validate config properties — reject out-of-range values to prevent downstream errors
+        if ($null -eq $cfg.default_trigger_hour -or
+            -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
+            [int]$cfg.default_trigger_hour -lt 0 -or [int]$cfg.default_trigger_hour -gt 23) {
+            Write-DLog "Get-Config: invalid default_trigger_hour '$($cfg.default_trigger_hour)' — resetting to 14" "WARN"
+            $cfg.default_trigger_hour = 14
+        }
+        if ($null -eq $cfg.task_warning_threshold -or
+            -not ($cfg.task_warning_threshold -is [int] -or $cfg.task_warning_threshold -is [long] -or $cfg.task_warning_threshold -is [double]) -or
+            [int]$cfg.task_warning_threshold -lt 0) {
+            Write-DLog "Get-Config: invalid task_warning_threshold '$($cfg.task_warning_threshold)' — resetting to 5" "WARN"
+            $cfg.task_warning_threshold = 5
+        }
+        return $cfg
     }
     catch {
         return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
@@ -205,18 +242,42 @@ function Get-Config {
 }
 
 function Save-Config {
+    # AG3-016 / AG7-002 / AG7-010: Atomic write — write to .tmp then rename to prevent
+    # partial-write corruption if the process is killed mid-write.
     param([PSCustomObject]$Config)
-    $Config | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding UTF8
+    $tempPath = $script:ConfigPath + ".tmp"
+    try {
+        $Config | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
+        Move-Item -Path $tempPath -Destination $script:ConfigPath -Force -ErrorAction Stop
+    }
+    catch {
+        if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
+        throw
+    }
 }
 
 function Get-PopupConfig {
+    # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
+    # null-reference crashes in callers that access properties without null checks.
     try {
         return Get-Content $script:PopupCfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
     }
-    catch { return $null }
+    catch {
+        Write-DLog "Get-PopupConfig: failed to read/parse config — returning defaults: $_" "WARN"
+        return [PSCustomObject]@{
+            glyph         = "[+]"
+            title         = ""
+            body          = ""
+            explorer_path = ""
+            folder_name   = ""
+            task_id       = ""
+        }
+    }
 }
 
 function Set-PopupConfig {
+    # AG3-008 / AG3-016: Use named mutex + atomic write (temp file + rename) to prevent
+    # file corruption when /setfolder and /popup modes run concurrently.
     param(
         [string]$Glyph,
         [string]$Title,
@@ -224,14 +285,35 @@ function Set-PopupConfig {
         [string]$ExplorerPath,
         [string]$TaskId
     )
-    [ordered]@{
-        glyph         = $Glyph
-        title         = $Title
-        body          = $Body
-        explorer_path = $ExplorerPath
-        folder_name   = (Split-Path -Leaf $ExplorerPath)
-        task_id       = $TaskId
-    } | ConvertTo-Json | Set-Content -Path $script:PopupCfgPath -Encoding UTF8
+    $tempPath    = $script:PopupCfgPath + ".tmp"
+    $cfgMutex    = $null
+    $cfgAcquired = $false
+    try {
+        $cfgMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationPopupConfigLock")
+        $cfgAcquired = $cfgMutex.WaitOne(2000)
+        if (-not $cfgAcquired) {
+            Write-DLog "Set-PopupConfig: could not acquire config mutex within 2s — proceeding without lock" "WARN"
+        }
+        [ordered]@{
+            glyph         = $Glyph
+            title         = $Title
+            body          = $Body
+            explorer_path = $ExplorerPath
+            folder_name   = (Split-Path -Leaf $ExplorerPath)
+            task_id       = $TaskId
+        } | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
+        Move-Item -Path $tempPath -Destination $script:PopupCfgPath -Force -ErrorAction Stop
+    }
+    catch {
+        if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
+        throw
+    }
+    finally {
+        if ($null -ne $cfgMutex) {
+            try { if ($cfgAcquired) { $cfgMutex.ReleaseMutex() } } catch {}
+            $cfgMutex.Dispose()
+        }
+    }
 }
 
 function Write-OutcomeLog {
@@ -265,6 +347,27 @@ function Show-ErrorDialog {
     }
 }
 
+function Show-InfoDialog {
+    # AG6-019: Centralised informational dialog with WPF→WinForms→Console fallback.
+    # Use this instead of direct [System.Windows.MessageBox] calls in code paths
+    # that may run before/without WPF assemblies (e.g. /setfolder on non-WPF systems).
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [string]$Title = "Daily Motivation Brain Helper"
+    )
+    try {
+        [System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information") | Out-Null
+    }
+    catch {
+        try {
+            [System.Windows.Forms.MessageBox]::Show($Message, $Title,
+                [System.Windows.Forms.MessageBoxButtons]::OK,
+                [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+        }
+        catch { [Console]::Out.WriteLine("INFO [$Title]: $Message") }
+    }
+}
+
 # ============================================================
 # SECTION 4: Task Scheduler functions
 # ============================================================
@@ -282,14 +385,23 @@ function Get-TasksJson {
 }
 
 function Save-TasksJson {
+    # AG3-009 / AG18-001: Atomic write — write to .tmp then rename to prevent partial-write
+    # corruption if the process is killed mid-write. FIX-003 null/empty handling preserved.
     param([object[]]$Tasks)
-    $path = $script:TasksPath
-    # FIX-003: explicit null/empty handling to avoid "null" or broken JSON
-    if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
-        Set-Content -Path $path -Value '[]' -Encoding UTF8 -NoNewline
+    $path     = $script:TasksPath
+    $tempPath = $path + ".tmp"
+    try {
+        if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
+            Set-Content -Path $tempPath -Value '[]' -Encoding UTF8 -NoNewline -ErrorAction Stop
+        }
+        else {
+            ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
+        }
+        Move-Item -Path $tempPath -Destination $path -Force -ErrorAction Stop
     }
-    else {
-        ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $path -Encoding UTF8
+    catch {
+        if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
+        throw
     }
 }
 
@@ -1175,6 +1287,17 @@ function Unregister-ContextMenu {
 # ============================================================
 
 function Show-MainWindow {
+    # AG6-001: Guard — verify WPF assemblies are loaded before attempting any UI operations
+    if (-not $script:AssembliesLoaded) {
+        Write-DLog "Show-MainWindow: WPF assemblies not loaded — cannot display UI" "ERROR"
+        [Console]::Error.WriteLine("UI cannot display: .NET Framework WPF assemblies not available.")
+        return
+    }
+    # AG6-003: Warn if not running on an STA thread (required for WPF ShowDialog)
+    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
+        Write-DLog "Show-MainWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
+    }
+
     # Check Task Scheduler service
     $schedSvc = Get-Service -Name Schedule -ErrorAction SilentlyContinue
     if ($schedSvc -and $schedSvc.Status -ne "Running") {
@@ -1196,7 +1319,15 @@ function Show-MainWindow {
     $localXaml = $MainXaml.Clone()
     try { $localXaml.Window.RemoveAttribute("x:Name") } catch {}
     $reader = [System.Xml.XmlNodeReader]::new($localXaml)
-    $window = [Windows.Markup.XamlReader]::Load($reader)
+    # AG6-002: Wrap XamlReader.Load() in try-catch — it throws on malformed XAML
+    try {
+        $window = [Windows.Markup.XamlReader]::Load($reader)
+    }
+    catch {
+        Write-DLog "FATAL: Main XAML build failed - $_" "ERROR"
+        Show-ErrorDialog "UI failed to load: $($_.Exception.Message)`n`nPlease reinstall the application."
+        return
+    }
     if ($null -eq $window -or $window -isnot [System.Windows.Window]) {
         Show-ErrorDialog "UI failed to load. Please reinstall the application."
         return
@@ -1570,6 +1701,9 @@ function Show-MainWindow {
                                     <MenuItem x:Name="Snooze15" Header=" 15 minutes"           Foreground="#E8E8F4" FontSize="12"/>
                                     <MenuItem x:Name="Snooze30" Header=" 30 minutes"           Foreground="#E8E8F4" FontSize="12"/>
                                     <MenuItem x:Name="Snooze60" Header=" 1 hour"               Foreground="#E8E8F4" FontSize="12"/>
+                                    <Separator/>
+                                    <!-- AG17-011: Exit item so the user can close the popup from the snooze menu -->
+                                    <MenuItem x:Name="ExitItem" Header=" Exit"                 Foreground="#7878A0" FontSize="12"/>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
@@ -1667,6 +1801,10 @@ function Show-MainWindow {
 # ============================================================
 
 function Show-PopupWindow {
+    # AG6-003: Warn if not on STA thread (required for WPF ShowDialog)
+    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
+        Write-DLog "Show-PopupWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
+    }
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time (SSOT-006 / TASK-006)
@@ -1678,6 +1816,9 @@ function Show-PopupWindow {
         $mutexOwned = $mutex.WaitOne(0)
         if (-not $mutexOwned) {
             Write-DLog "Mutex held - another popup running. Exiting." "WARN"
+            # AG1-001: Dispose the mutex handle even when we did not acquire ownership,
+            # to release the kernel object reference and prevent a handle leak.
+            if ($mutex) { $mutex.Dispose() }
             return
         }
         Write-DLog "Mutex acquired"
@@ -1754,6 +1895,7 @@ function Show-PopupWindow {
     $snooze15         = Find "Snooze15"
     $snooze30         = Find "Snooze30"
     $snooze60         = Find "Snooze60"
+    $exitItem         = Find "ExitItem"
     $dismissBtn       = Find "DismissBtn"
     $missingPathLabel = Find "MissingPathLabel"
     $pathDismissBtn   = Find "PathDismissBtn"
@@ -1861,6 +2003,17 @@ function Show-PopupWindow {
     $snooze30.Add_Click({ Set-SnoozeDuration -Minutes 30 -SnoozeBtnControl $snoozeBtn })
     $snooze60.Add_Click({ Set-SnoozeDuration -Minutes 60 -SnoozeBtnControl $snoozeBtn })
 
+    # AG17-011: Exit item closes the popup without opening explorer (equivalent to Dismiss)
+    if ($exitItem) {
+        $exitItem.Add_Click({
+            Write-DLog "Exit menu item clicked"
+            if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) { $timer.Stop() }
+            $script:openExplorer = $false
+            $script:windowClosed = $true
+            $window.Close()
+        })
+    }
+
     # Snooze button
     $snoozeBtn.Add_Click({
             try {
@@ -1921,10 +2074,10 @@ function Show-PopupWindow {
                 $newPath = $dialog.SelectedPath
                 Write-DLog "Re-pick: $newPath"
                 try {
-                    $c = Get-Content $configPath -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json
-                    $c.explorer_path = $newPath
-                    $c.folder_name   = Split-Path -Leaf $newPath
-                    $c | ConvertTo-Json | Set-Content $configPath -Encoding UTF8 -ErrorAction Stop
+                    # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
+                    $c = Get-PopupConfig
+                    Set-PopupConfig -Glyph $c.glyph -Title $c.title -Body $c.body `
+                        -ExplorerPath $newPath -TaskId $c.task_id
                     # ERR-002: only update state if write succeeded
                     $script:newExplorerPath = $newPath
                     $script:openExplorer    = $true
@@ -2051,22 +2204,20 @@ if (-not $NoRun) {
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
                         -ExplorerPath $FolderPath -TaskId $result.TaskId
-                    # Confirm to user that the folder was scheduled (A10-ISSUE-07)
+                    # AG6-019: Use Show-InfoDialog (WPF→WinForms→Console fallback) instead of
+                    # direct [System.Windows.MessageBox] to handle non-WPF environments.
                     $folderLeaf   = Split-Path -Leaf $FolderPath
                     $schedDisplay = $triggerTime.ToString("dddd 'at' h:mm tt")
-                    [System.Windows.MessageBox]::Show(
-                        "'$folderLeaf' scheduled for $schedDisplay.",
-                        "Folder Scheduled", "OK", "Information") | Out-Null
+                    Show-InfoDialog -Message "'$folderLeaf' scheduled for $schedDisplay." `
+                        -Title "Folder Scheduled"
                 }
                 elseif ($result.IsDuplicate) {
-                    [System.Windows.MessageBox]::Show(
-                        "'$FolderPath' is already scheduled for tomorrow.",
-                        "Already Scheduled", "OK", "Information") | Out-Null
+                    Show-InfoDialog -Message "'$FolderPath' is already scheduled for tomorrow." `
+                        -Title "Already Scheduled"
                 }
                 else {
-                    [System.Windows.MessageBox]::Show(
-                        "Could not schedule '$FolderPath'.`n`n$($result.Error)",
-                        "Schedule Failed", "OK", "Error") | Out-Null
+                    Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$($result.Error)" `
+                        -Title "Schedule Failed"
                 }
             }
             else {
