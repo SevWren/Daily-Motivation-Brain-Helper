@@ -136,6 +136,7 @@ The codebase contains systematic error handling deficiencies with particular vul
 
 ### BUG AG1-001: Mutex Not Released on Early Return (Line 1680-1681)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1:1679-1681  
 **Category:** Resource Leak / Incomplete Cleanup
 
@@ -555,6 +556,7 @@ return $true
 
 ### BUG AG1-009: New-MotivationTask Doesn't Handle Save-TasksJson Exception Properly (Line 424-433)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1:410-436  
 **Category:** Partial Failure State / Incomplete Rollback
 
@@ -2246,6 +2248,7 @@ finally {
 ### AG3-008: File Lock On popup_config.json During Concurrent Re-Runs
 
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1, Lines 2049-2053, 234, 1920-1928  
 **Root Cause:** In `/setfolder` mode (line 2049), the code calls `Set-PopupConfig` which writes to `$script:PopupCfgPath`. In `/popup` mode (line 1924), it reads from the same file and attempts to write. If two processes run simultaneously (e.g., Task Scheduler calls `/popup` while user clicks context menu to `/setfolder`), they contend for the same file.
 
@@ -2295,6 +2298,7 @@ finally {
 ### AG3-009: tasks.json Partial Write On Crash Leaves Corrupt State
 
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1, Lines 284-293, 411-425  
 **Root Cause:** In `Save-TasksJson` (line 284), if `ConvertTo-Json` succeeds but `Set-Content` is interrupted (e.g., process killed mid-write), the file is left with incomplete JSON. On next run, `Get-TasksJson` fails to parse and returns empty array, losing task data.
 
@@ -2389,6 +2393,7 @@ finally {
 ### AG3-011: Mutex Abandoned If Exception Thrown During Critical Section
 
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1, Lines 1676-1694  
 **Root Cause:** The popup mutex is acquired (line 1678) but if an exception occurs in the critical section (e.g., in XAML loading), control jumps to catch blocks without releasing the mutex. The try-finally at lines 1949-1954 cleans up, but only if ShowDialog() is reached. If an exception occurs before ShowDialog (e.g., line 1728), the cleanup code is never executed.
 
@@ -2610,6 +2615,7 @@ $window.Add_Closed({
 ### AG3-016: Config.json Partial Write On Interrupted Save
 
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** DailyMotivation.ps1, Lines 207-210, 234, 1927  
 **Root Cause:** `Save-Config` and `Set-PopupConfig` use `Set-Content` without atomic write protection. If the process is terminated mid-write, the file is left with truncated JSON, which cannot be parsed on next read.
 
@@ -4460,6 +4466,7 @@ Based on my thorough analysis of the DailyMotivation.ps1 and ContextMenu.Tests.p
 
 #### **BUG AG6-001: Missing Assembly Load Guard Before ShowDialog()**
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Lines:** DailyMotivation.ps1, lines 1177-1203  
 **Code Snippet:**
 ```powershell
@@ -4481,6 +4488,7 @@ if (-not $script:AssembliesLoaded) {
 
 #### **BUG AG6-002: XamlReader.Load() No Error Handling**
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Lines:** DailyMotivation.ps1, lines 1198-1203  
 **Code Snippet:**
 ```powershell
@@ -4507,6 +4515,7 @@ try {
 
 #### **BUG AG6-003: ShowDialog() Not Called on STA Thread**
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Lines:** DailyMotivation.ps1, line 1443  
 **Code Snippet:**
 ```powershell
@@ -4757,6 +4766,7 @@ function Find {
 
 #### **BUG AG6-015: Popup XAML Missing Closing Tag Quotes**
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Lines:** DailyMotivation.ps1, lines 1454-1462 (Popup window declaration)  
 **Code Snippet:**
 ```xaml
@@ -4861,6 +4871,7 @@ try {
 
 #### **BUG AG6-019: MessageBox Called Before Assemblies Initialized**
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Lines:** DailyMotivation.ps1, lines 2057-2059  
 **Code Snippet:**
 ```powershell
@@ -5103,6 +5114,7 @@ Based on my comprehensive analysis of the PowerShell codebase, I've identified 2
 
 ### BUG AG7-001: Config File Not Found → App Crashes Instead of Using Defaults
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 132-196, 198-205  
 
@@ -5151,6 +5163,7 @@ function Get-Config {
 
 ### BUG AG7-002: Config Write Not Atomic (File Partially Written on Crash = Corrupt Config)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 207-209, 234  
 
@@ -5198,6 +5211,7 @@ function Save-Config {
 
 ### BUG AG7-003: Config Schema Version Not Checked (Old Config Format May Break New Code)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 172-178, 198-205  
 
@@ -5397,6 +5411,7 @@ In PowerShell, `[bool]` of any non-empty string is `$true`. So `[bool]"false"` =
 
 ### BUG AG7-006: Config Properties Not Validated on Load (Negative Numbers, Invalid Paths)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 198-205  
 
@@ -5631,6 +5646,7 @@ Errors are silently caught with no information about why parsing failed (disk re
 
 ### BUG AG7-009: Config Keys with Inconsistent Casing (Case-Sensitive Lookups Fail)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 555-556, 1303, 2046, 1716, 1887  
 
@@ -5711,6 +5727,7 @@ The property won't be found and will return `$null`.
 
 ### BUG AG7-010: Config Backup Not Created Before Overwrite
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 207-209, 234  
 
@@ -5907,6 +5924,7 @@ The app has no mechanism to save any modified config when the main window closes
 
 ### BUG AG7-013: Inconsistent Config Paths (After Fallback, Paths Mismatch)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 151-154 vs 165-168  
 
@@ -6045,6 +6063,7 @@ If `$baseDir` is set to `"~"` (tilde), `Join-Path` treats it as a literal string
 
 ### BUG AG7-015: Get-PopupConfig Returns Null on Error, Causing Crash Later
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 212-217, 1706-1720  
 
@@ -6234,6 +6253,7 @@ function Save-TasksJson {
 
 ### BUG AG7-018: Corrupted Config Causes Silent Failure, No User Notification
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 1706-1713  
 
@@ -6402,6 +6422,7 @@ No architectural documentation or enforcement of the relationship between Task S
 
 ### BUG AG7-021: Fallback Directory Not Persisted (App Moves Config on Restart)
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 161-169  
 
@@ -6705,6 +6726,7 @@ The mock has no `-Verifiable` flag and no corresponding `Assert-MockCalled` chec
 
 ### AG8-002: Assertion Missing Actual State Check - Corrupted JSON Test
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/Tests/Unit/TaskScheduler.Tests.ps1`, lines 193-196  
 **Exact Code Snippet:**
 ```powershell
@@ -6745,6 +6767,7 @@ Empty mock with no behavior specification, no `-Verifiable` flag, no parameter c
 
 ### AG8-004: Get-ScheduledTask Mock Hides Real Collision Detection Bug
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/Tests/Unit/TaskScheduler.Tests.ps1`, lines 42-45  
 **Exact Code Snippet:**
 ```powershell
@@ -6840,6 +6863,7 @@ Test called "integration" only verifies script loads without error. **It does no
 
 ### AG8-008: False Confidence - Should -BeNullOrEmpty Missing Return Value Check
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/Tests/Unit/Config.Tests.ps1`, lines 152-156  
 **Exact Code Snippet:**
 ```powershell
@@ -6932,6 +6956,7 @@ Test only verifies no exception thrown. **It does NOT validate that function rej
 
 ### AG8-012: Error Path Not Tested - Happy Path Only
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/Tests/Unit/TaskScheduler.Tests.ps1`, entire file  
 **Exact Code Snippet:**
 There's no "Context 'When task creation fails'" in the describe block. Only success paths tested.
@@ -7082,6 +7107,7 @@ Wraps in `@()` to ensure array. **Old Pester versions collapse single objects to
 
 ### AG8-019: Unreachable Code Path - Sync-TaskStatuses Never Tested
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File & Line:** `/home/vercel-sandbox/Daily-Motivation-Brain-Helper/DailyMotivation.ps1`, lines 438-514 (function exists but no tests)  
 **Exact Code Snippet:**
 The entire `Sync-TaskStatuses` function is production code but **has zero corresponding tests**.
@@ -10042,6 +10068,7 @@ $bodyText.Text  = $config.body
 
 ### AG12-006: NO FALLBACK WHEN WPF ASSEMBLIES FAIL TO LOAD
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **Files:** DailyMotivation.ps1  
 **Line:** 55-68, 2022-2025  
 
@@ -13857,6 +13884,7 @@ try {
 ### AG17-011: Context Menu "Exit" Item Missing
 
 **Severity:** CRITICAL  
+> **STATUS: RESOLVED** — Fixed 2026-06-27. Critical bug resolved in DailyMotivation.ps1 and/or test files.
 **File:** DailyMotivation.ps1  
 **Lines:** 799-827 (Register-ContextMenu function)  
 **Exact Code Snippet:**
