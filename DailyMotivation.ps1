@@ -423,13 +423,28 @@ function Show-InfoDialog {
 # ============================================================
 
 function Get-TasksJson {
+    # AG5-022: Valid task status values
+    $script:ValidTaskStatuses = @('PENDING', 'DELETED', 'COMPLETED', 'FAILED')
+
     $path = $script:TasksPath
     if (-not (Test-Path $path)) { return @() }
     try {
         $result = Get-Content -Path "$path" -Raw -Encoding UTF8 | ConvertFrom-Json
         # FIX-003: Ensure consistent array handling for empty JSON arrays
         if ($null -eq $result) { return @() }
-        return @($result)
+
+        # AG5-022: Validate and normalize task status values
+        $tasks = @($result)
+        foreach ($task in $tasks) {
+            if ($null -ne $task -and $task.PSObject.Properties['status']) {
+                if ($task.status -notin $script:ValidTaskStatuses) {
+                    Write-DLog "Invalid task status '$($task.status)' for task $($task.task_id) - setting to UNKNOWN" "WARN"
+                    $task.status = 'UNKNOWN'
+                }
+            }
+        }
+
+        return $tasks
     }
     catch { return @() }
 }
