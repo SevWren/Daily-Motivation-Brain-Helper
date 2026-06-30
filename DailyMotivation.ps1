@@ -2353,6 +2353,15 @@ function Show-PopupWindow {
     }
     catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
     finally {
+        # AG6-004: Dispose WPF window to prevent memory leaks
+        if ($window) {
+            try {
+                $window.Dispose()
+                Write-DLog "PopupWindow disposed"
+            }
+            catch { Write-DLog "Window disposal error: $_" "WARN" }
+        }
+
         # AG3-005, AG3-006, AG3-007, AG3-018, AG3-019: Reset state variables
         # to prevent leakage between popup instances
         $script:pathMissing = $false
@@ -2362,7 +2371,7 @@ function Show-PopupWindow {
         $script:snoozeCount = 0
         $script:firstTick = $true
         $script:windowClosed = $false
-        
+
         if ($mutexOwned -and $mutex) {
             try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
             catch { Write-DLog "Mutex release error: $_" "WARN" }
