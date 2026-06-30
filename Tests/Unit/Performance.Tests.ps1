@@ -47,6 +47,42 @@ Describe 'AG14-001: FolderBrowserDialog Not Disposed' {
     }
 }
 
+Describe 'AG14-007: DriveInfo Not Disposed' {
+    It 'Should dispose DriveInfo in Invoke-FolderScheduling function' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+
+        $functionStart = $content.IndexOf('function Invoke-FolderScheduling')
+        $functionEnd = $content.IndexOf('function ', $functionStart + 100)
+        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
+
+        # Check for DriveInfo usage and disposal
+        $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
+        $hasDisposal = $functionBody -match 'driveInfo.*Dispose'
+
+        if ($hasDriveInfo) {
+            $hasDisposal | Should -Be $true -Because "DriveInfo must be disposed to prevent file system handle leak (AG14-007)"
+        }
+    }
+
+    It 'Should dispose DriveInfo in New-MotivationTask function' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+
+        $functionStart = $content.IndexOf('function New-MotivationTask')
+        $functionEnd = $content.IndexOf('function ', $functionStart + 100)
+        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
+
+        # Check for DriveInfo usage and disposal
+        $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
+        $hasDisposal = $functionBody -match 'driveInfo.*Dispose'
+
+        if ($hasDriveInfo) {
+            $hasDisposal | Should -Be $true -Because "DriveInfo must be disposed to prevent file system handle leak (AG14-007)"
+        }
+    }
+}
+
 Describe 'AG14-002: XmlNodeReader Not Disposed' {
     It 'Should dispose XmlNodeReader after loading XAML in Show-MainWindow' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'

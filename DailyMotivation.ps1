@@ -619,11 +619,15 @@ function New-MotivationTask {
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
         $isMappedDrive = $false
         if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+            $driveInfo = $null
             try {
                 $driveInfo     = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
             }
             catch { $isMappedDrive = $false }
+            finally {
+                if ($driveInfo) { $driveInfo.Dispose() }  # AG14-007: Dispose DriveInfo
+            }
         }
         $isNetworkPath = $isUncPath -or $isMappedDrive
 
@@ -999,11 +1003,15 @@ function Invoke-FolderScheduling {
     $isUncPath = $FolderPath -match '^\\\\[^\\]'
     $isMappedDrive = $false
     if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        $driveInfo = $null
         try {
             $driveInfo = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
             $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
         }
         catch { $isMappedDrive = $false }
+        finally {
+            if ($driveInfo) { $driveInfo.Dispose() }  # AG14-007: Dispose DriveInfo
+        }
     }
     $isNetworkPath = $isUncPath -or $isMappedDrive
 
