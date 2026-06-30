@@ -1920,7 +1920,7 @@ function Show-PopupWindow {
             $config = $loaded
             Write-DLog "Popup config loaded. title='$($config.title)' folder='$($config.folder_name)'"
         }
-        catch { Write-DLog "Config parse failed: $($_.Exception.Message)" "WARN" }
+        catch { Write-DLog "Config parse failed: $($_.Exception.Message)" "ERROR" }
     }
 
     # Exit silently if no folder has been configured (GAP-003b)
@@ -2051,7 +2051,6 @@ function Show-PopupWindow {
                     $script:remaining--
                     $countdownText.Text = $script:remaining
                     if ($script:remaining -le 0 -and -not $script:windowClosed) {
-                        $timer.Stop()
                         $script:windowClosed = $true
                         $script:openExplorer = $true
                         $window.Close()
@@ -2059,9 +2058,12 @@ function Show-PopupWindow {
                 }
                 catch {
                     Write-DLog "Timer error: $_" "ERROR"
-                    $timer.Stop()
-                    if (-not $script:windowClosed -and $window.IsLoaded) {
-                        $script:windowClosed = $true; $window.Close()
+                    $script:windowClosed = $true
+                }
+                finally {
+                    # AG1-011: Always stop timer when countdown completes or window closes
+                    if ($script:remaining -le 0 -or $script:windowClosed) {
+                        $timer.Stop()
                     }
                 }
             })
@@ -2120,7 +2122,12 @@ function Show-PopupWindow {
                     $pending = Get-MotivationTasks | Where-Object {
                         $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
                     }
-                    foreach ($t in $pending) { Remove-MotivationTask -TaskId $t.task_id }
+                    foreach ($t in $pending) {
+                        $removed = Remove-MotivationTask -TaskId $t.task_id
+                        if (-not $removed) {
+                            Write-DLog "Failed to remove task $($t.task_id) during dismiss" "WARN"
+                        }
+                    }
                 }
                 $window.Close()
             }
