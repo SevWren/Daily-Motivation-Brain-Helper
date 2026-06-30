@@ -18,13 +18,27 @@ BeforeAll {
 }
 
 AfterAll {
-    # Clean up any leftover registry key from tests
-    Remove-Item $script:VerbKey -Recurse -Force -ErrorAction SilentlyContinue
+    # AG8-021: Add cleanup verification to prevent state leakage
+    try {
+        # Clean up any leftover registry key from tests
+        if (Test-Path $script:VerbKey) {
+            Remove-Item $script:VerbKey -Recurse -Force -ErrorAction Stop
+        }
 
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction Stop
+        }
     }
-    $env:APPDATA = $script:OriginalAppData
+    catch {
+        Write-Warning "Cleanup failed: $_"
+    }
+    finally {
+        $env:APPDATA = $script:OriginalAppData
+        # AG8-021: Verify cleanup succeeded
+        if ($IsWindows) {
+            Test-Path $script:VerbKey | Should -Be $false -Because "Registry key should be deleted"
+        }
+    }
 }
 
 Describe 'Register-ContextMenu' {
@@ -52,9 +66,25 @@ Describe 'Register-ContextMenu' {
         $cmd | Should -Match '"%1"'
     }
 
-    It 'Should not throw when called multiple times (idempotent)' {
-        { Register-ContextMenu -ExePath $script:TestExe } | Should -Not -Throw
-        { Register-ContextMenu -ExePath $script:TestExe } | Should -Not -Throw
+    It 'Should not throw when called multiple times (idempotent)' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+        # AG8-022: Verify true idempotency - state unchanged after second call
+        # Verify initial state
+        Test-Path $script:VerbKey | Should -Be $false
+
+        # First call
+        Register-ContextMenu -ExePath $script:TestExe
+        $cmdKey = "$($script:VerbKey)\command"
+        $val1 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+
+        # Second call
+        Register-ContextMenu -ExePath $script:TestExe
+        $val2 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+
+        # AG8-022: Verify values are identical (no duplication, no cruft)
+        $val2 | Should -BeExactly $val1
+        # Verify no leftover subkeys
+        $subkeys = Get-ChildItem -Path $script:VerbKey -ErrorAction SilentlyContinue
+        $subkeys.Count | Should -Be 1  # Only 'command' subkey
     }
 
     It 'Should skip registration and not write to registry when ExePath is a .ps1 file' {
