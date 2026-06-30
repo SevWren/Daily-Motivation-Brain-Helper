@@ -38,6 +38,7 @@ $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDI
 $script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug.log"
 
 function Write-DLog {
+    [CmdletBinding()]
     param([string]$Msg, [string]$Level = "INFO")
     $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Msg"
     Add-Content -Path $script:DebugLog -Value $line -ErrorAction SilentlyContinue
@@ -54,6 +55,10 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
 
 # Platform adapter (null by default, tests can inject HeadlessPlatform)
 $script:Platform = $null
+
+# AG7-004: Config caching variables (improves performance, prevents inconsistency)
+$script:ConfigCache = $null
+$script:ConfigCacheMTime = $null
 
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
@@ -225,8 +230,21 @@ function Initialize-AppData {
 }
 
 function Get-Config {
+    # AG7-004: Check cache first, reload only if file has changed
     try {
+        $mtime = $null
+        if (Test-Path $script:ConfigPath) {
+            $mtime = (Get-Item $script:ConfigPath -ErrorAction SilentlyContinue).LastWriteTime
+        }
+
+        # Return cached config if valid and file hasn't changed
+        if ($null -ne $script:ConfigCache -and $null -ne $mtime -and $mtime -eq $script:ConfigCacheMTime) {
+            return $script:ConfigCache
+        }
+
+        # Load from disk
         $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+
         # AG7-006: Validate config properties — reject out-of-range values to prevent downstream errors
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
@@ -240,9 +258,17 @@ function Get-Config {
             Write-DLog "Get-Config: invalid task_warning_threshold '$($cfg.task_warning_threshold)' — resetting to 5" "WARN"
             $cfg.task_warning_threshold = 5
         }
+
+        # Cache the loaded config
+        $script:ConfigCache = $cfg
+        $script:ConfigCacheMTime = $mtime
+
         return $cfg
     }
     catch {
+        # Clear cache on error
+        $script:ConfigCache = $null
+        $script:ConfigCacheMTime = $null
         return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
     }
 }
@@ -468,6 +494,8 @@ function New-MotivationTask {
         $taskName = "DailyMotivation_$taskId"
         $attempts = 0
         while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
+            # AG5-025: Add sleep between retry attempts to avoid CPU spinning
+            Start-Sleep -Milliseconds (100 * ($attempts + 1))
             $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
             $attempts++
