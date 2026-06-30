@@ -349,6 +349,7 @@ function Set-PopupConfig {
 }
 
 function Write-OutcomeLog {
+    [CmdletBinding()]
     param(
         [string]$TaskId,
         [string]$FolderName,
