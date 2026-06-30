@@ -122,4 +122,41 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
             $result.IsNetworkPath | Should -Be $true
         }
     }
+
+    Context "Windows path handling (AG8-024)" {
+        # AG8-024: Add cross-platform path tests for Windows-specific scenarios
+
+        It "Should detect Windows UNC paths correctly" {
+            $result = Invoke-FolderScheduling -FolderPath "\\server\share\folder" -TriggerTime (Get-Date).AddHours(1)
+            $result.IsNetworkPath | Should -Be $true
+        }
+
+        It "Should handle Windows drive letters as local paths" -Skip:(-not $IsWindows) {
+            # This test only makes sense on Windows
+            $result = Invoke-FolderScheduling -FolderPath "C:\Projects\MyFolder" -TriggerTime (Get-Date).AddHours(1)
+            $result.Success | Should -Be $true
+            $result.IsNetworkPath | Should -Be $false
+        }
+
+        It "Should detect mapped network drives on Windows" -Skip:(-not $IsWindows) {
+            # AG8-024: Test mapped drive detection (Z:\ etc)
+            # Note: This test assumes Z: is a mapped drive
+            # In real Windows environment, this would need actual mapped drive
+            $result = Invoke-FolderScheduling -FolderPath "Z:\SharedFolder" -TriggerTime (Get-Date).AddHours(1)
+            # Depending on implementation, might be detected as network path
+            $result.Success | Should -Be $true
+        }
+
+        It "Should handle Windows paths with spaces" {
+            $result = Invoke-FolderScheduling -FolderPath "C:\Program Files\My App" -TriggerTime (Get-Date).AddHours(1)
+            $result.Success | Should -Be $true
+        }
+
+        It "Should handle Unix paths on Linux" -Skip:($IsWindows) {
+            # This test only makes sense on Linux/Unix
+            $result = Invoke-FolderScheduling -FolderPath "/home/user/documents" -TriggerTime (Get-Date).AddHours(1)
+            $result.Success | Should -Be $true
+            $result.IsNetworkPath | Should -Be $false
+        }
+    }
 }

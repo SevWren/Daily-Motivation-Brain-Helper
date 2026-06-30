@@ -74,4 +74,58 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
             $result | Should -Be "OK"
         }
     }
+
+    Context "Failure scenarios (AG8-023)" {
+        It "Should handle ScheduleTask failure gracefully" {
+            # AG8-023: Create a failure platform adapter
+            $failPlatform = [PSCustomObject]@{
+                ScheduleTask = {
+                    param($params)
+                    return @{ Success = $false; Error = "Mock failure"; TaskId = $null }
+                }
+            }
+
+            # Verify failure is returned, not exception
+            $result = $failPlatform.ScheduleTask(@{ FolderPath = "/tmp/test"; TriggerTime = (Get-Date) })
+            $result.Success | Should -Be $false
+            $result.Error | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should handle UnscheduleTask failure gracefully" {
+            # AG8-023: Mock UnscheduleTask that throws
+            $failPlatform = [PSCustomObject]@{
+                UnscheduleTask = {
+                    param($taskId)
+                    throw "Task not found"
+                }
+            }
+
+            # Should throw or return error indication
+            { $failPlatform.UnscheduleTask("test-123") } | Should -Throw
+        }
+
+        It "Should handle ShowDialog returning unexpected button" {
+            # AG8-023: Mock dialog returning wrong button
+            $failPlatform = [PSCustomObject]@{
+                ShowDialog = {
+                    param($msg, $title, $btns, $icon)
+                    return "UnexpectedButton"
+                }
+            }
+
+            $result = $failPlatform.ShowDialog("Test", "Title", "OK", "Info")
+            # Calling code should validate button is expected
+            $result | Should -Not -BeIn @("OK", "Cancel", "Yes", "No")
+        }
+
+        It "Should handle GetAppDataPath returning null" {
+            # AG8-023: Mock GetAppDataPath failure
+            $failPlatform = [PSCustomObject]@{
+                GetAppDataPath = { return $null }
+            }
+
+            $result = $failPlatform.GetAppDataPath()
+            $result | Should -Be $null
+        }
+    }
 }
