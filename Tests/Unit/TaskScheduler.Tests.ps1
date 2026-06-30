@@ -344,6 +344,37 @@ Describe 'New-MotivationTask' {
             }
         }
     }
+
+    Context 'Task action path validation (AG5-005, AG5-023)' {
+        BeforeEach {
+            $script:OriginalExePath = $script:ExePath
+        }
+
+        It 'Should reject empty executable path (AG5-005)' {
+            $script:ExePath = ""
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "executable path"
+        }
+
+        It 'Should reject non-.exe file path (AG5-005)' {
+            $script:ExePath = "C:\Test\DailyMotivation.ps1"
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "\.exe"
+        }
+
+        It 'Should reject relative path (AG5-023)' {
+            $script:ExePath = "DailyMotivation.exe"
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "absolute"
+        }
+
+        AfterEach {
+            $script:ExePath = $script:OriginalExePath
+        }
+    }
 }
 
 Describe 'Get-MotivationTasks' {

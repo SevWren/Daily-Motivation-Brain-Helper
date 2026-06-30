@@ -523,6 +523,22 @@ function New-MotivationTask {
         # $script:ExePath is set at entry point to $MyInvocation.MyCommand.Path
         # Tests override $script:ExePath before calling this function
         $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
+
+        # AG5-005: Validate executable path before creating task action
+        if ([string]::IsNullOrWhiteSpace($exeForTask)) {
+            Write-DLog "Task action executable path is empty or null" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: path cannot be empty" }
+        }
+        if ($exeForTask -notmatch '\.exe$') {
+            Write-DLog "Task action path must be an .exe file: $exeForTask" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be a .exe file, got: $exeForTask" }
+        }
+        # AG5-023: Verify path is absolute (not relative)
+        if (-not [System.IO.Path]::IsPathRooted($exeForTask)) {
+            Write-DLog "Task action path must be absolute: $exeForTask" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be absolute path, got: $exeForTask" }
+        }
+
         try {
             $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
             if ($null -eq $action) {
