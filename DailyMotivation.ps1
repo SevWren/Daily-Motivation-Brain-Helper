@@ -856,6 +856,8 @@ function Update-TaskListUI {
             status       = $t.status
         }
     })
+    # AG6-007: Ensure ItemsSource is always an array (even if empty) to prevent WPF property iteration
+    if (-not $displayTasks) { $displayTasks = @() }
     $TaskListControl.ItemsSource          = $displayTasks
     $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
 }
