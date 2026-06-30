@@ -924,7 +924,8 @@ function Register-ContextMenu {
         New-Item -Path $verbKey -Force | Out-Null
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
         New-Item -Path $cmdKey -Force | Out-Null
-        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$ExePath`" /setfolder `"%1`""
+        $escapedPath = $ExePath -replace '([\\"`])', '`$1'
+        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
         Write-DLog "Context menu registered for: $ExePath"
     }
     catch {
@@ -1328,6 +1329,9 @@ function Show-MainWindow {
         Show-ErrorDialog "UI failed to load: $($_.Exception.Message)`n`nPlease reinstall the application."
         return
     }
+    finally {
+        if ($reader) { $reader.Dispose() }
+    }
     if ($null -eq $window -or $window -isnot [System.Windows.Window]) {
         Show-ErrorDialog "UI failed to load. Please reinstall the application."
         return
@@ -1626,10 +1630,33 @@ function Show-MainWindow {
         catch { Write-DLog "Window cleanup error: $_" "WARN" }
     })
 
+    # AG6-010: Stop timers when window closes to prevent memory leaks
+    # AG6-011: Cleanup event handlers (best effort - WPF handles most automatically)
+    $window.Add_Closing({
+        if ($script:undoTimer) {
+            $script:undoTimer.Stop()
+            $script:undoTimer = $null
+        }
+        if ($script:undoFeedbackTimer) {
+            $script:undoFeedbackTimer.Stop()
+            $script:undoFeedbackTimer = $null
+        }
+        Write-DLog "MainWindow closing - timers stopped"
+    })
+
     # Reconcile task statuses with Windows Task Scheduler before displaying
     Sync-TaskStatuses
     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
-    $window.ShowDialog() | Out-Null
+    # AG6-004: Wrap ShowDialog in try-finally to ensure window disposal
+    try {
+        $window.ShowDialog() | Out-Null
+    }
+    finally {
+        if ($window) {
+            $window.Dispose()
+            Write-DLog "MainWindow disposed"
+        }
+    }
 }
 
 # ============================================================
@@ -2208,10 +2235,10 @@ function Show-PopupWindow {
         if ($mutexOwned -and $mutex) {
             try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
             catch { Write-DLog "Mutex release error: $_" "WARN" }
+        }
         if ($null -ne $mutex) {
             try { $mutex.Dispose() }  # AG1-010: Dispose mutex handle
             catch { Write-DLog "Mutex dispose error: $_" "WARN" }
-        }
         }
     }
 
@@ -2315,7 +2342,7 @@ if (-not $NoRun) {
                         -ExplorerPath $FolderPath -TaskId $result.TaskId
                     # AG6-019: Use Show-InfoDialog (WPF→WinForms→Console fallback) instead of
                     # direct [System.Windows.MessageBox] to handle non-WPF environments.
-                    $folderLeaf   = Split-Path -Leaf $FolderPath
+                    $folderLeaf = Split-Path -Leaf $FolderPath; if (-not $folderLeaf -or $folderLeaf.Length -eq 0) { $folderLeaf = "Unknown Folder" }
                     $schedDisplay = $triggerTime.ToString("dddd 'at' h:mm tt")
                     Show-InfoDialog -Message "'$folderLeaf' scheduled for $schedDisplay." `
                         -Title "Folder Scheduled"
