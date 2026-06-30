@@ -311,13 +311,27 @@ function Save-Config {
 function Get-PopupConfig {
     [CmdletBinding()]
     param()
+    # AG4-010: Check if file exists before attempting to read
+    # This distinguishes between "file not found" (expected) vs "file corrupted" (error)
+    if (-not (Test-Path -Path "$script:PopupCfgPath" -PathType Leaf)) {
+        Write-DLog "Get-PopupConfig: file does not exist — returning defaults" "INFO"
+        return [PSCustomObject]@{
+            glyph         = "[+]"
+            title         = ""
+            body          = ""
+            explorer_path = ""
+            folder_name   = ""
+            task_id       = ""
+        }
+    }
+
     # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
     # null-reference crashes in callers that access properties without null checks.
     try {
         return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     catch {
-        Write-DLog "Get-PopupConfig: failed to read/parse config — returning defaults: $_" "WARN"
+        Write-DLog "Get-PopupConfig: failed to parse config (file exists but corrupted) — returning defaults: $_" "ERROR"
         return [PSCustomObject]@{
             glyph         = "[+]"
             title         = ""
