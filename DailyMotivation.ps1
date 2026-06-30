@@ -2272,7 +2272,12 @@ function Show-PopupWindow {
     }
 
     # Snooze duration helpers
-    $snoozeDropBtn.Add_Click({ $snoozeDropBtn.ContextMenu.IsOpen = $true })
+    # AG6-022: Set proper ContextMenu placement to avoid off-screen positioning
+    $snoozeDropBtn.Add_Click({
+        $snoozeDropBtn.ContextMenu.PlacementTarget = $snoozeDropBtn
+        $snoozeDropBtn.ContextMenu.Placement = 'Bottom'
+        $snoozeDropBtn.ContextMenu.IsOpen = $true
+    })
 
     $snooze5.Add_Click({  Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn  })
     $snooze15.Add_Click({ Set-SnoozeDuration -Minutes 15 -SnoozeBtnControl $snoozeBtn })
