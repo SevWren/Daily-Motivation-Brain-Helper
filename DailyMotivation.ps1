@@ -1980,7 +1980,9 @@ function Show-PopupWindow {
     if ($script:pathMissing) {
         $normalPanel.Visibility      = "Collapsed"
         $pathMissingPanel.Visibility = "Visible"
-         = if (.explorer_path) { Split-Path -Leaf .explorer_path } else { "Unknown" }; if (-not  -or .Length -eq 0) {  = "Unknown" }; .Text = "This folder can't be found: "
+        $folderName = if ($config.explorer_path) { Split-Path -Leaf $config.explorer_path } else { "Unknown" }
+        if (-not $folderName -or $folderName.Length -eq 0) { $folderName = "Unknown" }
+        $missingPathLabel.Text = "This folder can't be found: $folderName"
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {

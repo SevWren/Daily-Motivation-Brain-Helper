@@ -224,3 +224,75 @@ Describe 'UTF-8 Encoding' {
         (Get-PopupConfig).explorer_path | Should -Be 'C:\Projets\Montreal\Dossier'
     }
 }
+
+Describe 'AG7-004: Config Caching' {
+    BeforeEach {
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Cache_Test_$(New-Guid)"
+        Initialize-AppData
+        # Clear any existing cache
+        if ($null -ne $script:ConfigCache) {
+            $script:ConfigCache = $null
+            $script:ConfigCacheMTime = $null
+        }
+    }
+
+    AfterEach {
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        # Clean up cache after each test
+        $script:ConfigCache = $null
+        $script:ConfigCacheMTime = $null
+    }
+
+    It 'Should cache config on first load and reuse on subsequent calls' {
+        # First call - loads from disk
+        $cfg1 = Get-Config
+        $cfg1.default_trigger_hour | Should -Be 14
+
+        # Verify cache is populated
+        $script:ConfigCache | Should -Not -Be $null
+        $script:ConfigCacheMTime | Should -Not -Be $null
+
+        # Second call - should reuse cache (not reload from disk)
+        $cfg2 = Get-Config
+        $cfg2.default_trigger_hour | Should -Be 14
+
+        # Both should be the same cached object
+        [Object]::ReferenceEquals($cfg1, $cfg2) | Should -Be $true
+    }
+
+    It 'Should invalidate cache when config file is modified' {
+        # First load
+        $cfg1 = Get-Config
+        $cfg1.default_trigger_hour | Should -Be 14
+
+        # Modify config file
+        Start-Sleep -Milliseconds 100  # Ensure mtime changes
+        $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
+        @{ default_trigger_hour = 15; task_warning_threshold = 5 } |
+            ConvertTo-Json | Set-Content $configPath -Encoding UTF8
+
+        # Second load should detect file change and reload
+        $cfg2 = Get-Config
+        $cfg2.default_trigger_hour | Should -Be 15
+    }
+
+    It 'Should invalidate cache after Save-Config' {
+        $cfg = Get-Config
+        $cfg.default_trigger_hour = 16
+
+        # Cache should exist before save
+        $script:ConfigCache | Should -Not -Be $null
+
+        Save-Config -Config $cfg
+
+        # Cache should be invalidated after save
+        $script:ConfigCache | Should -Be $null
+        $script:ConfigCacheMTime | Should -Be $null
+
+        # Next load should read fresh from disk
+        $cfg2 = Get-Config
+        $cfg2.default_trigger_hour | Should -Be 16
+    }
+}

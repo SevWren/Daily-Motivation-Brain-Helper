@@ -25,7 +25,8 @@ BeforeAll {
     # Real Task Scheduler cmdlets return CimInstance objects, which cannot be easily mocked.
     # By mocking Register-ScheduledTask directly, we bypass parameter type validation and
     # focus on testing the business logic (JSON persistence, duplicate detection, etc.)
-    Mock Register-ScheduledTask {
+    # AG8-001: Add -Verifiable to enable mock call verification
+    Mock Register-ScheduledTask -Verifiable {
         param(
             $TaskName,
             $Action,
@@ -38,7 +39,8 @@ BeforeAll {
         # Just succeed - we're testing business logic, not Windows API
         return $null
     }
-    Mock Unregister-ScheduledTask { }
+    # AG8-003: Add -Verifiable to Unregister mock for validation
+    Mock Unregister-ScheduledTask -Verifiable { }
     # Mock Get-ScheduledTask - return $null to simulate task not existing
     # This allows the collision-detection retry loop in New-MotivationTask to work correctly
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
@@ -174,6 +176,25 @@ Describe 'New-MotivationTask' {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
             $result.Success | Should -Be $true
             $script:callCount | Should -BeGreaterOrEqual 2  # retry loop executed
+        }
+
+        # AG5-025: Collision retry loop should sleep between attempts to avoid CPU spinning
+        It 'Should sleep between collision retry attempts (AG5-025)' {
+            $startTime = Get-Date
+            $callCount = 0
+            Mock Get-ScheduledTask {
+                $script:callCount++
+                # Simulate 3 collisions before success
+                if ($script:callCount -le 3) {
+                    return [PSCustomObject]@{ TaskName = 'DailyMotivation_collision' }
+                }
+                return $null
+            }
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $duration = ((Get-Date) - $startTime).TotalMilliseconds
+            # Should have slept at least 100ms per retry (3 retries = 300ms minimum)
+            $duration | Should -BeGreaterThan 200
+            $result.Success | Should -Be $true
         }
 
         AfterEach {
