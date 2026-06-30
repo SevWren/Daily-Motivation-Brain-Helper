@@ -299,7 +299,7 @@ function Set-PopupConfig {
             title         = $Title
             body          = $Body
             explorer_path = $ExplorerPath
-            folder_name   = (Split-Path -Leaf $ExplorerPath)
+            folder_name   = if ($ExplorerPath) { $leaf = Split-Path -Leaf $ExplorerPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
             task_id       = $TaskId
         } | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:PopupCfgPath -Force -ErrorAction Stop
@@ -430,7 +430,7 @@ function New-MotivationTask {
             ($null -ne $_ -and $_.PSObject.Properties['folder_path']) -and
             $_.folder_path -and $_.folder_path.Length -gt 0 -and
             [System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -eq $normalizedInput -and
-            ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date -and
+            (try { ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date } catch { $false }) -and
             $_.status -eq "PENDING"
         }
         if ($existing) {
@@ -526,7 +526,7 @@ function New-MotivationTask {
         task_id        = $taskId
         task_name      = $taskName
         folder_path    = $FolderPath
-        folder_name    = (Split-Path -Leaf $FolderPath)
+        folder_name    = if ($FolderPath) { $leaf = Split-Path -Leaf $FolderPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
         scheduled_time = $TriggerTime.ToString("yyyy-MM-ddTHH:mm:ss")
         created_at     = (Get-Date -Format "o")
         status         = "PENDING"
@@ -1602,6 +1602,30 @@ function Show-MainWindow {
         catch { Write-DLog "Window cleanup error: $_" "WARN" }
     })
 
+    # AG3-001, AG3-015, AG3-017: Add window cleanup handler
+    $window.Add_Closed({
+        try {
+            # Stop and dispose undo timer if still running
+            if ($script:undoTimer) {
+                $script:undoTimer.Stop()
+                try { $script:undoTimer.Dispose() } catch {}
+                $script:undoTimer = $null
+            }
+            # AG3-015: Dispose brush objects to prevent memory leak
+            foreach ($brush in @($script:dropZoneBrushNormal, $script:dropZoneBrushHover, 
+                                 $script:dropZoneBgNormal, $script:dropZoneBgHover)) {
+                if ($brush -is [System.IDisposable]) {
+                    try { $brush.Dispose() } catch {}
+                }
+            }
+            # Reset state variables to prevent leakage across window instances
+            $script:lastTaskId = $null
+            $script:undoScheduledFor = $null
+            $script:selectedPath = ""
+        }
+        catch { Write-DLog "Window cleanup error: $_" "WARN" }
+    })
+
     # Reconcile task statuses with Windows Task Scheduler before displaying
     Sync-TaskStatuses
     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
@@ -1948,7 +1972,7 @@ function Show-PopupWindow {
     if ($script:pathMissing) {
         $normalPanel.Visibility      = "Collapsed"
         $pathMissingPanel.Visibility = "Visible"
-        $missingPathLabel.Text       = "This folder can't be found: $(Split-Path -Leaf $config.explorer_path)"
+         = if (.explorer_path) { Split-Path -Leaf .explorer_path } else { "Unknown" }; if (-not  -or .Length -eq 0) {  = "Unknown" }; .Text = "This folder can't be found: "
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
@@ -2142,6 +2166,27 @@ function Show-PopupWindow {
             }
         })
 
+    # AG3-013, AG3-014: Add window cleanup handler for timers
+    $window.Add_Closed({
+        try {
+            # Stop and dispose fallback timer if it exists
+            if ($null -ne $fallbackTimer) {
+                try {
+                    $fallbackTimer.Stop()
+                    $fallbackTimer.Dispose()
+                } catch {}
+            }
+            # Stop and dispose countdown timer if it exists
+            if ($null -ne $timer) {
+                try {
+                    $timer.Stop()
+                    $timer.Dispose()
+                } catch {}
+            }
+        }
+        catch { Write-DLog "Popup timer cleanup error: $_" "WARN" }
+    })
+
     # Show popup
     Write-DLog "Calling ShowDialog()"
     try {
@@ -2163,6 +2208,10 @@ function Show-PopupWindow {
         if ($mutexOwned -and $mutex) {
             try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
             catch { Write-DLog "Mutex release error: $_" "WARN" }
+        if ($null -ne $mutex) {
+            try { $mutex.Dispose() }  # AG1-010: Dispose mutex handle
+            catch { Write-DLog "Mutex dispose error: $_" "WARN" }
+        }
         }
     }
 
