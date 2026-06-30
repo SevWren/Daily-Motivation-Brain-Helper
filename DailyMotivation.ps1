@@ -2262,7 +2262,19 @@ function Show-PopupWindow {
                 if (-not $script:pathMissing) { $timer.Stop() }
                 $script:snoozeCount++
                 $script:openExplorer = $false
-                $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes)
+                # AG11-003: Validate snoozeMinutes is within valid range (1-1440 minutes = 24 hours)
+                if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
+                    Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
+                    [System.Windows.MessageBox]::Show(
+                        "Snooze duration must be between 1 minute and 24 hours.",
+                        "Invalid Snooze", "OK", "Error") | Out-Null
+                    return
+                }
+                # AG11-003: Add 1-minute buffer to snooze time to prevent scheduling in past
+                # If system processing takes time, this ensures TriggerTime validation won't fail
+                $bufferMinutes = 1
+                $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
+                Write-DLog "Snooze time calculated: $snoozeTime (requested: $($script:snoozeMinutes)m + buffer: ${bufferMinutes}m)"
                 $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
                 if (-not $snoozeResult.Success) {
                     Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
