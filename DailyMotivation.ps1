@@ -19,6 +19,11 @@
 # ============================================================
 param(
     [string]$Mode       = "main",
+    [ValidateScript({
+        if ($_ -eq "") { $true }
+        elseif ($_ -match '^[*?<>|]') { throw "Path contains invalid characters" }
+        else { $true }
+    })]
     [string]$FolderPath = "",
     [switch]$NoRun      # When set, defines all functions but skips the entry point.
                         # Use when dot-sourcing in Pester tests: . .\DailyMotivation.ps1 -NoRun
@@ -220,7 +225,7 @@ function Initialize-AppData {
 
 function Get-Config {
     try {
-        $cfg = Get-Content $script:ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
         # AG7-006: Validate config properties — reject out-of-range values to prevent downstream errors
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
@@ -260,7 +265,7 @@ function Get-PopupConfig {
     # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
     # null-reference crashes in callers that access properties without null checks.
     try {
-        return Get-Content $script:PopupCfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     catch {
         Write-DLog "Get-PopupConfig: failed to read/parse config — returning defaults: $_" "WARN"
@@ -326,7 +331,7 @@ function Write-OutcomeLog {
     )
     $ts    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $entry = "[$ts] | $TaskId | $FolderName | $FolderPath | $Outcome | $SnoozeCount"
-    Add-Content -Path $script:LogPath -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+    Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 
 function Show-ErrorDialog {
@@ -376,7 +381,7 @@ function Get-TasksJson {
     $path = $script:TasksPath
     if (-not (Test-Path $path)) { return @() }
     try {
-        $result = Get-Content $path -Raw -Encoding UTF8 | ConvertFrom-Json
+        $result = Get-Content -Path "$path" -Raw -Encoding UTF8 | ConvertFrom-Json
         # FIX-003: Ensure consistent array handling for empty JSON arrays
         if ($null -eq $result) { return @() }
         return @($result)
@@ -705,8 +710,8 @@ function Update-TaskListUI {
 }
 
 function Get-HistoryData {
-    if (-not (Test-Path $script:LogPath)) { return @() }
-    $lines = @(Get-Content $script:LogPath -Encoding UTF8 |
+    if (-not (Test-Path -Path "$script:LogPath" -PathType Leaf)) { return @() }
+    $lines = @(Get-Content -Path "$script:LogPath" -Encoding UTF8 |
         Where-Object { $_ -match '^\[' } |
         Select-Object -Last 30)
     if (-not $lines -or $lines.Count -eq 0) { return @() }
@@ -1567,27 +1572,10 @@ function Show-MainWindow {
                 "Clear all history entries? This cannot be undone.",
                 "Clear History", "YesNo", "Question")
             if ($confirm -eq "Yes") {
-                if (Test-Path $script:LogPath) { Clear-Content $script:LogPath }
+                if (Test-Path -Path "$script:LogPath" -PathType Leaf) { Clear-Content $script:LogPath }
                 Update-HistoryUI -HistoryListControl $historyList
             }
         })
-
-    # AG3-001, AG3-017: Add window cleanup handler to stop timers and reset state
-    $window.Add_Closed({
-        try {
-            # Stop and dispose undo timer if still running
-            if ($script:undoTimer) {
-                $script:undoTimer.Stop()
-                try { $script:undoTimer.Dispose() } catch {}
-                $script:undoTimer = $null
-            }
-            # Reset state variables to prevent leakage across window instances
-            $script:lastTaskId = $null
-            $script:undoScheduledFor = $null
-            $script:selectedPath = ""
-        }
-        catch { Write-DLog "Window cleanup error: $_" "WARN" }
-    })
 
     # AG3-001, AG3-017: Add window cleanup handler to stop timers and reset state
     $window.Add_Closed({
@@ -1936,7 +1924,7 @@ function Show-PopupWindow {
     }
     if (Test-Path $configPath) {
         try {
-            $loaded = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $loaded = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
             $config = $loaded
             Write-DLog "Popup config loaded. title='$($config.title)' folder='$($config.folder_name)'"
         }
