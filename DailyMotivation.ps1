@@ -2286,7 +2286,14 @@ function Show-PopupWindow {
                 Write-DLog "Snooze task created for $snoozeTime"
                 $window.Close()
             }
-            catch { Write-DLog "Snooze error: $_" "ERROR"; $window.Close() }
+            catch {
+                # AG6-017: Ensure timer stops even in exception paths
+                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                    $timer.Stop()
+                }
+                Write-DLog "Snooze error: $_" "ERROR"
+                $window.Close()
+            }
         })
 
     # Dismiss for Today
@@ -2308,7 +2315,14 @@ function Show-PopupWindow {
                 }
                 $window.Close()
             }
-            catch { Write-DLog "Dismiss error: $_" "ERROR"; $window.Close() }
+            catch {
+                # AG6-017: Ensure timer stops even in exception paths
+                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                    $timer.Stop()
+                }
+                Write-DLog "Dismiss error: $_" "ERROR"
+                $window.Close()
+            }
         })
 
     # Open Folder button
@@ -2319,7 +2333,13 @@ function Show-PopupWindow {
                 $script:openExplorer = $true
                 $window.Close()
             }
-            catch { Write-DLog "LetsGo error: $_" "ERROR" }
+            catch {
+                # AG6-017: Ensure timer stops even in exception paths
+                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                    $timer.Stop()
+                }
+                Write-DLog "LetsGo error: $_" "ERROR"
+            }
         })
 
     # Path missing - Dismiss
