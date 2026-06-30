@@ -539,7 +539,16 @@ function New-MotivationTask {
             catch { $isMappedDrive = $false }
         }
         $isNetworkPath = $isUncPath -or $isMappedDrive
-        $runLevel      = if ($isNetworkPath) { 'Highest' } else { 'Limited' }
+
+        # FIX AG10-004: CRITICAL - Never use 'Highest' RunLevel for security
+        # Network paths do NOT require admin elevation. Using 'Limited' for all tasks
+        # prevents privilege escalation attacks where attacker controls network path.
+        $runLevel = 'Limited'
+
+        # Log warning for network paths (AG10-004)
+        if ($isNetworkPath) {
+            Write-DLog "SECURITY: Network path detected: $FolderPath - using Limited RunLevel to prevent privilege escalation" "WARN"
+        }
 
         $principal = New-ScheduledTaskPrincipal `
             -UserId    $env:USERNAME `
