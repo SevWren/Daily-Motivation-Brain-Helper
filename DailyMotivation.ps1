@@ -1639,10 +1639,12 @@ function Show-MainWindow {
         })
 
     # SS-C-05: drag-over visual feedback
-    $script:dropZoneBrushNormal = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#3A4A5A")
-    $script:dropZoneBrushHover  = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#00BCD4")
-    $script:dropZoneBgNormal    = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#111B22")
-    $script:dropZoneBgHover     = [System.Windows.Media.BrushConverter]::new().ConvertFrom("#162028")
+    # AG14-006: Reuse single BrushConverter instance to prevent WPF resource fragmentation
+    $converter = [System.Windows.Media.BrushConverter]::new()
+    $script:dropZoneBrushNormal = $converter.ConvertFrom("#3A4A5A")
+    $script:dropZoneBrushHover  = $converter.ConvertFrom("#00BCD4")
+    $script:dropZoneBgNormal    = $converter.ConvertFrom("#111B22")
+    $script:dropZoneBgHover     = $converter.ConvertFrom("#162028")
 
     $dropZone.Add_DragEnter({
             param($s, $e)

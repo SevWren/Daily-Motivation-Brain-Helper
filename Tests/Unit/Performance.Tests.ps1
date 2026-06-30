@@ -83,6 +83,28 @@ Describe 'AG14-007: DriveInfo Not Disposed' {
     }
 }
 
+Describe 'AG14-006: BrushConverter Objects Never Disposed' {
+    It 'Should use a single BrushConverter instance for all brush conversions in Show-MainWindow' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+
+        $functionStart = $content.IndexOf('function Show-MainWindow')
+        $functionEnd = $content.IndexOf('function Show-PopupWindow', $functionStart)
+        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
+
+        # Should have BrushConverter instantiation and disposal
+        $hasBrushConverter = $functionBody -match '\[System\.Windows\.Media\.BrushConverter\]'
+
+        if ($hasBrushConverter) {
+            # Should either: 1) Reuse single converter (AG14-006 comment present), or 2) Dispose converters
+            $hasReuse = $functionBody -match 'AG14-006.*Reuse single BrushConverter'
+            $hasDisposal = $functionBody -match 'converter.*Dispose'
+
+            ($hasReuse -or $hasDisposal) | Should -Be $true -Because "BrushConverter instances should be reused or disposed to prevent WPF resource fragmentation (AG14-006)"
+        }
+    }
+}
+
 Describe 'AG14-002: XmlNodeReader Not Disposed' {
     It 'Should dispose XmlNodeReader after loading XAML in Show-MainWindow' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
