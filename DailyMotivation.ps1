@@ -488,9 +488,9 @@ function New-MotivationTask {
         # GAP-010: network path detection for RunLevel assignment
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
         $isMappedDrive = $false
-        if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
             try {
-                $driveInfo     = [System.IO.DriveInfo]::new([string]$FolderPath[0])
+                $driveInfo     = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
             }
             catch { $isMappedDrive = $false }
@@ -833,9 +833,9 @@ function Invoke-FolderScheduling {
     # Detect network paths (UNC or mapped drives)
     $isUncPath = $FolderPath -match '^\\\\[^\\]'
     $isMappedDrive = $false
-    if ($FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+    if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
         try {
-            $driveInfo = [System.IO.DriveInfo]::new([string]$FolderPath[0])
+            $driveInfo = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
             $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
         }
         catch { $isMappedDrive = $false }
@@ -1568,6 +1568,40 @@ function Show-MainWindow {
             }
         })
 
+    # AG3-001, AG3-017: Add window cleanup handler to stop timers and reset state
+    $window.Add_Closed({
+        try {
+            # Stop and dispose undo timer if still running
+            if ($script:undoTimer) {
+                $script:undoTimer.Stop()
+                try { $script:undoTimer.Dispose() } catch {}
+                $script:undoTimer = $null
+            }
+            # Reset state variables to prevent leakage across window instances
+            $script:lastTaskId = $null
+            $script:undoScheduledFor = $null
+            $script:selectedPath = ""
+        }
+        catch { Write-DLog "Window cleanup error: $_" "WARN" }
+    })
+
+    # AG3-001, AG3-017: Add window cleanup handler to stop timers and reset state
+    $window.Add_Closed({
+        try {
+            # Stop and dispose undo timer if still running
+            if ($script:undoTimer) {
+                $script:undoTimer.Stop()
+                try { $script:undoTimer.Dispose() } catch {}
+                $script:undoTimer = $null
+            }
+            # Reset state variables to prevent leakage across window instances
+            $script:lastTaskId = $null
+            $script:undoScheduledFor = $null
+            $script:selectedPath = ""
+        }
+        catch { Write-DLog "Window cleanup error: $_" "WARN" }
+    })
+
     # Reconcile task statuses with Windows Task Scheduler before displaying
     Sync-TaskStatuses
     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
@@ -1830,10 +1864,15 @@ function Show-PopupWindow {
         if ($stale) {
             Write-DLog "Stale popup visible - exiting to avoid duplicate" "WARN"
             if ($mutex) { try { $mutex.ReleaseMutex() } catch {} }
+            if ($mutex) { $mutex.Dispose() }
             return
         }
     }
-    catch { Write-DLog "Mutex error (non-fatal): $_" "WARN" }
+    catch {
+        Write-DLog "Mutex error (non-fatal): $_" "WARN"
+        if ($mutex) { $mutex.Dispose() }
+        return  # AG1-002: Exit safely rather than proceed with undefined state
+    }
 
     # Load popup config
     $config = [PSCustomObject]@{
@@ -1864,19 +1903,23 @@ function Show-PopupWindow {
     if ($script:pathMissing) { Write-DLog "Path missing: '$($config.explorer_path)'" "WARN" }
 
     # Build popup window
-    $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
+    $reader = $null
     try {
+        $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
         $window = [Windows.Markup.XamlReader]::Load($reader)
+        if ($null -eq $window) {
+            Write-DLog "FATAL: XamlReader returned null" "ERROR"
+            if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
+            return
+        }
     }
     catch {
         Write-DLog "FATAL: Popup XAML build failed - $_" "ERROR"
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
-    if ($null -eq $window) {
-        Write-DLog "FATAL: XamlReader returned null" "ERROR"
-        if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
-        return
+    finally {
+        if ($null -ne $reader) { $reader.Dispose() }  # AG1-005: Dispose XmlNodeReader
     }
 
     function Find { param($n) $window.FindName($n) }
@@ -2022,7 +2065,14 @@ function Show-PopupWindow {
                 $script:snoozeCount++
                 $script:openExplorer = $false
                 $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes)
-                New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force | Out-Null
+                $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
+                if (-not $snoozeResult.Success) {
+                    Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
+                    [System.Windows.MessageBox]::Show(
+                        "Could not snooze the task.`n`n$($snoozeResult.Error)",
+                        "Snooze Failed", "OK", "Error") | Out-Null
+                    return
+                }
                 Write-DLog "Snooze task created for $snoozeTime"
                 $window.Close()
             }
@@ -2100,6 +2150,16 @@ function Show-PopupWindow {
     }
     catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
     finally {
+        # AG3-005, AG3-006, AG3-007, AG3-018, AG3-019: Reset state variables
+        # to prevent leakage between popup instances
+        $script:pathMissing = $false
+        $script:openExplorer = $true
+        $script:newExplorerPath = ""
+        $script:remaining = 20
+        $script:snoozeCount = 0
+        $script:firstTick = $true
+        $script:windowClosed = $false
+        
         if ($mutexOwned -and $mutex) {
             try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
             catch { Write-DLog "Mutex release error: $_" "WARN" }
