@@ -2117,7 +2117,16 @@ function Show-PopupWindow {
         if ($null -ne $reader) { $reader.Dispose() }  # AG1-005: Dispose XmlNodeReader
     }
 
-    function Find { param($n) $window.FindName($n) }
+    # AG6-014: Validate FindName() returns non-null to prevent "member on null" errors
+    function Find {
+        param($n)
+        $control = $window.FindName($n)
+        if ($null -eq $control) {
+            Write-DLog "FATAL: XAML element not found: $n" "ERROR"
+            throw "XAML element not found: $n"
+        }
+        return $control
+    }
 
     $normalPanel      = Find "NormalPanel"
     $pathMissingPanel = Find "PathMissingPanel"
