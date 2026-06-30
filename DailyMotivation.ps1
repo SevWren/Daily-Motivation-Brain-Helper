@@ -35,7 +35,11 @@ param(
 # ============================================================
 # Cross-platform temp directory resolution
 $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
-$script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug.log"
+
+# FIX AG10-005: Use unique log name to prevent symlink attacks and collisions
+$uniqueId = [System.Diagnostics.Process]::GetCurrentProcess().Id
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug_${uniqueId}_${timestamp}.log"
 
 function Write-DLog {
     [CmdletBinding()]
@@ -232,6 +236,8 @@ function Initialize-AppData {
 }
 
 function Get-Config {
+    [CmdletBinding()]
+    param()
     # AG7-004: Check cache first, reload only if file has changed
     try {
         $mtime = $null
@@ -296,6 +302,8 @@ function Save-Config {
 }
 
 function Get-PopupConfig {
+    [CmdletBinding()]
+    param()
     # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
     # null-reference crashes in callers that access properties without null checks.
     try {
