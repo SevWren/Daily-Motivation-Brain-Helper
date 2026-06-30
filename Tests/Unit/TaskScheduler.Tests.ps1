@@ -156,6 +156,30 @@ Describe 'New-MotivationTask' {
             $r2 = New-MotivationTask -FolderPath 'c:\PROJECTS\testfolder' -TriggerTime $t
             $r2.IsDuplicate | Should -Be $true
         }
+
+        It 'Should NOT block duplicate if first task status is COMPLETED' {
+            # AG8-020: Negative test - COMPLETED tasks should not block new ones
+            $t = (Get-Date).Date.AddHours(14)
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+            # Mark first task as COMPLETED
+            $tasks = Get-TasksJson
+            $tasks[0].status = 'COMPLETED'
+            Save-TasksJson -Tasks $tasks
+            # Should allow new task for same folder/date
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
+            $r2.Success | Should -Be $true
+            $r2.IsDuplicate | Should -Be $false
+        }
+
+        It 'Should handle time boundary at midnight correctly' {
+            # AG8-020: Negative test - 23:59:59 vs 00:00:01 next day
+            $t1 = (Get-Date).Date.AddHours(23).AddMinutes(59).AddSeconds(59)
+            $t2 = (Get-Date).Date.AddDays(1).AddSeconds(1)
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t1 | Out-Null
+            $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t2
+            # Different dates, should not be duplicate
+            $r2.IsDuplicate | Should -Be $false
+        }
     }
 
     Context 'Network path detection' {
@@ -167,6 +191,53 @@ Describe 'New-MotivationTask' {
         It 'Should return IsNetworkPath=false for a local path' {
             $result = New-MotivationTask -FolderPath 'C:\Projects\Local' -TriggerTime ((Get-Date).AddHours(2))
             $result.IsNetworkPath | Should -Be $false
+        }
+    }
+
+    Context 'Edge cases - Path handling' {
+        It 'Should handle very long folder paths gracefully (AG8-013)' {
+            # Windows path limit is ~260 chars, task name limit is 238
+            $longPath = 'C:\' + ('VeryLongFolderName' * 15)  # ~285 characters
+            $result = New-MotivationTask -FolderPath $longPath -TriggerTime ((Get-Date).AddHours(2))
+            # Should either succeed or fail gracefully (not crash)
+            $result | Should -Not -BeNullOrEmpty
+            if ($result.Success) {
+                # If successful, task name should be within limits
+                $task = @(Get-TasksJson)[0]
+                $task.task_name.Length | Should -BeLessOrEqual 238
+            }
+        }
+
+        It 'Should handle paths with quotes (AG8-014)' {
+            $quotePath = 'C:\My "Special" Folder'
+            $result = New-MotivationTask -FolderPath $quotePath -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            # Verify JSON round-trip doesn't corrupt the path
+            $task = @(Get-TasksJson)[0]
+            $task.folder_path | Should -Be $quotePath
+        }
+
+        It 'Should handle paths with Unicode characters (AG8-014)' {
+            $unicodePath = 'C:\Café\Résumé\Naïve'
+            $result = New-MotivationTask -FolderPath $unicodePath -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            $task = @(Get-TasksJson)[0]
+            $task.folder_path | Should -Be $unicodePath
+        }
+
+        It 'Should handle paths with pipe characters (AG8-014)' {
+            # Pipes are delimiters in Write-OutcomeLog - ensure proper escaping
+            $pipePath = 'C:\Project|A|B'
+            $result = New-MotivationTask -FolderPath $pipePath -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            $task = @(Get-TasksJson)[0]
+            $task.folder_path | Should -Be $pipePath
+        }
+
+        It 'Should handle paths with trailing backslash (AG8-014)' {
+            $trailingSlashPath = 'C:\Projects\MyFolder\'
+            $result = New-MotivationTask -FolderPath $trailingSlashPath -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
         }
     }
 
