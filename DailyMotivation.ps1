@@ -417,7 +417,7 @@ function New-MotivationTask {
     The task action calls this same exe with /popup argument (-STA baked in by build).
     #>
     param(
-        [Parameter(Mandatory)][string]$FolderPath,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )
@@ -476,7 +476,16 @@ function New-MotivationTask {
         # $script:ExePath is set at entry point to $MyInvocation.MyCommand.Path
         # Tests override $script:ExePath before calling this function
         $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
-        $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
+        try {
+            $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
+            if ($null -eq $action) {
+                throw [System.Exception]::new("New-ScheduledTaskAction returned null")
+            }
+        }
+        catch {
+            Write-DLog "Failed to create scheduled task action: $($_.Exception.Message)" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
+        }
 
         $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
         # EndBoundary is required by Task Scheduler XML schema when DeleteExpiredTaskAfter is set.
@@ -830,7 +839,7 @@ function Invoke-FolderScheduling {
         Hashtable with Success, TaskId, IsDuplicate, IsNetworkPath keys.
     #>
     param(
-        [Parameter(Mandatory)][string]$FolderPath,
+        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )
@@ -1577,23 +1586,6 @@ function Show-MainWindow {
             }
         })
 
-    # AG3-001, AG3-017: Add window cleanup handler to stop timers and reset state
-    $window.Add_Closed({
-        try {
-            # Stop and dispose undo timer if still running
-            if ($script:undoTimer) {
-                $script:undoTimer.Stop()
-                try { $script:undoTimer.Dispose() } catch {}
-                $script:undoTimer = $null
-            }
-            # Reset state variables to prevent leakage across window instances
-            $script:lastTaskId = $null
-            $script:undoScheduledFor = $null
-            $script:selectedPath = ""
-        }
-        catch { Write-DLog "Window cleanup error: $_" "WARN" }
-    })
-
     # AG3-001, AG3-015, AG3-017: Add window cleanup handler
     $window.Add_Closed({
         try {
@@ -2244,7 +2236,7 @@ function Show-PopupWindow {
     if ($script:openExplorer -and $effectivePath -and $effectivePath -ne "") {
         Write-DLog "Launching Explorer: $effectivePath"
         try {
-            Start-Process "explorer.exe" -ArgumentList $effectivePath -ErrorAction Stop
+            Start-Process -FilePath "explorer.exe" -ArgumentList "`"$effectivePath`"" -ErrorAction Stop
             Write-DLog "Explorer launched"
         }
         catch {
