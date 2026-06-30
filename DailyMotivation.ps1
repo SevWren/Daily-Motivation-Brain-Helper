@@ -770,11 +770,19 @@ function Remove-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic
+        # AG5-020: Verify unregister succeeded and handle failures properly
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
+            # Verify task was actually removed
+            $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction SilentlyContinue
+            if ($stillExists) {
+                throw "Task still exists after unregister attempt"
+            }
         }
         catch {
-            Write-Warning "Remove-MotivationTask: '$($target.task_name)': $_"
+            Write-DLog "Remove-MotivationTask: Failed to unregister '$($target.task_name)': $_" "ERROR"
+            # AG5-020: Don't remove from tasks.json if unregister failed (maintain consistency)
+            return $false
         }
     }
 
