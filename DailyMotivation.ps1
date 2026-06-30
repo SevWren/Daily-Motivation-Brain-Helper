@@ -285,6 +285,7 @@ function Save-Config {
     # AG3-016 / AG7-002 / AG7-010: Atomic write — write to .tmp then rename to prevent
     # partial-write corruption if the process is killed mid-write.
     # AG7-004: Invalidate cache after save to force reload on next Get-Config.
+    [CmdletBinding()]
     param([PSCustomObject]$Config)
     $tempPath = $script:ConfigPath + ".tmp"
     try {
@@ -325,6 +326,7 @@ function Get-PopupConfig {
 function Set-PopupConfig {
     # AG3-008 / AG3-016: Use named mutex + atomic write (temp file + rename) to prevent
     # file corruption when /setfolder and /popup modes run concurrently.
+    [CmdletBinding()]
     param(
         [string]$Glyph,
         [string]$Title,
