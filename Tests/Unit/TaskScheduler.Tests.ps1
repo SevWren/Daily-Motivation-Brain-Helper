@@ -66,6 +66,8 @@ Describe 'New-MotivationTask' {
             $result.TaskId    | Should -Not -BeNullOrEmpty
             $result.TaskId.Length | Should -Be 16
             $result.IsDuplicate | Should -Be $false
+            # AG8-001: Verify Register-ScheduledTask was called exactly once
+            Should -Invoke Register-ScheduledTask -Times 1 -Exactly
         }
 
         It 'Should generate unique task IDs for different folders' {
@@ -112,6 +114,14 @@ Describe 'New-MotivationTask' {
         It 'Should initialize snooze_count to 0' {
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
             (Get-TasksJson)[0].snooze_count | Should -Be 0
+        }
+
+        It 'Should call Register-ScheduledTask with correct TaskName format' {
+            # AG8-001/AG8-003: Verify mock parameters match expected format
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                $TaskName -like 'DailyMotivation_*'
+            }
         }
     }
 
@@ -290,8 +300,13 @@ Describe 'Remove-MotivationTask' {
 
     It 'Should remove the specified task from tasks.json' {
         $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        $taskName = (Get-TasksJson)[0].task_name
         Remove-MotivationTask -TaskId $r.TaskId
         @(Get-TasksJson).Count | Should -Be 0
+        # AG8-003: Verify Unregister-ScheduledTask was called with correct TaskName
+        Should -Invoke Unregister-ScheduledTask -Times 1 -ParameterFilter {
+            $TaskName -eq $taskName
+        }
     }
 
     It 'Should only remove the specified task, leaving others intact' {
