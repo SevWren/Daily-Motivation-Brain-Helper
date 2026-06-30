@@ -553,7 +553,7 @@ function New-MotivationTask {
                 -Trigger     $trigger   `
                 -Settings    $settings  `
                 -Principal   $principal `
-                -Description "Daily Motivation Brain Helper - $FolderPath" `
+                -Description "Daily Motivation Brain Helper - $([System.Net.WebUtility]::HtmlEncode($FolderPath))" `
                 -Force -ErrorAction Stop | Out-Null
             Write-DLog "Register-ScheduledTask succeeded: $taskName"
         }
