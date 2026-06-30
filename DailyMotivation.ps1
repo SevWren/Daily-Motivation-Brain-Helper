@@ -568,9 +568,11 @@ function New-MotivationTask {
             Write-DLog "SECURITY: Network path detected: $FolderPath - using Limited RunLevel to prevent privilege escalation" "WARN"
         }
 
+        # AG5-010: Use S4U (Service for User) LogonType instead of Interactive
+        # so tasks can fire even when user is not actively logged in (e.g., workstation locked)
         $principal = New-ScheduledTaskPrincipal `
             -UserId    $env:USERNAME `
-            -LogonType Interactive   `
+            -LogonType S4U   `
             -RunLevel  $runLevel
 
         # FIX AG10-001 & AG10-010: Sanitize Description - use hash instead of raw path

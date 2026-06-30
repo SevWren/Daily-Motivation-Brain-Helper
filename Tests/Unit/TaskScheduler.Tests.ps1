@@ -320,6 +320,30 @@ Describe 'New-MotivationTask' {
             }
         }
     }
+
+    Context 'Task Principal configuration (AG5-010)' {
+        # AG5-010: LogonType must be S4U (Service for User) not Interactive
+        # so tasks fire when user is not logged in
+        It 'Should use S4U LogonType to allow task execution when user logged out' {
+            # Verify that task principal is configured correctly
+            Mock New-ScheduledTaskPrincipal {
+                param($UserId, $LogonType, $RunLevel)
+                # Verify LogonType is S4U not Interactive
+                $LogonType | Should -Be 'S4U'
+                return [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
+            }
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            Should -Invoke New-ScheduledTaskPrincipal -Times 1
+        }
+
+        AfterEach {
+            # Restore default mock
+            Mock New-ScheduledTaskPrincipal {
+                param($UserId, $LogonType, $RunLevel)
+                return [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
+            }
+        }
+    }
 }
 
 Describe 'Get-MotivationTasks' {
