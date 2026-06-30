@@ -1500,7 +1500,16 @@ function Show-MainWindow {
         return
     }
 
-    function Find { param($n) $window.FindName($n) }
+    # AG6-014: Validate FindName() returns non-null to prevent "member on null" errors
+    function Find {
+        param($n)
+        $control = $window.FindName($n)
+        if ($null -eq $control) {
+            Write-DLog "FATAL: XAML element not found: $n" "ERROR"
+            throw "XAML element not found: $n"
+        }
+        return $control
+    }
 
     $dropZone          = Find "DropZone"
     $selectFolderBtn   = Find "SelectFolderBtn"
@@ -2212,11 +2221,25 @@ function Show-PopupWindow {
         $timer.Interval = [System.TimeSpan]::FromSeconds(1)
         $timer.Add_Tick({
                 try {
+                    # AG11-011: Check if window is still loaded before accessing UI elements
+                    if ($null -eq $window -or -not $window.IsLoaded) {
+                        Write-DLog "Window no longer loaded, stopping timer" "WARN"
+                        $script:windowClosed = $true
+                        $timer.Stop()
+                        return
+                    }
+                    # AG11-011: Check windowClosed flag FIRST before any UI operations
+                    if ($script:windowClosed) {
+                        $timer.Stop()
+                        return
+                    }
                     if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
                     $script:remaining--
                     $countdownText.Text = $script:remaining
                     if ($script:remaining -le 0 -and -not $script:windowClosed) {
+                        # AG11-011: Set flag BEFORE closing window to prevent race condition
                         $script:windowClosed = $true
+                        $timer.Stop()
                         $script:openExplorer = $true
                         $window.Close()
                     }
@@ -2224,6 +2247,7 @@ function Show-PopupWindow {
                 catch {
                     Write-DLog "Timer error: $_" "ERROR"
                     $script:windowClosed = $true
+                    $timer.Stop()
                 }
                 finally {
                     # AG1-011: Always stop timer when countdown completes or window closes
