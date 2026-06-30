@@ -923,7 +923,14 @@ function Start-UndoTimer {
     $UndoProgressControl.Value    = 30
     $UndoBannerControl.Visibility = "Visible"
     $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
-    $script:undoTimer.Interval = [System.TimeSpan]::FromSeconds(1)
+    # AG6-016: Validate timer interval to prevent CPU spike from zero/negative interval
+    $interval = [System.TimeSpan]::FromSeconds(1)
+    if ($interval.TotalMilliseconds -le 0) {
+        Write-DLog "FATAL: Undo timer interval must be positive (got $($interval.TotalMilliseconds)ms)" "ERROR"
+        $UndoBannerControl.Visibility = "Collapsed"
+        throw "Invalid timer interval: $($interval.TotalMilliseconds)ms"
+    }
+    $script:undoTimer.Interval = $interval
     $script:undoTimer.Add_Tick({
             $script:undoSeconds--
             $script:undoProgressCtrl.Value = $script:undoSeconds
@@ -1600,10 +1607,16 @@ function Show-MainWindow {
 
     # --- Event handlers ---
     $selectFolderBtn.Add_Click({
-            $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-            $dialog.Description         = "Select the folder you want to open tomorrow"
-            $dialog.ShowNewFolderButton = $false
-            if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
+            $dialog = $null
+            try {
+                $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+                $dialog.Description         = "Select the folder you want to open tomorrow"
+                $dialog.ShowNewFolderButton = $false
+                if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
+            }
+            finally {
+                if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
+            }
         })
 
     # SS-C-05: drag-over visual feedback
@@ -2162,13 +2175,21 @@ function Show-PopupWindow {
                 $window.Opacity = 1  # ensure visible if animation fails
             }
             # Fallback: if opacity is still 0 after 500ms, force it visible
+            # AG6-016: Validate fallback timer interval
             $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
-            $fallbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(500)
-            $fallbackTimer.Add_Tick({
-                $fallbackTimer.Stop()
-                if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
-            })
-            $fallbackTimer.Start()
+            $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
+            if ($fallbackInterval.TotalMilliseconds -le 0) {
+                Write-DLog "WARN: Fallback timer interval invalid, skipping animation fallback" "WARN"
+                $window.Opacity = 1
+            }
+            else {
+                $fallbackTimer.Interval = $fallbackInterval
+                $fallbackTimer.Add_Tick({
+                    $fallbackTimer.Stop()
+                    if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
+                })
+                $fallbackTimer.Start()
+            }
         })
 
     # Race condition fix: stop countdown on ANY button press before click handler fires (A9-BUG-12)
@@ -2299,28 +2320,34 @@ function Show-PopupWindow {
     # Path missing - Re-pick folder
     $rePickBtn.Add_Click({
             Write-DLog "Re-pick clicked"
-            $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-            $dialog.Description         = "Choose the new location for this folder"
-            $dialog.ShowNewFolderButton = $false
-            if ($dialog.ShowDialog() -eq "OK") {
-                $newPath = $dialog.SelectedPath
-                Write-DLog "Re-pick: $newPath"
-                try {
-                    # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
-                    $c = Get-PopupConfig
-                    Set-PopupConfig -Glyph $c.glyph -Title $c.title -Body $c.body `
-                        -ExplorerPath $newPath -TaskId $c.task_id
-                    # ERR-002: only update state if write succeeded
-                    $script:newExplorerPath = $newPath
-                    $script:openExplorer    = $true
-                    $window.Close()
+            $dialog = $null
+            try {
+                $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+                $dialog.Description         = "Choose the new location for this folder"
+                $dialog.ShowNewFolderButton = $false
+                if ($dialog.ShowDialog() -eq "OK") {
+                    $newPath = $dialog.SelectedPath
+                    Write-DLog "Re-pick: $newPath"
+                    try {
+                        # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
+                        $c = Get-PopupConfig
+                        Set-PopupConfig -Glyph $c.glyph -Title $c.title -Body $c.body `
+                            -ExplorerPath $newPath -TaskId $c.task_id
+                        # ERR-002: only update state if write succeeded
+                        $script:newExplorerPath = $newPath
+                        $script:openExplorer    = $true
+                        $window.Close()
+                    }
+                    catch {
+                        Write-DLog "Config update failed: $_" "ERROR"
+                        [System.Windows.MessageBox]::Show(
+                            "Could not save the new folder path.`n`n$($_.Exception.Message)",
+                            "Save Failed", "OK", "Error") | Out-Null
+                    }
                 }
-                catch {
-                    Write-DLog "Config update failed: $_" "ERROR"
-                    [System.Windows.MessageBox]::Show(
-                        "Could not save the new folder path.`n`n$($_.Exception.Message)",
-                        "Save Failed", "OK", "Error") | Out-Null
-                }
+            }
+            finally {
+                if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
             }
         })
 
