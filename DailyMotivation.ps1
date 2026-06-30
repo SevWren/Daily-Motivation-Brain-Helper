@@ -164,6 +164,8 @@ class HeadlessPlatform {
 # ============================================================
 
 function Initialize-AppData {
+    [CmdletBinding()]
+    param()
     <#
     Creates platform-specific app data directory and default config files.
     Uses platform adapter if available (for cross-platform testing).
