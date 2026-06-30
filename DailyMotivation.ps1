@@ -583,11 +583,15 @@ function New-MotivationTask {
         # EndBoundary is required by Task Scheduler XML schema when DeleteExpiredTaskAfter is set.
         # Without it, Register-ScheduledTask emits a non-terminating "(49,4):EndBoundary:" XML error
         # that ps2exe surfaces as a dialog. Set it to trigger time + execution limit + buffer.
-        $trigger.EndBoundary = $TriggerTime.AddMinutes(11).ToString('yyyy-MM-ddTHH:mm:ss')
+        # AG5-012: Increased ExecutionTimeLimit from 10 to 30 minutes to allow adequate time
+        # for user interaction with popup window and folder opening
+        $executionTimeLimit = New-TimeSpan -Minutes 30
+        # AG5-014: EndBoundary should account for the execution time limit
+        $trigger.EndBoundary = $TriggerTime.Add($executionTimeLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
         Write-DLog "Trigger EndBoundary set to $($trigger.EndBoundary)"
         $settings = New-ScheduledTaskSettingsSet `
             -StartWhenAvailable `
-            -ExecutionTimeLimit  (New-TimeSpan -Minutes 10) `
+            -ExecutionTimeLimit  $executionTimeLimit `
             -MultipleInstances   IgnoreNew `
             -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 30)
 
