@@ -200,12 +200,18 @@ function Initialize-AppData {
         catch {
             $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
-            New-Item -ItemType Directory -Path $fallback -Force | Out-Null
-            $script:AppDataDir   = $fallback
-            $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
-            $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
-            $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
-            $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+            try {
+                New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop | Out-Null
+                $script:AppDataDir   = $fallback
+                $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
+                $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
+                $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
+                $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+            }
+            catch {
+                Write-Error "Initialize-AppData: Cannot create fallback directory '$fallback': $($_.Exception.Message)"
+                throw
+            }
         }
     }
 
