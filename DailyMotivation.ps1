@@ -18,6 +18,7 @@
 # SECTION 1: Param block
 # ============================================================
 param(
+    [ValidateSet("main", "/popup", "/setfolder")]
     [string]$Mode       = "main",
     [ValidateScript({
         if ($_ -eq "") { $true }
