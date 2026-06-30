@@ -550,6 +550,20 @@ function New-MotivationTask {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
         }
 
+        # AG5-007: Validate trigger time before creating trigger
+        if ($null -eq $TriggerTime -or $TriggerTime -isnot [datetime]) {
+            Write-DLog "TriggerTime must be a valid DateTime object" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be a DateTime object" }
+        }
+        if ($TriggerTime -le (Get-Date)) {
+            Write-DLog "TriggerTime must be in the future: $TriggerTime" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be in the future, got: $TriggerTime" }
+        }
+        if ($TriggerTime -gt (Get-Date).AddYears(4)) {
+            Write-DLog "TriggerTime is too far in the future: $TriggerTime" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: cannot be more than 4 years in the future" }
+        }
+
         $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
         # EndBoundary is required by Task Scheduler XML schema when DeleteExpiredTaskAfter is set.
         # Without it, Register-ScheduledTask emits a non-terminating "(49,4):EndBoundary:" XML error

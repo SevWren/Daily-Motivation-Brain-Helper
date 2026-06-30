@@ -375,6 +375,28 @@ Describe 'New-MotivationTask' {
             $script:ExePath = $script:OriginalExePath
         }
     }
+
+    Context 'Trigger time validation (AG5-007)' {
+        It 'Should reject trigger time in the past (AG5-007)' {
+            $pastTime = (Get-Date).AddHours(-1)
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $pastTime
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "future"
+        }
+
+        It 'Should reject trigger time too far in future (AG5-007)' {
+            $farFuture = (Get-Date).AddYears(10)
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $farFuture
+            $result.Success | Should -Be $false
+            $result.Error | Should -Match "4 years"
+        }
+
+        It 'Should accept valid future trigger time (AG5-007)' {
+            $validFuture = (Get-Date).AddDays(1)
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $validFuture
+            $result.Success | Should -Be $true
+        }
+    }
 }
 
 Describe 'Get-MotivationTasks' {
