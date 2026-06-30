@@ -110,3 +110,130 @@ Describe 'Write-OutcomeLog creates the log file' {
         (Get-Content $logPath -Raw) | Should -Match 'intg-t1'
     }
 }
+
+Describe 'Mode switching and config persistence (AG8-026)' {
+    # AG8-026: Integration tests for config persistence across execution modes
+
+    BeforeEach {
+        # Clean config state
+        $script:AppDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'
+        if (Test-Path $script:AppDir) {
+            Remove-Item -Path $script:AppDir -Recurse -Force
+        }
+        Initialize-AppData
+    }
+
+    It 'Should persist popup config written by main mode for popup mode to read' {
+        # Simulate main mode writing popup_config.json
+        $testConfig = @{
+            folder_path = 'C:\TestFolder'
+            folder_name = 'TestFolder'
+            message_glyph = '[!]'
+            message_title = 'Test Title'
+            message_body = 'Test Body'
+        }
+        Set-PopupConfig -FolderPath $testConfig.folder_path `
+            -FolderName $testConfig.folder_name `
+            -Glyph $testConfig.message_glyph `
+            -Title $testConfig.message_title `
+            -Body $testConfig.message_body
+
+        # Verify file was written
+        $popupConfigPath = Join-Path $script:AppDir 'popup_config.json'
+        Test-Path $popupConfigPath | Should -Be $true
+
+        # Simulate popup mode reading config
+        $readConfig = Get-PopupConfig
+        $readConfig | Should -Not -Be $null
+        $readConfig.folder_path | Should -Be $testConfig.folder_path
+        $readConfig.message_title | Should -Be $testConfig.message_title
+    }
+
+    It 'Should verify config.json persists default settings across reads' {
+        # Write config
+        Save-Config -DefaultTriggerHour 15 -TaskWarningThreshold 7
+
+        # Read config
+        $cfg = Get-Config
+        $cfg.default_trigger_hour | Should -Be 15
+        $cfg.task_warning_threshold | Should -Be 7
+
+        # Verify persistence: re-read from disk
+        $cfg2 = Get-Config
+        $cfg2.default_trigger_hour | Should -Be 15
+        $cfg2.task_warning_threshold | Should -Be 7
+    }
+
+    It 'Should verify tasks.json persists across mode switches' {
+        # Simulate main mode creating a task
+        Mock Register-ScheduledTask { return $null }
+        Mock Get-ScheduledTask { return $null }
+        $script:ExePath = 'C:\Test\DailyMotivation.exe'
+
+        $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
+        $result.Success | Should -Be $true
+
+        # Verify task persists
+        $tasks1 = Get-MotivationTasks
+        $tasks1.Count | Should -Be 1
+
+        # Simulate setfolder mode reading tasks
+        $tasks2 = Get-MotivationTasks
+        $tasks2.Count | Should -Be 1
+        $tasks2[0].task_id | Should -Be $result.TaskId
+    }
+}
+
+Describe 'Integration scenario - Full lifecycle (AG8-007)' {
+    # AG8-007: Expanded integration tests covering actual integration scenarios
+
+    BeforeEach {
+        # Setup for integration tests
+        Mock Register-ScheduledTask { return $null }
+        Mock Unregister-ScheduledTask { }
+        Mock Get-ScheduledTask { return $null }
+        $script:ExePath = 'C:\Test\DailyMotivation.exe'
+
+        $script:AppDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'
+        if (Test-Path $script:AppDir) {
+            Remove-Item -Path $script:AppDir -Recurse -Force
+        }
+        Initialize-AppData
+    }
+
+    It 'Should complete full task lifecycle: create, list, remove' {
+        # Create task
+        $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
+        $result.Success | Should -Be $true
+        $taskId = $result.TaskId
+
+        # List tasks
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 1
+        $tasks[0].task_id | Should -Be $taskId
+
+        # Remove task
+        Remove-MotivationTask -TaskId $taskId
+
+        # Verify removed
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 0
+    }
+
+    It 'Should handle duplicate detection across task operations' {
+        $triggerTime = (Get-Date).Date.AddHours(14)
+
+        # Create first task
+        $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
+        $r1.Success | Should -Be $true
+
+        # Attempt duplicate
+        $r2 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
+        $r2.Success | Should -Be $false
+        $r2.IsDuplicate | Should -Be $true
+
+        # Verify only one task exists
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 1
+    }
+}
