@@ -276,11 +276,16 @@ function Get-Config {
 function Save-Config {
     # AG3-016 / AG7-002 / AG7-010: Atomic write — write to .tmp then rename to prevent
     # partial-write corruption if the process is killed mid-write.
+    # AG7-004: Invalidate cache after save to force reload on next Get-Config.
     param([PSCustomObject]$Config)
     $tempPath = $script:ConfigPath + ".tmp"
     try {
         $Config | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:ConfigPath -Force -ErrorAction Stop
+
+        # Invalidate cache
+        $script:ConfigCache = $null
+        $script:ConfigCacheMTime = $null
     }
     catch {
         if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
@@ -556,6 +561,13 @@ function New-MotivationTask {
             -LogonType Interactive   `
             -RunLevel  $runLevel
 
+        # FIX AG10-001 & AG10-010: Sanitize Description - use hash instead of raw path
+        # Prevents information leakage via Task Scheduler description field
+        $pathHash = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+            [Text.Encoding]::UTF8.GetBytes($FolderPath)) |
+            ForEach-Object { $_.ToString("X2") } | Join-String -Separator """"
+        $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
+
         try {
             Register-ScheduledTask `
                 -TaskName    $taskName  `
@@ -563,7 +575,7 @@ function New-MotivationTask {
                 -Trigger     $trigger   `
                 -Settings    $settings  `
                 -Principal   $principal `
-                -Description "Daily Motivation Brain Helper - $([System.Net.WebUtility]::HtmlEncode($FolderPath))" `
+                -Description $safeDescription `
                 -Force -ErrorAction Stop | Out-Null
             Write-DLog "Register-ScheduledTask succeeded: $taskName"
         }
