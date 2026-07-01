@@ -262,6 +262,15 @@ function Get-Config {
             return $script:ConfigCache
         }
 
+        # FIX AG10-017: Validate file size before parsing to prevent DoS via large JSON
+        if (Test-Path $script:ConfigPath) {
+            $fileSize = (Get-Item $script:ConfigPath).Length
+            if ($fileSize -gt 50KB) {
+                Write-DLog "Config file exceeds maximum size (50KB): $fileSize bytes - using defaults" "ERROR"
+                return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
+            }
+        }
+
         # Load from disk
         $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
 
@@ -334,6 +343,17 @@ function Get-PopupConfig {
     # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
     # null-reference crashes in callers that access properties without null checks.
     try {
+        # FIX AG10-017: Validate file size before parsing
+        if (Test-Path $script:PopupCfgPath) {
+            $fileSize = (Get-Item $script:PopupCfgPath).Length
+            if ($fileSize -gt 50KB) {
+                Write-DLog "Popup config file exceeds maximum size (50KB): $fileSize bytes - using defaults" "ERROR"
+                return [PSCustomObject]@{
+                    glyph = "[+]"; title = ""; body = ""
+                    explorer_path = ""; folder_name = ""; task_id = ""
+                }
+            }
+        }
         return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     catch {
@@ -985,9 +1005,24 @@ function Get-MotivationTasks {
 
 function Remove-MotivationTask {
     param([Parameter(Mandatory)][string]$TaskId)
+
+    # AG5-017: Call Sync-TaskStatuses before removal to ensure task state is current
+    # This prevents attempting to unregister tasks that were already deleted manually
+    if (-not $script:Platform) {
+        Sync-TaskStatuses
+    }
+
     $tasks  = Get-TasksJson
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
     if (-not $target) { return $false }
+
+    # AG5-017: If task is already marked DELETED, skip OS unregister
+    if ($target.status -eq 'DELETED') {
+        Write-DLog "Remove-MotivationTask: Task $TaskId already DELETED in OS, removing from JSON only" "INFO"
+        $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
+        Save-TasksJson $tasks
+        return $true
+    }
 
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
