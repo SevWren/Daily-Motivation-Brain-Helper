@@ -124,6 +124,24 @@ Describe 'New-MotivationTask' {
             $actual.Second | Should -Be 0
         }
 
+        It 'Should store scheduled_time in actual ISO 8601 format in JSON (AG8-027)' {
+            # AG8-027: Verify the RAW JSON string format, not just deserialized DateTime
+            $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
+
+            # Read raw JSON without deserializing
+            $rawJson = Get-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Raw
+
+            # Verify ISO 8601 format in actual JSON string
+            # Expected format: "2026-12-25T14:00:00" or with Z/offset
+            $rawJson | Should -Match '"scheduled_time"\s*:\s*"2026-12-25T14:00:00'
+
+            # Also verify roundtrip: deserialize and re-serialize produces same format
+            $tasks = Get-TasksJson
+            $reserialized = $tasks | ConvertTo-Json -Depth 4
+            $reserialized | Should -Match '"scheduled_time"\s*:\s*"2026-12-25T14:00:00'
+        }
+
         It 'Should initialize snooze_count to 0' {
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
             (Get-TasksJson)[0].snooze_count | Should -Be 0
@@ -432,15 +450,33 @@ Describe 'Get-MotivationTasks' {
     It 'Should return tasks with required properties' {
         New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
         $task = @(Get-MotivationTasks)[0]
+
+        # AG8-025: Strict property validation (not just -Not -BeNullOrEmpty)
+        # Verify task_id is hexadecimal GUID format (16 chars)
         $task.task_id        | Should -Not -BeNullOrEmpty
-        $task.task_name      | Should -Match 'DailyMotivation_'
+        $task.task_id        | Should -Match '^[a-f0-9]{16}$' -Because "task_id should be 16-char hex string"
+        $task.task_id.Length | Should -BeExactly 16
+
+        # Verify task_name follows naming convention
+        $task.task_name      | Should -Match '^DailyMotivation_[a-f0-9]{16}$'
+
+        # Verify paths are not just spaces or empty strings
         $task.folder_path    | Should -Not -BeNullOrEmpty
+        $task.folder_path.Trim() | Should -Not -BeExactly '' -Because "folder_path must not be whitespace only"
+
         $task.folder_name    | Should -Not -BeNullOrEmpty
+        $task.folder_name.Trim() | Should -Not -BeExactly ''
+
+        # Verify scheduled_time is a valid DateTime (not string)
         $task.scheduled_time | Should -Not -BeNullOrEmpty
-        $task.status         | Should -Not -BeNullOrEmpty
-        # Accept both [int] and [long] types (platform-specific JSON deserialization)
+        $task.scheduled_time | Should -BeOfType [DateTime] -Because "scheduled_time must deserialize to DateTime"
+
+        # Verify status is one of known valid values
+        $task.status         | Should -BeIn @('PENDING', 'COMPLETED', 'DELETED') -Because "status must be valid enum value"
+
+        # Verify snooze_count is non-negative integer
         $task.snooze_count.GetType().Name | Should -BeIn @('Int32', 'Int64')
-        $task.snooze_count   | Should -Be 0
+        $task.snooze_count   | Should -BeGreaterOrEqual 0 -Because "snooze_count cannot be negative"
     }
 
     It 'Should handle corrupted tasks.json gracefully' {
