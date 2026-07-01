@@ -82,12 +82,13 @@ Describe 'AG16-009: PSScriptAnalyzer Violations Must Fail Workflow' {
         $workflowPath = Join-Path $PSScriptRoot '..\..\.github\workflows\test.yml'
         $workflow = Get-Content $workflowPath -Raw
 
-        # Should have error handling after Invoke-ScriptAnalyzer
-        $hasErrorHandling = $workflow -match 'Invoke-ScriptAnalyzer.*-ErrorAction Stop' -or
-                           $workflow -match 'Invoke-ScriptAnalyzer.*throw' -or
-                           $workflow -match 'Invoke-ScriptAnalyzer.*exit 1'
+        # Should have error handling after Invoke-ScriptAnalyzer (may be on separate lines)
+        $hasInvokeScriptAnalyzer = $workflow -match 'Invoke-ScriptAnalyzer'
+        $hasThrowOrExit = $workflow -match 'throw.*PSScriptAnalyzer|throw.*violation' -or
+                         $workflow -match 'exit 1.*PSScriptAnalyzer' -or
+                         $workflow -match '\$results.*throw|\$results.*exit'
 
-        $hasErrorHandling | Should -Be $true -Because "PSScriptAnalyzer violations must fail the workflow (not just warn)"
+        ($hasInvokeScriptAnalyzer -and $hasThrowOrExit) | Should -Be $true -Because "PSScriptAnalyzer violations must fail the workflow (not just warn)"
     }
 }
 

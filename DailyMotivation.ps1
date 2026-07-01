@@ -2642,9 +2642,9 @@ function Show-PopupWindow {
                 $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
                 if (-not $snoozeResult.Success) {
                     Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
-                    [System.Windows.MessageBox]::Show(
+                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
                         "Could not snooze the task.`n`n$($snoozeResult.Error)",
-                        "Snooze Failed", "OK", "Error") | Out-Null
+                        "Snooze Failed", "OK", "Error")
                     return
                 }
                 Write-DLog "Snooze task created for $snoozeTime"
@@ -2735,10 +2735,10 @@ function Show-PopupWindow {
                         $window.Close()
                     }
                     catch {
-                        Write-DLog "Config update failed: $_" "ERROR"
-                        [System.Windows.MessageBox]::Show(
+                        Write-DLog "Config update failed: $_" "ERROR"  # AG9-003
+                        [void][System.Windows.MessageBox]::Show(
                             "Could not save the new folder path.`n`n$($_.Exception.Message)",
-                            "Save Failed", "OK", "Error") | Out-Null
+                            "Save Failed", "OK", "Error")
                     }
                 }
             }
@@ -2829,9 +2829,9 @@ function Show-PopupWindow {
         }
         catch {
             Write-DLog "Explorer launch failed: $_" "ERROR"
-            [System.Windows.MessageBox]::Show(
+            [void][System.Windows.MessageBox]::Show(
                 "Could not open the folder:`n$effectivePath`n`n$($_.Exception.Message)",
-                "Error Opening Folder", "OK", "Error") | Out-Null
+                "Error Opening Folder", "OK", "Error")
         }
     }
 
