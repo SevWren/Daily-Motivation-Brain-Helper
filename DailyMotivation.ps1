@@ -2643,7 +2643,7 @@ function Show-PopupWindow {
                 if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
                     Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
                     # AG9-003: Use [void] cast instead of | Out-Null for better performance
-            [void][System.Windows.MessageBox]::Show(
+                    [void][System.Windows.MessageBox]::Show(
                         "Snooze duration must be between 1 minute and 24 hours.",
                         "Invalid Snooze", "OK", "Error")
                     return
