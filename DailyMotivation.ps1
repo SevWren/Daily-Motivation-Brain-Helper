@@ -443,21 +443,42 @@ function Write-OutcomeLog {
     }
 }
 
+function Get-SafeErrorMessage {
+    # FIX AG10-013: Sanitize error messages to prevent path exposure
+    param([Parameter(Mandatory)][string]$ErrorMessage)
+
+    # Remove file paths (Windows and UNC)
+    $safe = $ErrorMessage -replace '[A-Z]:\\[^\s"]*', '[PATH]'
+    $safe = $safe -replace '\\\\[^\s"]*', '[UNC_PATH]'
+
+    # Remove sensitive keywords with context
+    $safe = $safe -replace '(password|secret|token|key|credential)[^\s]*', '[REDACTED]'
+
+    # Remove $env: variable references that might contain paths
+    $safe = $safe -replace '\$env:[A-Z_]+\\[^\s"]*', '[ENV_PATH]'
+
+    return $safe
+}
+
 function Show-ErrorDialog {
     param(
         [Parameter(Mandatory)][string]$Message,
         [string]$Title = "Daily Motivation Brain Helper"
     )
+
+    # FIX AG10-013: Sanitize error message before displaying
+    $safeMessage = Get-SafeErrorMessage -ErrorMessage $Message
+
     try {
-        [System.Windows.MessageBox]::Show($Message, $Title, "OK", "Error") | Out-Null
+        [System.Windows.MessageBox]::Show($safeMessage, $Title, "OK", "Error") | Out-Null
     }
     catch {
         try {
-            [System.Windows.Forms.MessageBox]::Show($Message, $Title,
+            [System.Windows.Forms.MessageBox]::Show($safeMessage, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
         }
-        catch { [Console]::Error.WriteLine("ERROR [$Title]: $Message") }
+        catch { [Console]::Error.WriteLine("ERROR [$Title]: $safeMessage") }
     }
 }
 
