@@ -9,16 +9,50 @@
 BeforeAll {
     . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
+    # AG8-010: Test Pollution Prevention
+    # Store original APPDATA and ensure restoration even if Initialize-AppData fails
     $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Test_$(New-Guid)"
-    Initialize-AppData
+    $script:TestAppData = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Test_$(New-Guid)"
+
+    try {
+        $env:APPDATA = $script:TestAppData
+        $Error.Clear()  # Clear error state before initialization
+        Initialize-AppData
+
+        # AG8-010: Detect silent failures
+        if ($Error.Count -gt 0) {
+            Write-Warning "Initialize-AppData completed with $($Error.Count) errors"
+            foreach ($err in $Error) {
+                Write-Warning "  Error: $($err.Exception.Message)"
+            }
+        }
+    }
+    catch {
+        # If initialization fails, restore original APPDATA immediately
+        $env:APPDATA = $script:OriginalAppData
+        throw "BeforeAll setup failed: $_"
+    }
 }
 
 AfterAll {
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+    # AG8-010: Guaranteed cleanup with try-finally
+    try {
+        if (Test-Path $script:TestAppData) {
+            Remove-Item -Path $script:TestAppData -Recurse -Force -ErrorAction Stop
+        }
     }
-    $env:APPDATA = $script:OriginalAppData
+    catch {
+        Write-Warning "AfterAll cleanup failed: $_"
+    }
+    finally {
+        # Always restore original APPDATA, even if cleanup fails
+        $env:APPDATA = $script:OriginalAppData
+
+        # Verify APPDATA was restored correctly
+        if ($env:APPDATA -ne $script:OriginalAppData) {
+            throw "CRITICAL: APPDATA was not restored correctly. Expected '$script:OriginalAppData', got '$env:APPDATA'"
+        }
+    }
 }
 
 Describe 'Initialize-AppData' {
