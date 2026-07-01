@@ -468,6 +468,7 @@ function Write-OutcomeLog {
 
 function Get-SafeErrorMessage {
     # FIX AG10-013: Sanitize error messages to prevent path exposure
+    # AG19-003: Also strip raw stack trace lines so users never see internal script paths
     param([Parameter(Mandatory)][string]$ErrorMessage)
 
     # Remove file paths (Windows and UNC)
@@ -480,18 +481,49 @@ function Get-SafeErrorMessage {
     # Remove $env: variable references that might contain paths
     $safe = $safe -replace '\$env:[A-Z_]+\\[^\s"]*', '[ENV_PATH]'
 
+    # AG19-003: Strip PowerShell/dotnet stack trace lines (e.g. "at DailyMotivation.ps1:line 123")
+    $safe = $safe -replace '(?m)\r?\n\s+at\s+[^\r\n]+', ''
+
     return $safe
 }
 
 function Show-ErrorDialog {
+    # AG19-022: Custom scrollable WPF dialog for long error messages
+    # AG19-003: Uses Get-SafeErrorMessage to strip stack traces before display
     param(
         [Parameter(Mandatory)][string]$Message,
         [string]$Title = "Daily Motivation Brain Helper"
     )
 
-    # FIX AG10-013: Sanitize error message before displaying
+    # FIX AG10-013 / AG19-003: Sanitize error message (strips paths, credentials, stack traces)
     $safeMessage = Get-SafeErrorMessage -ErrorMessage $Message
 
+    # AG19-022: Try WPF custom scrollable dialog first
+    if ($script:WpfLoaded) {
+        try {
+            $errXamlStr = '<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" WindowStyle="ToolWindow" ResizeMode="NoResize" Width="480" SizeToContent="Height" MaxHeight="440" WindowStartupLocation="CenterScreen" Background="#0D1117" FontFamily="Segoe UI"><Border Padding="24,20"><StackPanel><ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16" Background="#111B22" Padding="10,8"><TextBlock x:Name="MsgText" TextWrapping="Wrap" FontSize="13" Foreground="#E8E8F4" LineHeight="22"/></ScrollViewer><Button x:Name="OkBtn" Content="OK" Width="80" HorizontalAlignment="Right" Background="#00BCD4" Foreground="#0D1117" FontWeight="Bold" Padding="0,8" Cursor="Hand" BorderThickness="0"/></StackPanel></Border></Window>'
+            $errXml    = [xml]$errXamlStr
+            $errReader = [System.Xml.XmlNodeReader]::new($errXml)
+            $errWin    = [Windows.Markup.XamlReader]::Load($errReader)
+            $errReader.Dispose()
+            $errWin.Title = $Title
+            $errWin.FindName("MsgText").Text = $safeMessage
+            $errOkBtn = $errWin.FindName("OkBtn")
+            $errOkBtn.Add_Click({ $errWin.Close() })
+            $errWin.Add_KeyDown({
+                param($ks, $ke)
+                if ($ke.Key -eq [System.Windows.Input.Key]::Escape -or
+                    $ke.Key -eq [System.Windows.Input.Key]::Return) {
+                    $errWin.Close()
+                }
+            })
+            [void]$errWin.ShowDialog()
+            return
+        }
+        catch { <# fall through to MessageBox fallback #> }
+    }
+
+    # Fallback: plain MessageBox (WPF not available)
     try {
         # AG9-003: Use [void] cast instead of | Out-Null for better performance
         [void][System.Windows.MessageBox]::Show($safeMessage, $Title, "OK", "Error")
@@ -1176,11 +1208,22 @@ function Get-HistoryData {
 }
 
 function Update-HistoryUI {
+    # AG19-028: Accept sort order param; default newest-first
     param(
         [Parameter(Mandatory)]
-        [object]$HistoryListControl
+        [object]$HistoryListControl,
+        [string]$SortOrder = "newest"
     )
-    $items = Get-HistoryData
+    $items = @(Get-HistoryData)
+    # AG19-028: Sort by timestamp
+    if ($items.Count -gt 0) {
+        if ($SortOrder -eq "newest") {
+            $items = @($items | Sort-Object { $_.Timestamp } -Descending)
+        }
+        else {
+            $items = @($items | Sort-Object { $_.Timestamp })
+        }
+    }
     $HistoryListControl.ItemsSource = $items
 }
 
@@ -1423,7 +1466,7 @@ function Unregister-ContextMenu {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Name="MainWin"
-    Title="Daily Motivation Brain Helper"
+    Title="Daily Motivation Brain Helper — Folder Scheduler"
     Width="520" SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
     ResizeMode="CanMinimize"
@@ -1576,7 +1619,8 @@ function Unregister-ContextMenu {
                             Style="{StaticResource SecondaryBtn}"
                             HorizontalAlignment="Left" Padding="20,8"
                             TabIndex="1"
-                            ToolTip="Choose the folder you want to open at the scheduled time"/>
+                            AutomationProperties.Name="Open folder browser dialog"
+                            ToolTip="Choose the folder you want to open at the scheduled time (Alt+O)"/>
                     <TextBlock x:Name="SelectedPathLabel"
                                Text="No folder selected"
                                FontSize="11" Foreground="#8888A8"
@@ -1607,14 +1651,29 @@ function Unregister-ContextMenu {
             </StackPanel>
 
             <!-- Schedule Button (SS-E-01: padding fixed; SS-E-02: stretch) -->
+            <!-- AG19-011: AutomationProperties for screen reader support -->
             <Button x:Name="ScheduleBtn"
-                    Content="Schedule"
+                    Content="Schedule Reminder"
                     Style="{StaticResource PrimaryBtn}"
                     IsEnabled="False"
                     HorizontalAlignment="Stretch"
                     Padding="20,10"
                     TabIndex="4"
-                    ToolTip="Create a reminder to open this folder at the scheduled time"/>
+                    AutomationProperties.Name="Schedule folder reminder"
+                    ToolTip="Create a reminder to open this folder at the scheduled time (Enter)"/>
+
+            <!-- AG19-001: Hint shown while Schedule button is disabled -->
+            <TextBlock x:Name="ScheduleHintLabel"
+                       Text="Select a folder above to enable scheduling"
+                       FontSize="11" Foreground="#5A6A7A"
+                       HorizontalAlignment="Center" Margin="0,6,0,0"
+                       Visibility="Visible"/>
+
+            <!-- AG19-002: Operation status shown during task creation / deletion -->
+            <TextBlock x:Name="OperationStatusLabel"
+                       Text="" FontSize="11" Foreground="#00BCD4"
+                       HorizontalAlignment="Center" Margin="0,4,0,0"
+                       Visibility="Collapsed"/>
 
             <!-- Undo Banner (B-04) -->
             <Border x:Name="UndoBanner"
@@ -1679,7 +1738,12 @@ function Unregister-ContextMenu {
 
             <!-- Scheduled Tasks (SS-F-07: header given more weight than body labels) -->
             <TextBlock Text="Scheduled Tasks"
-                       FontSize="13" FontWeight="Bold" Foreground="#C8C8E8" Margin="0,0,0,10"/>
+                       FontSize="13" FontWeight="Bold" Foreground="#C8C8E8" Margin="0,0,0,6"/>
+            <!-- AG19-008: Loading indicator while tasks are being fetched/synced -->
+            <TextBlock x:Name="TaskLoadingLabel"
+                       Text="Syncing tasks..."
+                       FontSize="11" Foreground="#8888A8" FontStyle="Italic"
+                       Margin="0,0,0,6" Visibility="Collapsed"/>
             <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="TaskList">
                     <ItemsControl.ItemTemplate>
@@ -1703,24 +1767,38 @@ function Unregister-ContextMenu {
                                         Content="&#x2715;"
                                         Style="{StaticResource SecondaryBtn}"
                                         Width="28" Padding="0"
-                                        ToolTip="Remove this scheduled task permanently"/>
+                                        AutomationProperties.Name="Delete scheduled task"
+                                        ToolTip="Delete this scheduled reminder (confirms before removing)"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <TextBlock x:Name="NoTasksLabel"
-                       Text="No tasks scheduled."
-                       FontSize="11" Foreground="#6A6A8A"
-                       Margin="0,8,0,0" Visibility="Collapsed"/>
+            <!-- AG19-009: Visually distinct empty state with icon and call-to-action -->
+            <Border x:Name="NoTasksLabel"
+                    Background="#0D1520" BorderBrush="#2A3A4A" BorderThickness="1"
+                    CornerRadius="6" Padding="16,12" Margin="0,8,0,0"
+                    Visibility="Collapsed">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="No reminders scheduled yet."
+                               FontSize="12" Foreground="#5A7A9A"
+                               HorizontalAlignment="Center" FontWeight="SemiBold"/>
+                    <TextBlock Text="Select a folder and click Schedule Reminder to get started."
+                               FontSize="11" Foreground="#4A5A6A"
+                               HorizontalAlignment="Center" Margin="0,4,0,0"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+            </Border>
 
             <!-- History Toggle (SS-G-01: no emoji hack; SS-G-03: stretch not orphaned) -->
+            <!-- AG19-011: AutomationProperties; AG19-024: keyboard shortcut hint -->
             <Button x:Name="HistoryToggleBtn"
                     Content="View History"
                     Style="{StaticResource SecondaryBtn}"
                     HorizontalAlignment="Stretch"
                     Margin="0,16,0,0" Padding="12,8"
-                    ToolTip="See a log of your past folder openings"/>
+                    AutomationProperties.Name="Toggle history panel"
+                    ToolTip="Show or hide your past folder reminder log (H)"/>
 
             <!-- History panel -->
             <Border x:Name="HistoryPanel"
@@ -1728,12 +1806,26 @@ function Unregister-ContextMenu {
                     CornerRadius="7" Padding="14,12" Margin="0,8,0,8"
                     Visibility="Collapsed">
                 <StackPanel>
+                    <!-- AG19-028: History header with sort toggle and clear button -->
                     <Grid>
-                        <TextBlock Text="History" FontSize="12" FontWeight="SemiBold" Foreground="#8888A8"/>
-                        <Button x:Name="ClearHistoryBtn"
-                                Content="Clear" HorizontalAlignment="Right"
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="History" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="#8888A8" VerticalAlignment="Center"/>
+                        <Button x:Name="SortHistoryBtn" Grid.Column="1"
+                                Content="Sort: Newest" Margin="0,0,6,0"
                                 Style="{StaticResource SecondaryBtn}"
                                 FontSize="10" Padding="8,3"
+                                AutomationProperties.Name="Toggle history sort order"
+                                ToolTip="Toggle sort order between newest-first and oldest-first"/>
+                        <Button x:Name="ClearHistoryBtn" Grid.Column="2"
+                                Content="Clear"
+                                Style="{StaticResource SecondaryBtn}"
+                                FontSize="10" Padding="8,3"
+                                AutomationProperties.Name="Clear history log"
                                 ToolTip="Clear all history entries"/>
                     </Grid>
                     <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
@@ -1845,10 +1937,43 @@ function Show-MainWindow {
     $historyPanel      = Find "HistoryPanel"
     $historyList       = Find "HistoryList"
     $clearHistoryBtn   = Find "ClearHistoryBtn"
+    $sortHistoryBtn    = Find "SortHistoryBtn"
+    # AG19-001: Hint label under schedule button
+    $scheduleHintLabel    = Find "ScheduleHintLabel"
+    # AG19-002: Status label during operations
+    $operationStatusLabel = Find "OperationStatusLabel"
+    # AG19-008: Loading label during task sync
+    $taskLoadingLabel     = Find "TaskLoadingLabel"
 
     # Features not yet reimplemented - keep panels hidden
     $lastFolderBanner.Visibility                  = "Collapsed"
     (Find "RecentFoldersPanel").Visibility         = "Collapsed"
+
+    # AG19-005: First-run onboarding — show once, then write flag file
+    $firstRunPath = Join-Path $script:AppDataDir "first_run.done"
+    if (-not (Test-Path $firstRunPath)) {
+        try {
+            $cfgDir = $script:AppDataDir
+            [void][System.Windows.MessageBox]::Show(
+                "Welcome to Daily Motivation Brain Helper!`n`n" +
+                "Getting Started:`n" +
+                "  1. Drop a folder into the zone, or click Select Folder`n" +
+                "  2. Choose Today or Tomorrow as the schedule time`n" +
+                "  3. Click Schedule Reminder — a popup will open the folder at that time`n`n" +
+                "Keyboard Shortcuts:`n" +
+                "  Enter       Schedule the selected folder`n" +
+                "  Escape      Close this window`n" +
+                "  F1          Show this help again`n" +
+                "  H           Toggle history panel`n`n" +
+                "AG19-015 — Settings Info:`n" +
+                "  Trigger hour and thresholds are configured in:`n" +
+                "  $cfgDir\config.json`n" +
+                "  Changes take effect the next time you open this window.",
+                "Welcome! — Daily Motivation Brain Helper", "OK", "Information")
+            Set-Content -Path $firstRunPath -Value (Get-Date -Format "yyyy-MM-dd") -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
+        catch { Write-DLog "First-run dialog failed: $_" "WARN" }
+    }
 
     # State
     $script:selectedPath = ""
@@ -1869,6 +1994,8 @@ function Show-MainWindow {
         $selectedPathLabel.Text       = $Path
         $selectedPathLabel.Foreground = "#C8C8E8"
         $scheduleBtn.IsEnabled        = $true
+        # AG19-001: Hide hint once a folder is selected
+        $scheduleHintLabel.Visibility = "Collapsed"
     }
 
     function Do-Schedule {
@@ -1881,8 +2008,20 @@ function Show-MainWindow {
         }
         $triggerTime = Get-ScheduleTime -TodayRadioControl $todayRadio
 
+        # AG19-002: Show loading state during task creation; disable button to prevent double-click
+        $scheduleBtn.IsEnabled        = $false
+        $operationStatusLabel.Text    = "Creating reminder..."
+        $operationStatusLabel.Visibility = "Visible"
+        # Force a render pass so the label is visible before the blocking call
+        [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke(
+            [System.Windows.Threading.DispatcherPriority]::Render, [System.Action]{})
+
         # Attempt to schedule the folder (business logic extracted to Invoke-FolderScheduling)
         $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime
+
+        # AG19-002: Restore UI after scheduling attempt
+        $operationStatusLabel.Visibility = "Collapsed"
+        $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
 
         # Handle validation errors
         if (-not $result.Success -and -not $result.IsDuplicate) {
@@ -2014,11 +2153,11 @@ function Show-MainWindow {
                 $script:undoScheduledFor = $null
                 Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
-                # Provide confirmation feedback that undo succeeded (A10-ISSUE-06)
-                $undoLabel.Text        = "Task removed."
+                # AG19-020: More informative status message with longer display time
+                $undoLabel.Text        = "Reminder cancelled successfully. Your folder was not scheduled."
                 $undoBanner.Visibility = "Visible"
                 $undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
-                $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(1500)
+                $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
                 $undoFeedbackTimer.Add_Tick({
                     $undoFeedbackTimer.Stop()
                     # AG17-009: Dispose timer to prevent resource leak
@@ -2055,13 +2194,16 @@ function Show-MainWindow {
             }
         })
 
+    # AG19-028: Track sort order state
+    $script:historySortOrder = "newest"
+
     $historyToggleBtn.Add_Click({
             if ($historyPanel.Visibility -eq "Visible") {
                 $historyPanel.Visibility  = "Collapsed"
                 $historyToggleBtn.Content = "View History"   # matches new Content attribute
             }
             else {
-                Update-HistoryUI -HistoryListControl $historyList
+                Update-HistoryUI -HistoryListControl $historyList -SortOrder $script:historySortOrder
                 $historyPanel.Visibility  = "Visible"
                 $historyToggleBtn.Content = "Hide History"
             }
@@ -2073,9 +2215,58 @@ function Show-MainWindow {
                 "Clear History", "YesNo", "Question")
             if ($confirm -eq "Yes") {
                 if (Test-Path -Path "$script:LogPath" -PathType Leaf) { Clear-Content $script:LogPath }
-                Update-HistoryUI -HistoryListControl $historyList
+                Update-HistoryUI -HistoryListControl $historyList -SortOrder $script:historySortOrder
             }
         })
+
+    # AG19-028: Toggle history sort order between newest-first and oldest-first
+    $sortHistoryBtn.Add_Click({
+        if ($script:historySortOrder -eq "newest") {
+            $script:historySortOrder = "oldest"
+            $sortHistoryBtn.Content  = "Sort: Oldest"
+        }
+        else {
+            $script:historySortOrder = "newest"
+            $sortHistoryBtn.Content  = "Sort: Newest"
+        }
+        if ($historyPanel.Visibility -eq "Visible") {
+            Update-HistoryUI -HistoryListControl $historyList -SortOrder $script:historySortOrder
+        }
+    })
+
+    # AG19-024: Keyboard shortcuts — Enter=Schedule, Escape=Close, F1=Help, H=History
+    $window.Add_KeyDown({
+        param($ks, $ke)
+        switch ($ke.Key) {
+            ([System.Windows.Input.Key]::Return) {
+                if ($scheduleBtn.IsEnabled -and $script:selectedPath) {
+                    Do-Schedule -FolderPath $script:selectedPath
+                    $ke.Handled = $true
+                }
+            }
+            ([System.Windows.Input.Key]::Escape) {
+                $window.Close()
+                $ke.Handled = $true
+            }
+            ([System.Windows.Input.Key]::F1) {
+                [void][System.Windows.MessageBox]::Show(
+                    "Keyboard Shortcuts:`n`n" +
+                    "  Enter    Schedule the selected folder`n" +
+                    "  Escape   Close this window`n" +
+                    "  F1       Show this help`n" +
+                    "  H        Toggle history panel`n`n" +
+                    "Settings file: $($script:AppDataDir)\config.json",
+                    "Help — Keyboard Shortcuts", "OK", "Information")
+                $ke.Handled = $true
+            }
+            ([System.Windows.Input.Key]::H) {
+                $historyToggleBtn.RaiseEvent(
+                    [System.Windows.RoutedEventArgs]::new(
+                        [System.Windows.Controls.Button]::ClickEvent))
+                $ke.Handled = $true
+            }
+        }
+    })
 
     # AG3-001, AG3-015, AG3-017: Add window cleanup handler
     $window.Add_Closed({
@@ -2115,9 +2306,19 @@ function Show-MainWindow {
         Write-DLog "MainWindow closing - timers stopped"
     })
 
-    # Reconcile task statuses with Windows Task Scheduler before displaying
-    Sync-TaskStatuses
-    Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
+    # AG19-008: Defer task sync until after window renders to show loading indicator
+    $taskLoadingLabel.Visibility = "Visible"
+    $initSyncTimer = [System.Windows.Threading.DispatcherTimer]::new()
+    $initSyncTimer.Interval = [System.TimeSpan]::FromMilliseconds(80)
+    $initSyncTimer.Add_Tick({
+        $initSyncTimer.Stop()
+        try { $initSyncTimer.Dispose() } catch {}
+        Sync-TaskStatuses
+        Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
+        $taskLoadingLabel.Visibility = "Collapsed"
+    })
+    $initSyncTimer.Start()
+
     # AG6-004: Wrap ShowDialog in try-finally to ensure window disposal
     try {
         # AG9-003: Use [void] cast instead of | Out-Null for better performance
@@ -2171,19 +2372,46 @@ function Show-MainWindow {
                 <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#8888A8"
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#303050" Height="1" Margin="0,0,0,18"/>
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,22">
+                <!-- AG19-018: Countdown row with Pause/Resume button -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,22" VerticalAlignment="Center">
                     <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
                                Foreground="#00BCD4" VerticalAlignment="Center"/>
                     <TextBlock Text="s" FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
+                    <Button x:Name="PauseBtn" Content="Pause" Margin="12,0,0,0"
+                            FontSize="11" Height="22" Padding="8,0"
+                            Foreground="#8888A8" Background="#1C1C2C"
+                            BorderBrush="#3A3A5A" BorderThickness="1" Cursor="Hand"
+                            AutomationProperties.Name="Pause or resume countdown timer"
+                            ToolTip="Pause or resume the auto-open countdown">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="4">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bd" Property="Background" Value="#252538"/>
+                                        <Setter TargetName="Bd" Property="BorderBrush" Value="#5A5A7A"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <!-- B-11: Dismiss for Today — TabIndex=3 (lowest priority) -->
+                    <!-- AG19-011: AutomationProperties; AG19-014: explicit dismiss action -->
                     <Button x:Name="DismissBtn" Content="Dismiss for Today"
                             Width="148" Height="36" Foreground="#7878A0" FontSize="11"
                             Background="#14141F" BorderBrush="#555580" BorderThickness="1"
-                            Cursor="Hand" Margin="0,0,8,0" TabIndex="3">
+                            Cursor="Hand" Margin="0,0,8,0" TabIndex="3"
+                            AutomationProperties.Name="Dismiss this notification for today"
+                            ToolTip="Close this popup and remove the scheduled task for today">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bd" Background="{TemplateBinding Background}"
@@ -2206,10 +2434,13 @@ function Show-MainWindow {
                     </Button>
                     <!-- B-10: Snooze split-button -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
+                        <!-- AG19-011: AutomationProperties for snooze button -->
                         <Button x:Name="SnoozeBtn" Content="Snooze 5m" Height="36"
                                 Foreground="#8585A5" FontSize="12" FontWeight="SemiBold"
                                 Background="#1C1C2C" BorderBrush="#3A3A5A"
-                                BorderThickness="1,1,0,1" Cursor="Hand" Padding="10,0" TabIndex="1">
+                                BorderThickness="1,1,0,1" Cursor="Hand" Padding="10,0" TabIndex="1"
+                                AutomationProperties.Name="Snooze reminder"
+                                ToolTip="Snooze this reminder (use dropdown to change duration)">
                             <Button.Template>
                                 <ControlTemplate TargetType="Button">
                                     <Border x:Name="Bd" Background="{TemplateBinding Background}"
@@ -2266,9 +2497,11 @@ function Show-MainWindow {
                         </Button>
                     </StackPanel>
                     <!-- Open Folder — TabIndex=0 (primary action) -->
+                    <!-- AG19-011: AutomationProperties for primary action -->
                     <Button x:Name="LetsGoBtn" Content="Open Folder &#x2192;" Width="150" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
-                            Background="#00BCD4" BorderThickness="0" Cursor="Hand" TabIndex="0">
+                            Background="#00BCD4" BorderThickness="0" Cursor="Hand" TabIndex="0"
+                            AutomationProperties.Name="Open scheduled folder now">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7">
@@ -2479,6 +2712,8 @@ function Show-PopupWindow {
     $missingPathLabel = Find "MissingPathLabel"
     $pathDismissBtn   = Find "PathDismissBtn"
     $rePickBtn        = Find "RePickBtn"
+    # AG19-018: Pause button (only in normal mode; path-missing panel doesn't have countdown)
+    $pauseBtn         = if (-not $script:pathMissing) { Find "PauseBtn" } else { $null }
 
     # Populate UI based on mode (normal vs path-missing)
     if ($script:pathMissing) {
@@ -2513,6 +2748,7 @@ function Show-PopupWindow {
     $script:snoozeCount     = 0
     $script:newExplorerPath = ""
     $script:windowClosed    = $false   # UB-002: guard against queued dispatcher tick
+    $script:timerPaused     = $false   # AG19-018: pause/resume support
 
     # Fade-in animation with recovery fallback (A6-BUG-01)
     $window.Add_Loaded({
@@ -2600,6 +2836,24 @@ function Show-PopupWindow {
         })
         $timer.Start()
         Write-DLog "Countdown timer started"
+
+        # AG19-018: Pause/Resume button toggles countdown timer
+        if ($null -ne $pauseBtn) {
+            $pauseBtn.Add_Click({
+                if ($script:timerPaused) {
+                    $timer.Start()
+                    $pauseBtn.Content       = "Pause"
+                    $script:timerPaused     = $false
+                    Write-DLog "Countdown resumed"
+                }
+                else {
+                    $timer.Stop()
+                    $pauseBtn.Content       = "Resume"
+                    $script:timerPaused     = $true
+                    Write-DLog "Countdown paused"
+                }
+            })
+        }
     }
 
     # Snooze duration helpers

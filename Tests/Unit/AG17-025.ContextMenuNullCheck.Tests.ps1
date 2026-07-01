@@ -1,32 +1,52 @@
+#Requires -Modules Pester
+<#
+.SYNOPSIS
+    Tests for AG17-025: ContextMenu null check before accessing .IsOpen in the
+    snoozeDropBtn click handler to prevent NullReferenceException on XAML load failure.
+#>
+
 BeforeAll {
     . "$PSScriptRoot/../../DailyMotivation.ps1" -NoRun
 }
 
 Describe "AG17-025: Missing Null Checks Before Accessing ContextMenu" {
-    Context "When snooze dropdown button is clicked" {
-        It "Should check if ContextMenu exists before accessing IsOpen property" {
-            # The issue: Line 2575 accesses $snoozeDropBtn.ContextMenu.IsOpen without
-            # checking if ContextMenu is null. If XAML parsing fails or initialization
-            # error occurs, this throws a null reference exception.
-
-            # Expected behavior: Add null check in handler before accessing .IsOpen
-            # Code location: DailyMotivation.ps1 lines 2572-2576
-
-            $true | Should -BeTrue -Because "Test documents required fix for AG17-025"
+    Context "snoozeDropBtn.Add_Click handler" {
+        BeforeAll {
+            $script:content = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
         }
 
-        It "Should log error and handle gracefully when ContextMenu is null" {
-            # Expected: If ContextMenu is null, log error message and return early
-            # instead of throwing null reference exception
-
-            $true | Should -BeTrue -Because "Test documents error handling requirement"
+        It "Should contain a null check for snoozeDropBtn.ContextMenu before accessing its properties" {
+            $script:content | Should -Match '\$null -eq \$snoozeDropBtn\.ContextMenu' `
+                -Because "Accessing .IsOpen on a null ContextMenu throws NullReferenceException; null guard required (AG17-025)"
         }
 
-        It "Should handle XAML load failures without crashing" {
-            # Scenario: XAML parsing fails, ContextMenu not initialized
-            # Expected: Button click handler doesn't crash, logs diagnostic error
+        It "Should return early from the click handler when ContextMenu is null" {
+            $nullCheckIdx = $script:content.IndexOf('$null -eq $snoozeDropBtn.ContextMenu')
+            $nullCheckIdx | Should -BeGreaterThan 0 `
+                -Because "Null check must exist for snoozeDropBtn.ContextMenu (AG17-025)"
 
-            $true | Should -BeTrue -Because "Test documents failure resilience requirement"
+            # Inspect next 250 chars after the null check for a return statement
+            $guardContext = $script:content.Substring($nullCheckIdx, [Math]::Min(250, $script:content.Length - $nullCheckIdx))
+            $guardContext | Should -Match '\breturn\b' `
+                -Because "Guard block must return early when ContextMenu is null to prevent NullReferenceException (AG17-025)"
+        }
+
+        It "Should log a diagnostic error message when ContextMenu is null" {
+            $nullCheckIdx = $script:content.IndexOf('$null -eq $snoozeDropBtn.ContextMenu')
+            $nullCheckIdx | Should -BeGreaterThan 0
+
+            $guardContext = $script:content.Substring($nullCheckIdx, [Math]::Min(300, $script:content.Length - $nullCheckIdx))
+            $guardContext | Should -Match 'Write-DLog' `
+                -Because "A diagnostic error should be logged when ContextMenu is unexpectedly null (AG17-025)"
+        }
+
+        It "Should only access ContextMenu.IsOpen after the null guard" {
+            $nullCheckIdx = $script:content.IndexOf('$null -eq $snoozeDropBtn.ContextMenu')
+            $isOpenIdx    = $script:content.IndexOf('$snoozeDropBtn.ContextMenu.IsOpen')
+            $nullCheckIdx | Should -BeGreaterThan 0 -Because "Null guard must exist (AG17-025)"
+            $isOpenIdx    | Should -BeGreaterThan 0 -Because "ContextMenu.IsOpen must be set in handler"
+            $isOpenIdx    | Should -BeGreaterThan $nullCheckIdx `
+                -Because ".IsOpen must only be accessed after the null guard (AG17-025)"
         }
     }
 }

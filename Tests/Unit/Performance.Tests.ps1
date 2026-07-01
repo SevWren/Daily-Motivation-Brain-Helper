@@ -47,8 +47,12 @@ Describe 'AG14-001: FolderBrowserDialog Not Disposed' {
     }
 }
 
-Describe 'AG14-007: DriveInfo Not Disposed' {
-    It 'Should dispose DriveInfo in Invoke-FolderScheduling function' {
+Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
+    # DriveInfo does NOT implement IDisposable. Calling .Dispose() on it throws a
+    # MissingMethodException at runtime. HOTFIX 92e5f60 removed all DriveInfo.Dispose()
+    # calls. These tests verify that regression does not reoccur.
+
+    It 'Should NOT call Dispose() on DriveInfo in Invoke-FolderScheduling — DriveInfo is not IDisposable' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
         $content = Get-Content $sourceFile -Raw
 
@@ -56,16 +60,16 @@ Describe 'AG14-007: DriveInfo Not Disposed' {
         $functionEnd = $content.IndexOf('function ', $functionStart + 100)
         $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
 
-        # Check for DriveInfo usage and disposal
         $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
-        $hasDisposal = $functionBody -match 'driveInfo.*Dispose'
+        $hasDisposal  = $functionBody -match 'driveInfo.*\.Dispose\(\)'
 
         if ($hasDriveInfo) {
-            $hasDisposal | Should -Be $true -Because "DriveInfo must be disposed to prevent file system handle leak (AG14-007)"
+            # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
+            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
         }
     }
 
-    It 'Should dispose DriveInfo in New-MotivationTask function' {
+    It 'Should NOT call Dispose() on DriveInfo in New-MotivationTask — DriveInfo is not IDisposable' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
         $content = Get-Content $sourceFile -Raw
 
@@ -73,12 +77,12 @@ Describe 'AG14-007: DriveInfo Not Disposed' {
         $functionEnd = $content.IndexOf('function ', $functionStart + 100)
         $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
 
-        # Check for DriveInfo usage and disposal
         $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
-        $hasDisposal = $functionBody -match 'driveInfo.*Dispose'
+        $hasDisposal  = $functionBody -match 'driveInfo.*\.Dispose\(\)'
 
         if ($hasDriveInfo) {
-            $hasDisposal | Should -Be $true -Because "DriveInfo must be disposed to prevent file system handle leak (AG14-007)"
+            # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
+            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
         }
     }
 }
