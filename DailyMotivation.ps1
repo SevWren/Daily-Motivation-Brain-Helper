@@ -1557,6 +1557,7 @@ function Unregister-ContextMenu {
                             Content="Select Folder"
                             Style="{StaticResource SecondaryBtn}"
                             HorizontalAlignment="Left" Padding="20,8"
+                            TabIndex="1"
                             ToolTip="Choose the folder you want to open at the scheduled time"/>
                     <TextBlock x:Name="SelectedPathLabel"
                                Text="No folder selected"
@@ -1576,11 +1577,13 @@ function Unregister-ContextMenu {
                                  FontSize="12" Foreground="#E8E8F4"
                                  Margin="0,0,24,0"
                                  Visibility="Collapsed"
+                                 TabIndex="2"
                                  ToolTip="Schedule this folder to open today at 2:00 PM"/>
                     <RadioButton x:Name="TomorrowRadio"
                                  Content="Tomorrow at 2:00 PM"
                                  FontSize="12" Foreground="#E8E8F4"
                                  IsChecked="True"
+                                 TabIndex="3"
                                  ToolTip="Schedule this folder to open tomorrow at 2:00 PM"/>
                 </StackPanel>
             </StackPanel>
@@ -1592,6 +1595,7 @@ function Unregister-ContextMenu {
                     IsEnabled="False"
                     HorizontalAlignment="Stretch"
                     Padding="20,10"
+                    TabIndex="4"
                     ToolTip="Create a reminder to open this folder at the scheduled time"/>
 
             <!-- Undo Banner (B-04) -->
@@ -1618,6 +1622,7 @@ function Unregister-ContextMenu {
                             Content="Undo"
                             Style="{StaticResource SecondaryBtn}"
                             FontSize="11" Padding="12,5" Margin="10,0,0,0"
+                            TabIndex="5"
                             ToolTip="Cancel the schedule you just created"/>
                 </Grid>
             </Border>
