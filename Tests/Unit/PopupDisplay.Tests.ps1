@@ -103,3 +103,19 @@ Describe 'Truncate-TextForDisplay' {
         }
     }
 }
+
+Describe 'Message title and body validation' {
+    Context 'AG12-004: Title and body length limits' {
+        It 'All message titles should be 40 characters or less' {
+            foreach ($msg in $Messages) {
+                $msg.Title.Length | Should -BeLessOrEqual 40 -Because "Title '$($msg.Title)' exceeds 40 char limit"
+            }
+        }
+
+        It 'All message bodies should be 150 characters or less' {
+            foreach ($msg in $Messages) {
+                $msg.Body.Length | Should -BeLessOrEqual 150 -Because "Body for '$($msg.Title)' exceeds 150 char limit"
+            }
+        }
+    }
+}

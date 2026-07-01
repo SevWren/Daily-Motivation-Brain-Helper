@@ -790,10 +790,13 @@ function New-MotivationTask {
 
         # AG5-010: Use S4U (Service for User) LogonType instead of Interactive
         # so tasks can fire even when user is not actively logged in (e.g., workstation locked)
-        $principal = New-ScheduledTaskPrincipal `
-            -UserId    $env:USERNAME `
-            -LogonType S4U   `
-            -RunLevel  $runLevel
+        # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+        $principalParams = @{
+            UserId    = $env:USERNAME
+            LogonType = 'S4U'
+            RunLevel  = $runLevel
+        }
+        $principal = New-ScheduledTaskPrincipal @principalParams
 
         # FIX AG10-001 & AG10-010: Sanitize Description - use hash instead of raw path
         # Prevents information leakage via Task Scheduler description field
@@ -804,14 +807,18 @@ function New-MotivationTask {
 
         try {
             # AG5-001: Capture return value to verify task was actually created
-            $registeredTask = Register-ScheduledTask `
-                -TaskName    $taskName  `
-                -Action      $action    `
-                -Trigger     $trigger   `
-                -Settings    $settings  `
-                -Principal   $principal `
-                -Description $safeDescription `
-                -Force -ErrorAction Stop
+            # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+            $registerParams = @{
+                TaskName    = $taskName
+                Action      = $action
+                Trigger     = $trigger
+                Settings    = $settings
+                Principal   = $principal
+                Description = $safeDescription
+                Force       = $true
+                ErrorAction = 'Stop'
+            }
+            $registeredTask = Register-ScheduledTask @registerParams
 
             # AG5-001: Verify the task was actually created and has correct properties
             if ($null -eq $registeredTask) {
@@ -1332,8 +1339,15 @@ function Invoke-FolderScheduling {
     }
 
     # Write popup config for the scheduled task
-    Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
-        -ExplorerPath $FolderPath -TaskId $result.TaskId
+    # AG9-007: Removed backtick line continuation - use splatting for complex calls
+    $popupConfigParams = @{
+        Glyph        = $msg.Glyph
+        Title        = $msg.Title
+        Body         = $msg.Body
+        ExplorerPath = $FolderPath
+        TaskId       = $result.TaskId
+    }
+    Set-PopupConfig @popupConfigParams
 
     # REQ-010: Register context menu on successful scheduling
     if ($script:ExePath) {
@@ -2149,7 +2163,7 @@ function Show-MainWindow {
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
                     <TextBlock x:Name="GlyphText" FontSize="26" Foreground="#00BCD4"
                                VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="TitleText" FontSize="19" FontWeight="Bold"
+                    <TextBlock x:Name="TitleText" FontSize="19" FontWeight="Bold" MaxHeight="60"
                                Foreground="#E8E8F4" VerticalAlignment="Center"
                                TextWrapping="Wrap" MaxWidth="380"/>
                 </StackPanel>
