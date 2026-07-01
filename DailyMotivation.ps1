@@ -97,9 +97,10 @@ function Initialize-WindowsAssemblies {
         $errMsg = "Could not load WPF UI components (.NET Framework 4.x required). The application cannot display its interface.`n`nDetails: $wpfErr"
         Write-DLog "WPF assembly load failed: $wpfErr" "ERROR"
         if ($script:FormsLoaded) {
-            [System.Windows.Forms.MessageBox]::Show($errMsg, "Daily Motivation Brain Helper",
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.Forms.MessageBox]::Show($errMsg, "Daily Motivation Brain Helper",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+                [System.Windows.Forms.MessageBoxIcon]::Error)
         }
         else {
             [Console]::Error.WriteLine($errMsg)
@@ -1841,9 +1842,10 @@ function Show-MainWindow {
     function Set-SelectedPath {
         param([string]$Path)
         if (-not (Test-Path $Path -PathType Container)) {
-            [System.Windows.MessageBox]::Show(
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.MessageBox]::Show(
                 "That path does not exist or is not a folder:`n$Path",
-                "Invalid Folder", "OK", "Warning") | Out-Null
+                "Invalid Folder", "OK", "Warning")
             return
         }
         $script:selectedPath          = $Path

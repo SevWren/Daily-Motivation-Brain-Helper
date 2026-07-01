@@ -57,3 +57,49 @@ Describe 'Escape-XmlText' {
         }
     }
 }
+
+Describe 'Truncate-TextForDisplay' {
+    Context 'AG12-003: Text length truncation for popup body' {
+        It 'Should not truncate text under 150 characters' {
+            $text = "This is a normal message that fits within limits"
+            $result = Truncate-TextForDisplay -Text $text -MaxLength 150
+            $result | Should -Be $text
+        }
+
+        It 'Should truncate text over 150 characters with ellipsis' {
+            $text = "A" * 160
+            $result = Truncate-TextForDisplay -Text $text -MaxLength 150
+            $result.Length | Should -Be 150
+            $result | Should -Match '\.\.\.$'
+        }
+
+        It 'Should preserve content and add ellipsis at exactly 150 chars' {
+            $text = "A" * 160
+            $result = Truncate-TextForDisplay -Text $text -MaxLength 150
+            $result | Should -Be (("A" * 147) + "...")
+        }
+
+        It 'Should handle empty string' {
+            $result = Truncate-TextForDisplay -Text "" -MaxLength 150
+            $result | Should -Be ""
+        }
+
+        It 'Should handle null input gracefully' {
+            $result = Truncate-TextForDisplay -Text $null -MaxLength 150
+            $result | Should -Be ''
+        }
+
+        It 'Should handle text exactly at max length' {
+            $text = "A" * 150
+            $result = Truncate-TextForDisplay -Text $text -MaxLength 150
+            $result | Should -Be $text
+        }
+
+        It 'Should handle custom max length' {
+            $text = "A" * 100
+            $result = Truncate-TextForDisplay -Text $text -MaxLength 50
+            $result.Length | Should -Be 50
+            $result | Should -Match '\.\.\.$'
+        }
+    }
+}
