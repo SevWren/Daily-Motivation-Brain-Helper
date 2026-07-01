@@ -170,21 +170,21 @@
 |--------|----------|-------|--------|
 | AG4-001 | CRITICAL | Task ID collision not retried | RESOLVED |
 | AG4-002 | MEDIUM | `Write-DLog` missing `-Encoding UTF8` | **OPEN** |
+| AG4-013 | HIGH | `Save-TasksJson` doesn't ensure parent directory exists | **OPEN** |
+| AG4-009 | MEDIUM | `Sync-TaskStatuses` swallows `Get-ScheduledTask` errors with empty catch | **OPEN** |
 | AG4-003 | MEDIUM | Debug log path hardcoded to `/tmp` | RESOLVED |
 | AG4-004 | HIGH | `Register-ScheduledTask` return value discarded | RESOLVED |
 | AG4-005 | CRITICAL | Rollback on `Save-TasksJson` failure not attempted | RESOLVED |
 | AG4-006 | HIGH | Rollback itself not verified | RESOLVED |
 | AG4-007 | HIGH | `Sync-TaskStatuses` recovers path from description but description now stores hash | RESOLVED |
 | AG4-008 | HIGH | `Remove-MotivationTask` doesn't check `Sync-TaskStatuses` result | RESOLVED |
-| AG4-009 | MEDIUM | `Sync-TaskStatuses` swallows `Get-ScheduledTask` errors with empty catch | **OPEN** |
 | AG4-010 | HIGH | `New-MotivationTask` doesn't validate exe path exists | RESOLVED |
 | AG4-011 | MEDIUM | UNC path allowed without security warning | RESOLVED |
 | AG4-012 | HIGH | `New-MotivationTask` description leaks full folder path | RESOLVED |
-| AG4-013 | HIGH | `Save-TasksJson` doesn't ensure parent directory exists | **OPEN** |
-| AG4-014 | HIGH | Task trigger time not validated before registration | RESOLVED |
-| AG4-015 | LOW | `$env:USERNAME` used in principal without guard | RESOLVED |
 | AG4-016 | LOW | `Clear-Content` in `Remove-MotivationTask` missing `-ErrorAction` | N/A |
 | AG4-017 | HIGH | `Remove-MotivationTask` skips unregister for DELETED status | RESOLVED |
+| AG4-014 | HIGH | Task trigger time not validated before registration | RESOLVED |
+| AG4-015 | LOW | `$env:USERNAME` used in principal without guard | RESOLVED |
 | AG4-018 | MEDIUM | Exponential backoff cap 5000ms too long in UI thread | RESOLVED |
 | AG4-019 | HIGH | `New-MotivationTask` path traversal check can return multiple values | RESOLVED |
 | AG4-020 | HIGH | `Sync-TaskStatuses` modifies `$tasks` while iterating | RESOLVED |
@@ -199,30 +199,30 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG5-001 | HIGH | `Register-ScheduledTask` return value discarded | RESOLVED |
-| AG5-002 | HIGH | `Register-ContextMenu` doesn't validate exe path | RESOLVED |
 | AG5-003 | MEDIUM | Registry key creation not verified post-write | **OPEN** |
 | AG5-004 | MEDIUM | `Unregister-ContextMenu` returns no success/failure signal | **OPEN** |
+| AG5-011 | HIGH | `Register-ContextMenu` no rollback on partial registry failure | **OPEN** |
+| AG5-016 | MEDIUM | Context menu command path not hardened for special chars in exe path | **OPEN** |
+| AG5-017 | MEDIUM | `Unregister-ContextMenu` key path hardcoded | WINDOWS-ONLY |
+| AG5-018 | LOW | `Start-UndoTimer` `$Minutes=0` bypass if param validation skipped | **OPEN** |
+| AG5-019 | LOW | `Register-ContextMenu` `Test-Path` TOCTOU — symlink swap window | OPEN (low) |
+| AG5-021 | MEDIUM | `S4U` LogonType requires user logged in at registration | WINDOWS-ONLY |
+| AG5-020 | LOW | Task description truncated to 16 hex chars — collision risk | RESOLVED |
+| AG5-023 | MEDIUM | `Get-ScheduleTime` doesn't account for DST transitions | WINDOWS-ONLY |
+| AG5-022 | HIGH | `Register-ScheduledTask` `RunLevel` not set for network paths | RESOLVED |
+| AG5-024 | LOW | `Unregister-ContextMenu` doesn't log success | RESOLVED |
+| AG5-001 | HIGH | `Register-ScheduledTask` return value discarded | RESOLVED |
+| AG5-002 | HIGH | `Register-ContextMenu` doesn't validate exe path | RESOLVED |
 | AG5-005 | HIGH | Context menu command value uses unquoted path | RESOLVED |
 | AG5-006 | HIGH | `Get-ScheduleTime` returns past time for today | RESOLVED |
 | AG5-007 | MEDIUM | `Start-UndoTimer` interval not validated | RESOLVED |
 | AG5-008 | HIGH | `Start-UndoTimer` leaks timer on second call | RESOLVED |
 | AG5-009 | HIGH | `Start-UndoTimer` progress bar update throws on disposed controls | RESOLVED |
 | AG5-010 | CRITICAL | Task Scheduler uses Interactive logon type | RESOLVED |
-| AG5-011 | HIGH | `Register-ContextMenu` no rollback on partial registry failure | **OPEN** |
 | AG5-012 | MEDIUM | `Get-ScheduleTime` doesn't guard `$null` config | RESOLVED |
 | AG5-013 | HIGH | `Start-UndoTimer` doesn't dispose on undo confirm | RESOLVED |
 | AG5-014 | MEDIUM | `Get-ScheduleTime` `TodayRadioControl` can be `$null` | RESOLVED |
 | AG5-015 | MEDIUM | `Start-UndoTimer` `$undoFeedbackTimer` not scoped to function | RESOLVED |
-| AG5-016 | MEDIUM | Context menu command path not hardened for special chars in exe path | **OPEN** |
-| AG5-017 | MEDIUM | `Unregister-ContextMenu` key path hardcoded | WINDOWS-ONLY |
-| AG5-018 | LOW | `Start-UndoTimer` `$Minutes=0` bypass if param validation skipped | **OPEN** |
-| AG5-019 | LOW | `Register-ContextMenu` `Test-Path` TOCTOU — symlink swap window | OPEN (low) |
-| AG5-020 | LOW | Task description truncated to 16 hex chars — collision risk | RESOLVED |
-| AG5-021 | MEDIUM | `S4U` LogonType requires user logged in at registration | WINDOWS-ONLY |
-| AG5-022 | HIGH | `Register-ScheduledTask` `RunLevel` not set for network paths | RESOLVED |
-| AG5-023 | MEDIUM | `Get-ScheduleTime` doesn't account for DST transitions | WINDOWS-ONLY |
-| AG5-024 | LOW | `Unregister-ContextMenu` doesn't log success | RESOLVED |
 | AG5-025 | LOW | `Register-ContextMenu` `New-Item -Force` overwrites key silently | RESOLVED |
 
 ---
@@ -232,6 +232,9 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
+| AG6-008 | MEDIUM | `Do-Schedule` captures `$hour` before config reload (stale) | **OPEN** |
+| AG6-011 | MEDIUM | `$undoBanner.Visibility` set without null-check | **OPEN** |
+| AG6-022 | MEDIUM | `Do-Schedule` calls `Get-Config` but result not cached locally | **OPEN** |
 | AG6-001 | HIGH | `XmlNodeReader` not disposed in `Show-MainWindow` | RESOLVED |
 | AG6-002 | HIGH | `XamlReader.Load` not wrapped in try-catch | RESOLVED |
 | AG6-003 | HIGH | STA thread not verified before `ShowDialog()` | RESOLVED |
@@ -239,10 +242,8 @@
 | AG6-005 | HIGH | Window `Closing` event not hooked for cleanup | RESOLVED |
 | AG6-006 | HIGH | `DispatcherTimer` brush resources not disposed on window close | RESOLVED |
 | AG6-007 | MEDIUM | XAML `x:Name` attribute left on local copy | RESOLVED |
-| AG6-008 | MEDIUM | `Do-Schedule` captures `$hour` before config reload (stale) | **OPEN** |
 | AG6-009 | HIGH | `Invoke-FolderScheduling` not extracted from `Show-MainWindow` | RESOLVED |
 | AG6-010 | HIGH | `Select-Folder` dialog not disposed | RESOLVED |
-| AG6-011 | MEDIUM | `$undoBanner.Visibility` set without null-check | **OPEN** |
 | AG6-012 | HIGH | `Update-TaskListUI` called before window is shown | RESOLVED |
 | AG6-013 | LOW | `Show-MainWindow` doesn't return structured result | RESOLVED |
 | AG6-014 | HIGH | `FindName()` called without null guard | RESOLVED |
@@ -253,7 +254,6 @@
 | AG6-019 | MEDIUM | `Show-MainWindow` XAML has hardcoded `x:Name="MainWin"` | RESOLVED |
 | AG6-020 | HIGH | Task list removes task without confirmation | WINDOWS-ONLY |
 | AG6-021 | MEDIUM | `Update-TaskListUI` array wrap not applied consistently | RESOLVED |
-| AG6-022 | MEDIUM | `Do-Schedule` calls `Get-Config` but result not cached locally | **OPEN** |
 | AG6-023 | LOW | `Add_Closing` vs `Add_Closed` — cleanup misses in-progress animations | WINDOWS-ONLY |
 | AG6-024 | HIGH | `Start-UndoTimer` called before `$undoBanner` guaranteed visible | RESOLVED |
 | AG6-025 | MEDIUM | `Show-MainWindow` brush disposal list populated conditionally | RESOLVED |
@@ -265,28 +265,28 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
+| AG7-005 | HIGH | Snooze race — task removed before new task confirmed written | **OPEN** |
+| AG7-007 | CRITICAL | `$script:openExplorer=$true` default causes Explorer launch on exception | **OPEN** |
+| AG7-008 | HIGH | `Remove-MotivationTask` failure logged but not surfaced to user | **OPEN** |
+| AG7-011 | CRITICAL | `Escape-XmlText` not applied to `$config.title`/`$config.body` | **OPEN** |
+| AG7-012 | MEDIUM | `Truncate-TextForDisplay` can split UTF-16 surrogate pairs | **OPEN** |
+| AG7-014 | HIGH | Entry point doesn't check `Register-ContextMenu` result in setfolder mode | **OPEN** |
+| AG7-019 | HIGH | `$fallbackTimer` not disposed if `ShowDialog()` throws (exception path) | **OPEN** |
+| AG7-022 | LOW | `Escape-XmlText` chained `.Replace()` allocates excessive intermediate strings | **OPEN** |
 | AG7-001 | CRITICAL | Popup mutex not released on early return | RESOLVED |
 | AG7-002 | CRITICAL | `Set-PopupConfig` not atomic in popup flow | RESOLVED |
 | AG7-003 | HIGH | `XmlNodeReader` not disposed in `Show-PopupWindow` | RESOLVED |
 | AG7-004 | HIGH | `FindName()` null return not checked in popup | RESOLVED |
-| AG7-005 | HIGH | Snooze race — task removed before new task confirmed written | **OPEN** |
 | AG7-006 | MEDIUM | Session-isolated mutex name not applied | RESOLVED |
-| AG7-007 | CRITICAL | `$script:openExplorer=$true` default causes Explorer launch on exception | **OPEN** |
-| AG7-008 | HIGH | `Remove-MotivationTask` failure logged but not surfaced to user | **OPEN** |
 | AG7-009 | HIGH | `Show-PopupWindow` state variables reset in wrong place | RESOLVED |
 | AG7-010 | HIGH | Popup `Add_Closed` timer cleanup may double-dispose | RESOLVED |
-| AG7-011 | CRITICAL | `Escape-XmlText` not applied to `$config.title`/`$config.body` | **OPEN** |
-| AG7-012 | MEDIUM | `Truncate-TextForDisplay` can split UTF-16 surrogate pairs | **OPEN** |
 | AG7-013 | HIGH | `Strip-MarkupText` doesn't handle all XML special chars | RESOLVED |
-| AG7-014 | HIGH | Entry point doesn't check `Register-ContextMenu` result in setfolder mode | **OPEN** |
 | AG7-015 | HIGH | `Show-PopupWindow` called without STA check | RESOLVED |
 | AG7-016 | LOW | `Get-RandomMessage` not seeded — same message repeated | RESOLVED |
 | AG7-017 | HIGH | `Show-PopupWindow` `$config` not validated before use | RESOLVED |
 | AG7-018 | HIGH | `Write-OutcomeLog` called with stale `$config.explorer_path` | RESOLVED |
-| AG7-019 | HIGH | `$fallbackTimer` not disposed if `ShowDialog()` throws (exception path) | **OPEN** |
 | AG7-020 | LOW | Explorer launch uses `ArgumentList` without `-WorkingDirectory` | RESOLVED |
 | AG7-021 | MEDIUM | Popup outcome log entry missing snooze count | RESOLVED |
-| AG7-022 | LOW | `Escape-XmlText` chained `.Replace()` allocates excessive intermediate strings | **OPEN** |
 | AG7-023 | LOW | `Get-RandomMessage` can return `$null` if `$Messages` empty | RESOLVED |
 
 ---
@@ -296,32 +296,32 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG8-001 | HIGH | Mock Not Verifiable — `Register-ScheduledTask` never validated | RESOLVED |
-| AG8-002 | HIGH | Corrupted JSON test missing state check | RESOLVED |
-| AG8-003 | HIGH | `Unregister-ScheduledTask` mock too broad | RESOLVED |
-| AG8-004 | MEDIUM | `Get-ScheduledTask` mock hides real collision detection bug | RESOLVED |
 | AG8-005 | MEDIUM | Task ID uniqueness untested (no collision retry assertion) | **OPEN** |
 | AG8-006 | MEDIUM | Registry tests skipped instead of mocked cross-platform | **OPEN** |
 | AG8-007 | HIGH | Integration test missing actual integration (mode switching) | **OPEN** |
-| AG8-008 | HIGH | False confidence — `Should -BeNullOrEmpty` missing return value check | RESOLVED |
-| AG8-009 | MEDIUM | Mock scope issue — `Get-ScheduledTask` affects all tests | RESOLVED |
 | AG8-010 | MEDIUM | Test pollution — shared `$env:APPDATA` modification | **OPEN** |
 | AG8-011 | MEDIUM | Parameter validation not tested — empty strings accepted | **OPEN** |
-| AG8-012 | HIGH | Error path not tested (happy path only) | RESOLVED |
-| AG8-013 | MEDIUM | Missing edge case — very long folder paths | RESOLVED |
-| AG8-014 | MEDIUM | Missing edge case — special characters in paths | RESOLVED |
 | AG8-015 | LOW | Assertion confusion — `-Be` vs `-BeExactly` | **OPEN** |
 | AG8-016 | MEDIUM | Missing cleanup — timer objects not destroyed in tests | **OPEN** |
 | AG8-017 | MEDIUM | Mock without behavior — `Get-RandomMessage` not validated | **OPEN** |
-| AG8-018 | HIGH | Pester version incompatibility with `Should -Be` array behavior | RESOLVED |
-| AG8-019 | HIGH | `Sync-TaskStatuses` never tested | RESOLVED |
-| AG8-020 | HIGH | No negative tests — duplicate detection gaps | RESOLVED |
 | AG8-021 | MEDIUM | State leakage between tests — registry not fully cleaned | **OPEN** |
 | AG8-022 | MEDIUM | False idempotency — `Register-ContextMenu` not truly tested | **OPEN** |
 | AG8-023 | MEDIUM | Platform adapter tests don't mock actual failures | **OPEN** |
 | AG8-024 | MEDIUM | No cross-platform path coverage (Windows paths on Linux) | **OPEN** |
 | AG8-025 | LOW | Incomplete assertion — task property validation too loose | **OPEN** |
 | AG8-026 | HIGH | Missing integration test — config persistence across modes | **OPEN** |
+| AG8-004 | MEDIUM | `Get-ScheduledTask` mock hides real collision detection bug | RESOLVED |
+| AG8-008 | HIGH | False confidence — `Should -BeNullOrEmpty` missing return value check | RESOLVED |
+| AG8-009 | MEDIUM | Mock scope issue — `Get-ScheduledTask` affects all tests | RESOLVED |
+| AG8-012 | HIGH | Error path not tested (happy path only) | RESOLVED |
+| AG8-001 | HIGH | Mock Not Verifiable — `Register-ScheduledTask` never validated | RESOLVED |
+| AG8-002 | HIGH | Corrupted JSON test missing state check | RESOLVED |
+| AG8-003 | HIGH | `Unregister-ScheduledTask` mock too broad | RESOLVED |
+| AG8-013 | MEDIUM | Missing edge case — very long folder paths | RESOLVED |
+| AG8-014 | MEDIUM | Missing edge case — special characters in paths | RESOLVED |
+| AG8-018 | HIGH | Pester version incompatibility with `Should -Be` array behavior | RESOLVED |
+| AG8-019 | HIGH | `Sync-TaskStatuses` never tested | RESOLVED |
+| AG8-020 | HIGH | No negative tests — duplicate detection gaps | RESOLVED |
 | AG8-027 | MEDIUM | Assertion on display format hides string processing bugs | RESOLVED |
 
 ---
@@ -331,28 +331,28 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG9-001 | HIGH | Missing `[CmdletBinding()]` on advanced functions | RESOLVED |
 | AG9-002 | LOW | Missing `[OutputType()]` declarations | **OPEN** |
-| AG9-003 | LOW | Inconsistent null suppression (`[void]` vs `Out-Null` vs `$null=`) | RESOLVED |
 | AG9-004 | MEDIUM | `$null` comparison trap — mixed left/right patterns | **OPEN** |
 | AG9-005 | LOW | `.Count` access without null safety | **OPEN** |
 | AG9-006 | MEDIUM | Case-sensitive `-eq` for status strings when `-ieq` needed | **OPEN** |
-| AG9-007 | MEDIUM | Backtick line continuation (fragile) | RESOLVED |
-| AG9-008 | HIGH | Missing `[Parameter()]` attributes on required parameters | RESOLVED |
 | AG9-009 | MEDIUM | Inline `try-catch` in type conversions — bare catch | **OPEN** |
 | AG9-010 | LOW | String interpolation with complex expressions | **OPEN** |
-| AG9-011 | MEDIUM | Return value pollution in side-effect functions | RESOLVED |
 | AG9-012 | LOW | `.PSObject.Properties` check pattern is verbose | **OPEN** |
 | AG9-013 | LOW | Platform check creates dead code path (PS 5.x else branch) | **OPEN** |
-| AG9-014 | HIGH | Mutex not properly disposed (resource leak) | RESOLVED |
-| AG9-015 | LOW | `[void]` vs `Out-Null` vs `$null=` inconsistency | RESOLVED |
 | AG9-016 | MEDIUM | No `-ErrorAction Stop` on critical operations | WINDOWS-ONLY |
-| AG9-017 | MEDIUM | Complex logic without comments | RESOLVED |
 | AG9-018 | LOW | Switch statement missing `break`/`return` | **OPEN** |
 | AG9-019 | LOW | `catch` uses `$_` without context | **OPEN** |
 | AG9-020 | LOW | Inconsistent array wrapping pattern | **OPEN** |
 | AG9-021 | HIGH | `DateTime` casting without validation | WINDOWS-ONLY |
 | AG9-022 | MEDIUM | Event handler delegate captures variables by reference | WINDOWS-ONLY |
+| AG9-001 | HIGH | Missing `[CmdletBinding()]` on advanced functions | RESOLVED |
+| AG9-003 | LOW | Inconsistent null suppression (`[void]` vs `Out-Null` vs `$null=`) | RESOLVED |
+| AG9-007 | MEDIUM | Backtick line continuation (fragile) | RESOLVED |
+| AG9-011 | MEDIUM | Return value pollution in side-effect functions | RESOLVED |
+| AG9-014 | HIGH | Mutex not properly disposed (resource leak) | RESOLVED |
+| AG9-015 | LOW | `[void]` vs `Out-Null` vs `$null=` inconsistency | RESOLVED |
+| AG9-017 | MEDIUM | Complex logic without comments | RESOLVED |
+| AG9-008 | HIGH | Missing `[Parameter()]` attributes on required parameters | RESOLVED |
 | AG9-023 | HIGH | Function parameters accept `$null` without validation | RESOLVED |
 
 ---
@@ -362,26 +362,26 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
+| AG10-006 | MEDIUM | Fallback AppData directory uses fixed name in temp | **OPEN** |
+| AG10-007 | MEDIUM | No certificate validation for HTTPS | **OPEN** (no feature yet) |
+| AG10-008 | MEDIUM | JSON config files have no integrity protection (no HMAC/checksum) | **OPEN** |
+| AG10-014 | MEDIUM | Folder path directly embedded in popup UI | **OPEN** (by design) |
+| AG10-015 | MEDIUM | No signature/authenticity check on `$MyInvocation.MyCommand.Path` | **OPEN** |
+| AG10-018 | LOW | Process arguments visible in Task Manager/WMI | **OPEN** (by design) |
+| AG10-019 | LOW | No execution policy check before running script | **OPEN** |
+| AG10-020 | LOW | No code signing certificate validation | **OPEN** |
 | AG10-001 | CRITICAL | Unquoted path / code injection via registry | RESOLVED |
 | AG10-002 | HIGH | Sensitive folder paths written to plaintext config files | RESOLVED |
 | AG10-003 | HIGH | No validation of folder paths before registry/Task Scheduler storage | RESOLVED |
 | AG10-004 | HIGH | Task Scheduler RunLevel set to "Highest" for network paths | RESOLVED |
 | AG10-005 | HIGH | Debug log in world-writable temp without unique name | RESOLVED |
-| AG10-006 | MEDIUM | Fallback AppData directory uses fixed name in temp | **OPEN** |
-| AG10-007 | MEDIUM | No certificate validation for HTTPS | **OPEN** (no feature yet) |
-| AG10-008 | MEDIUM | JSON config files have no integrity protection (no HMAC/checksum) | **OPEN** |
 | AG10-009 | MEDIUM | Registry keys written without ACL configuration | WINDOWS-ONLY |
 | AG10-010 | HIGH | Task Scheduler description contains user-controlled data | RESOLVED |
 | AG10-011 | MEDIUM | File permissions not explicitly set on config files | WINDOWS-ONLY |
 | AG10-012 | HIGH | Mutex name provides no process/user isolation | RESOLVED |
 | AG10-013 | HIGH | Error messages exposed without sanitization | RESOLVED |
-| AG10-014 | MEDIUM | Folder path directly embedded in popup UI | **OPEN** (by design) |
-| AG10-015 | MEDIUM | No signature/authenticity check on `$MyInvocation.MyCommand.Path` | **OPEN** |
 | AG10-016 | HIGH | Sensitive folder paths in log file | RESOLVED |
 | AG10-017 | HIGH | `ConvertFrom-Json` without schema validation | RESOLVED |
-| AG10-018 | LOW | Process arguments visible in Task Manager/WMI | **OPEN** (by design) |
-| AG10-019 | LOW | No execution policy check before running script | **OPEN** |
-| AG10-020 | LOW | No code signing certificate validation | **OPEN** |
 | AG10-021 | HIGH | Unquoted paths in `Start-Process` command | RESOLVED |
 | AG10-022 | CRITICAL | Task creation race condition — collision retry loop | RESOLVED |
 
@@ -394,23 +394,23 @@
 |--------|----------|-------|--------|
 | AG11-001 | CRITICAL | No timezone/DST handling — missed/double triggers | **OPEN** |
 | AG11-002 | HIGH | `DateTime.Date` truncation at midnight — edge case lost | **OPEN** |
-| AG11-003 | HIGH | Snooze time can schedule in past | RESOLVED |
-| AG11-004 | MEDIUM | `EndBoundary` calculation off-by-minute | RESOLVED |
-| AG11-005 | HIGH | No validation that `TriggerTime > current time` | RESOLVED |
 | AG11-006 | MEDIUM | Midnight crossing not detected — tomorrow logic breaks at 23:00 | **OPEN** |
 | AG11-007 | HIGH | DST spring forward — hour skipped | **OPEN** |
 | AG11-008 | HIGH | DST fall back — hour fires twice | **OPEN** |
 | AG11-009 | MEDIUM | `DateTime` parse mismatch — different formats in different paths | **OPEN** |
 | AG11-010 | HIGH | Hour comparison logic error — "already past" check broken | **OPEN** |
-| AG11-011 | HIGH | Countdown timer race — fires after window closed | RESOLVED |
 | AG11-012 | LOW | Undo timer seconds never reach zero — off-by-one | **OPEN** |
 | AG11-013 | MEDIUM | No validation for task time window overlap | **OPEN** |
 | AG11-014 | LOW | No maximum trigger count validation | **OPEN** |
 | AG11-015 | MEDIUM | Snooze creates duplicate task without timestamp check | **OPEN** |
-| AG11-016 | CRITICAL | GUID collision retry — typo in name concatenation | RESOLVED |
 | AG11-017 | MEDIUM | Snooze duration not persisted to config | **OPEN** |
 | AG11-018 | MEDIUM | `created_at` vs `scheduled_time` format inconsistency | **OPEN** |
 | AG11-019 | HIGH | No handling for system clock changes | **OPEN** |
+| AG11-003 | HIGH | Snooze time can schedule in past | RESOLVED |
+| AG11-004 | MEDIUM | `EndBoundary` calculation off-by-minute | RESOLVED |
+| AG11-005 | HIGH | No validation that `TriggerTime > current time` | RESOLVED |
+| AG11-011 | HIGH | Countdown timer race — fires after window closed | RESOLVED |
+| AG11-016 | CRITICAL | GUID collision retry — typo in name concatenation | RESOLVED |
 | AG11-020 | HIGH | No configuration for custom trigger hours — hardcoded defaults | RESOLVED |
 | AG11-021 | MEDIUM | `StartBoundary` parsing from OS task fails silently | WINDOWS-ONLY |
 | AG11-022 | LOW | No handling for recurring schedule requests | WINDOWS-ONLY |
@@ -422,30 +422,30 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG12-001 | CRITICAL | XML escape not applied to folder paths in popup | RESOLVED |
-| AG12-002 | HIGH | Glyph text contains unescaped Unicode entities | RESOLVED |
-| AG12-003 | MEDIUM | Body text not limited — overflow causes visual corruption | RESOLVED |
 | AG12-004 | LOW | Title `MaxWidth` insufficient for localization | **OPEN** |
-| AG12-005 | HIGH | Title and body not stripped of Markdown/HTML formatting | RESOLVED |
-| AG12-006 | CRITICAL | No fallback when WPF assemblies fail to load | RESOLVED |
 | AG12-007 | HIGH | Mutation of global `$timer` — race condition | WINDOWS-ONLY |
-| AG12-008 | HIGH | Mutex release not guaranteed on exception paths | RESOLVED |
-| AG12-009 | HIGH | Popup window `Opacity=0` — invisible on launch | RESOLVED |
 | AG12-010 | MEDIUM | No validation that message file exists before loading | **OPEN** (moot) |
 | AG12-011 | LOW | No localization support — hardcoded English strings | **OPEN** |
 | AG12-012 | LOW | Message selection not truly random — insufficient seed | **OPEN** (by design) |
-| AG12-013 | HIGH | Folder name with special chars breaks display | RESOLVED |
 | AG12-014 | LOW | Body text wrapping without minimum width constraint | **OPEN** |
 | AG12-015 | MEDIUM | Countdown text not bound to property — manual update | **OPEN** |
 | AG12-016 | MEDIUM | Snooze button timer not cancellation-safe | **OPEN** |
 | AG12-017 | MEDIUM | Missing validation for extremely long folder paths in popup | **OPEN** |
 | AG12-018 | LOW | No system tray icon cleanup on exit | **OPEN** (N/A — no tray) |
-| AG12-019 | MEDIUM | Notification not marked "Topmost" until after show | RESOLVED |
-| AG12-020 | HIGH | Config JSON parse failure returns NULL — no fallback message | RESOLVED |
 | AG12-021 | MEDIUM | Button click handlers don't cancel animation state | **OPEN** |
 | AG12-022 | MEDIUM | DND/Focus Assist not checked before showing popup | **OPEN** |
 | AG12-023 | MEDIUM | No validation that config fields are populated | **OPEN** |
 | AG12-024 | LOW | Message `Glyph` property name case sensitivity undocumented | **OPEN** |
+| AG12-001 | CRITICAL | XML escape not applied to folder paths in popup | RESOLVED |
+| AG12-002 | HIGH | Glyph text contains unescaped Unicode entities | RESOLVED |
+| AG12-003 | MEDIUM | Body text not limited — overflow causes visual corruption | RESOLVED |
+| AG12-005 | HIGH | Title and body not stripped of Markdown/HTML formatting | RESOLVED |
+| AG12-006 | CRITICAL | No fallback when WPF assemblies fail to load | RESOLVED |
+| AG12-008 | HIGH | Mutex release not guaranteed on exception paths | RESOLVED |
+| AG12-009 | HIGH | Popup window `Opacity=0` — invisible on launch | RESOLVED |
+| AG12-013 | HIGH | Folder name with special chars breaks display | RESOLVED |
+| AG12-019 | MEDIUM | Notification not marked "Topmost" until after show | RESOLVED |
+| AG12-020 | HIGH | Config JSON parse failure returns NULL — no fallback message | RESOLVED |
 | AG12-025 | MEDIUM | Folder name display not validated for empty string | RESOLVED |
 | AG12-026 | HIGH | Markdown characters in title/body not escaped | RESOLVED |
 
@@ -456,34 +456,34 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
+| AG13-011 | MEDIUM | Path separator inconsistency between Windows and Unix | **OPEN** |
+| AG13-012 | LOW | `$env:APPDATA` not documented for unusual Windows setups | **OPEN** |
+| AG13-018 | MEDIUM | `DateTimeOffset` ISO format inconsistency between `.NET` runtimes | **OPEN** |
+| AG13-028 | LOW | `build.ps1` assumes ps2exe available on any PS version | **OPEN** |
+| AG13-005 | LOW | Case-insensitive path comparison not guarded | **OPEN** |
+| AG13-021 | LOW | `$env:APPDATA` not set in Windows Sandbox/container | **OPEN** |
 | AG13-001 | HIGH | Missing PS version guard for WPF assembly loading | RESOLVED |
 | AG13-002 | HIGH | Unguarded registry access without edition check | WINDOWS-ONLY |
 | AG13-003 | HIGH | Task Scheduler service not checked on all Windows editions | WINDOWS-ONLY |
 | AG13-004 | MEDIUM | `.NET Framework` vs `.NET Core`: `DriveType` not available | RESOLVED |
-| AG13-005 | LOW | Case-insensitive path comparison not guarded | **OPEN** |
 | AG13-006 | HIGH | `MessageBox` API not available on non-Windows PS7 | WINDOWS-ONLY |
 | AG13-007 | HIGH | WPF namespace not available without `PresentationFramework` | WINDOWS-ONLY |
 | AG13-008 | MEDIUM | `Register-ScheduledTask` params not available on PS 5.1 | WINDOWS-ONLY |
 | AG13-009 | MEDIUM | `explorer.exe` not available on Server SKUs and ARM64 | WINDOWS-ONLY |
 | AG13-010 | MEDIUM | Task Scheduler XML error not handled for different Windows versions | WINDOWS-ONLY |
-| AG13-011 | MEDIUM | Path separator inconsistency between Windows and Unix | **OPEN** |
-| AG13-012 | LOW | `$env:APPDATA` not documented for unusual Windows setups | **OPEN** |
 | AG13-013 | MEDIUM | High DPI scaling not configured for WPF window | WINDOWS-ONLY |
 | AG13-014 | LOW | XAML emoji rendering not supported on all Windows versions | WINDOWS-ONLY |
 | AG13-015 | MEDIUM | `CimJobException` not caught on PS 5.1 | WINDOWS-ONLY |
 | AG13-016 | MEDIUM | `FolderBrowserDialog` not available in Server Core | WINDOWS-ONLY |
 | AG13-017 | LOW | Mutex `Global\` prefix not available on some editions | WINDOWS-ONLY |
-| AG13-018 | MEDIUM | `DateTimeOffset` ISO format inconsistency between `.NET` runtimes | **OPEN** |
 | AG13-019 | MEDIUM | PS class syntax not available in PS 5.0 | RESOLVED |
 | AG13-020 | MEDIUM | CIM cmdlets not available without `CimCmdlets` module | WINDOWS-ONLY |
-| AG13-021 | MEDIUM | `$env:APPDATA` not set in Windows Sandbox/container | **OPEN** |
 | AG13-022 | MEDIUM | XML parsing error for legacy task descriptions | WINDOWS-ONLY |
 | AG13-023 | LOW | `WScript.Shell` COM not available in Server Core | WINDOWS-ONLY |
 | AG13-024 | LOW | 32-bit vs 64-bit registry paths not handled | WINDOWS-ONLY |
 | AG13-025 | LOW | ARM64 process execution not detected | WINDOWS-ONLY |
 | AG13-026 | MEDIUM | Thread-unsafe `$script:` access in `DispatcherTimer` callbacks | WINDOWS-ONLY |
 | AG13-027 | MEDIUM | STA mode requirement not enforced on PS 5.1 | WINDOWS-ONLY |
-| AG13-028 | LOW | `build.ps1` assumes ps2exe available on any PS version | **OPEN** |
 
 ---
 
@@ -492,6 +492,19 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
+| AG14-008 | MEDIUM | `Get-Process` pipeline expensive in loop context | **OPEN** |
+| AG14-010 | LOW | `Where-Object` pipeline inefficiency in task lookup | **OPEN** |
+| AG14-011 | MEDIUM | `Get-MotivationTasks` called multiple times with duplicate reads | **OPEN** |
+| AG14-012 | MEDIUM | `Get-HistoryData` reads entire log file into memory | **OPEN** |
+| AG14-013 | MEDIUM | `FileShare` not set when reading log files — potential lock | **OPEN** |
+| AG14-016 | LOW | `ConvertFrom-Json`/`ConvertTo-Json` pipeline repeated | **OPEN** |
+| AG14-017 | LOW | Script-scoped variables accumulate without cleanup | **OPEN** |
+| AG14-018 | MEDIUM | `Get-ScheduledTask` called in loop without caching | **OPEN** |
+| AG14-019 | LOW | `Sync-TaskStatuses` enumerates all tasks twice | **OPEN** |
+| AG14-020 | LOW | Regex compiled multiple times in loop | **OPEN** |
+| AG14-021 | LOW | String concatenation in `ForEach` loop (history parsing) | **OPEN** |
+| AG14-023 | LOW | `Start-Process explorer.exe` has no timeout | **OPEN** |
+| AG14-024 | LOW | `Add-Content` no encoding consistency check | **OPEN** |
 | AG14-001 | HIGH | Unmanaged `FolderBrowserDialog` — not disposed | RESOLVED |
 | AG14-002 | HIGH | `XmlNodeReader` not disposed | RESOLVED |
 | AG14-003 | HIGH | Mutex not disposed explicitly in all paths | RESOLVED |
@@ -499,23 +512,10 @@
 | AG14-005 | LOW | Button click handlers never unregistered | WINDOWS-ONLY |
 | AG14-006 | MEDIUM | `BrushConverter` objects never disposed | RESOLVED |
 | AG14-007 | LOW | `DriveInfo` not disposed | RESOLVED (N/A — value type) |
-| AG14-008 | MEDIUM | `Get-Process` pipeline expensive in loop context | **OPEN** |
 | AG14-009 | HIGH | `Get-Config` called repeatedly without caching | RESOLVED |
-| AG14-010 | LOW | `Where-Object` pipeline inefficiency in task lookup | **OPEN** |
-| AG14-011 | MEDIUM | `Get-MotivationTasks` called multiple times with duplicate reads | **OPEN** |
-| AG14-012 | MEDIUM | `Get-HistoryData` reads entire log file into memory | **OPEN** |
-| AG14-013 | MEDIUM | `FileShare` not set when reading log files — potential lock | **OPEN** |
 | AG14-014 | LOW | `MessageBox` handle leak (rooted by event handler) | WINDOWS-ONLY |
 | AG14-015 | LOW | `DoubleAnimation` not disposed after `BeginAnimation` | WINDOWS-ONLY |
-| AG14-016 | LOW | `ConvertFrom-Json`/`ConvertTo-Json` pipeline repeated | **OPEN** |
-| AG14-017 | LOW | Script-scoped variables accumulate without cleanup | **OPEN** |
-| AG14-018 | MEDIUM | `Get-ScheduledTask` called in loop without caching | **OPEN** |
-| AG14-019 | LOW | `Sync-TaskStatuses` enumerates all tasks twice | **OPEN** |
-| AG14-020 | LOW | Regex compiled multiple times in loop | **OPEN** |
-| AG14-021 | LOW | String concatenation in `ForEach` loop (history parsing) | **OPEN** |
 | AG14-022 | LOW | `Window.ShowDialog()` not properly garbage collected | WINDOWS-ONLY |
-| AG14-023 | LOW | `Start-Process explorer.exe` has no timeout | **OPEN** |
-| AG14-024 | LOW | `Add-Content` no encoding consistency check | **OPEN** |
 
 ---
 
@@ -524,11 +524,8 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG15-001 | HIGH | Log file growing without bound | RESOLVED |
 | AG15-002 | LOW | Debug log path not configurable | **OPEN** |
-| AG15-003 | HIGH | Silent failure in assembly loading — error not fully logged | RESOLVED |
 | AG15-004 | MEDIUM | Missing start/end log entries for long operations | **OPEN** |
-| AG15-005 | HIGH | Logging sensitive data — file paths in log | RESOLVED |
 | AG15-006 | MEDIUM | Log writes not atomic — interleaved entries possible | **OPEN** |
 | AG15-007 | MEDIUM | Log directory not created before first write | **OPEN** |
 | AG15-008 | LOW | Incorrect log level usage — debug noise in production | **OPEN** |
@@ -542,7 +539,6 @@
 | AG15-016 | LOW | Version/environment info not logged at startup | **OPEN** |
 | AG15-017 | LOW | No structured logging — hard to parse | **OPEN** |
 | AG15-018 | MEDIUM | `Sync-TaskStatuses` warnings not at ERROR level | **OPEN** |
-| AG15-019 | MEDIUM | Silent failures in config fallback | RESOLVED |
 | AG15-020 | MEDIUM | `Write-Error` not captured in log file | **OPEN** |
 | AG15-021 | MEDIUM | No timeout detection for long-running operations | **OPEN** |
 | AG15-022 | LOW | Mutex errors not fully captured | **OPEN** |
@@ -552,6 +548,10 @@
 | AG15-026 | LOW | No log verbosity control at runtime | **OPEN** |
 | AG15-027 | LOW | Mutex release error at WARN not ERROR level | **OPEN** |
 | AG15-028 | MEDIUM | Config initialization silent failures | **OPEN** |
+| AG15-001 | HIGH | Log file growing without bound | RESOLVED |
+| AG15-003 | HIGH | Silent failure in assembly loading — error not fully logged | RESOLVED |
+| AG15-005 | HIGH | Logging sensitive data — file paths in log | RESOLVED |
+| AG15-019 | MEDIUM | Silent failures in config fallback | RESOLVED |
 
 ---
 
@@ -560,10 +560,17 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG16-001 | HIGH | `Invoke-ps2exe` exit code not checked | RESOLVED |
-| AG16-002 | HIGH | Build doesn't exit on `Invoke-ps2exe` failure | RESOLVED |
 | AG16-003 | MEDIUM | CI only tests on Windows — no cross-platform matrix | **OPEN** |
 | AG16-004 | MEDIUM | No PowerShell version matrix in CI | **OPEN** |
+| AG16-012 | LOW | No artifact retention policy | **OPEN** |
+| AG16-013 | MEDIUM | Code coverage not enforced as quality gate | **OPEN** |
+| AG16-014 | LOW | No changelog generated | **OPEN** |
+| AG16-015 | MEDIUM | PSScriptAnalyzerSettings rules too permissive | **OPEN** |
+| AG16-016 | LOW | No scheduled/nightly CI runs | **OPEN** |
+| AG16-019 | MEDIUM | No pre-test validation of `DailyMotivation.ps1` syntax | **OPEN** |
+| AG16-020 | MEDIUM | Tests don't fail when coverage drops | **OPEN** |
+| AG16-001 | HIGH | `Invoke-ps2exe` exit code not checked | RESOLVED |
+| AG16-002 | HIGH | Build doesn't exit on `Invoke-ps2exe` failure | RESOLVED |
 | AG16-005 | HIGH | Missing Pester version pin | RESOLVED |
 | AG16-006 | HIGH | Missing PSScriptAnalyzer version pin | RESOLVED |
 | AG16-007 | HIGH | Missing ps2exe version pin | RESOLVED |
@@ -571,15 +578,8 @@
 | AG16-009 | HIGH | PSScriptAnalyzer violations not blocking | RESOLVED |
 | AG16-010 | HIGH | `analyze` job not required for build | RESOLVED |
 | AG16-011 | MEDIUM | No smoke test after build | RESOLVED |
-| AG16-012 | LOW | No artifact retention policy | **OPEN** |
-| AG16-013 | MEDIUM | Code coverage not enforced as quality gate | **OPEN** |
-| AG16-014 | LOW | No changelog generated | **OPEN** |
-| AG16-015 | MEDIUM | PSScriptAnalyzerSettings rules too permissive | **OPEN** |
-| AG16-016 | LOW | No scheduled/nightly CI runs | **OPEN** |
 | AG16-017 | MEDIUM | No job timeout defined | RESOLVED |
 | AG16-018 | MEDIUM | `build.ps1` doesn't support `-WhatIf` | RESOLVED |
-| AG16-019 | MEDIUM | No pre-test validation of `DailyMotivation.ps1` syntax | **OPEN** |
-| AG16-020 | MEDIUM | Tests don't fail when coverage drops | **OPEN** |
 | AG16-021 | LOW | Pester config uses relative paths | RESOLVED |
 | AG16-022 | HIGH | Missing dependency validation before build | RESOLVED |
 
@@ -590,29 +590,29 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG17-001 | MEDIUM | Context menu registered multiple times on each main window launch | WINDOWS-ONLY |
-| AG17-002 | HIGH | Context menu registration doesn't verify successful write | WINDOWS-ONLY |
-| AG17-003 | HIGH | No unregister on exit or uninstall path | WINDOWS-ONLY |
 | AG17-004 | LOW | `ContextMenuStrip` vs WPF `ContextMenu` confusion | **OPEN** |
-| AG17-005 | MEDIUM | Menu items not disabled based on state | WINDOWS-ONLY |
-| AG17-006 | HIGH | Event handlers attached multiple times on repeated window calls | WINDOWS-ONLY |
 | AG17-007 | HIGH | Timer not properly disposed before window close | **OPEN** |
 | AG17-008 | HIGH | `FallbackTimer` also not disposed | **OPEN** |
-| AG17-009 | HIGH | `UndoFeedbackTimer` not disposed | RESOLVED |
-| AG17-010 | MEDIUM | Duplicate registry key creation in `Register-ContextMenu` | WINDOWS-ONLY |
 | AG17-011 | LOW | Context menu "Exit" item missing | **OPEN** (no system tray) |
-| AG17-012 | LOW | Popup context menu on left-click instead of right-click | WINDOWS-ONLY |
 | AG17-013 | MEDIUM | No busy state indicator during long operations | **OPEN** |
-| AG17-014 | MEDIUM | Menu item state not reflected when snooze duration changes | WINDOWS-ONLY |
-| AG17-015 | MEDIUM | Snooze menu not showing on first right-click (WPF race) | WINDOWS-ONLY |
 | AG17-016 | LOW | Missing separator between menu item groups | **OPEN** |
 | AG17-017 | MEDIUM | Keyboard accessibility missing — no access keys | **OPEN** |
 | AG17-018 | LOW | No tooltip or help text on context menu items | **OPEN** |
+| AG17-022 | LOW | No icon file for system tray (if implemented) | **OPEN** (N/A) |
+| AG17-023 | MEDIUM | No event handler deregistration on window close | **OPEN** |
+| AG17-001 | MEDIUM | Context menu registered multiple times on each main window launch | WINDOWS-ONLY |
+| AG17-002 | HIGH | Context menu registration doesn't verify successful write | WINDOWS-ONLY |
+| AG17-003 | HIGH | No unregister on exit or uninstall path | WINDOWS-ONLY |
+| AG17-005 | MEDIUM | Menu items not disabled based on state | WINDOWS-ONLY |
+| AG17-006 | HIGH | Event handlers attached multiple times on repeated window calls | WINDOWS-ONLY |
+| AG17-009 | HIGH | `UndoFeedbackTimer` not disposed | RESOLVED |
+| AG17-010 | MEDIUM | Duplicate registry key creation in `Register-ContextMenu` | WINDOWS-ONLY |
+| AG17-012 | LOW | Popup context menu on left-click instead of right-click | WINDOWS-ONLY |
+| AG17-014 | MEDIUM | Menu item state not reflected when snooze duration changes | WINDOWS-ONLY |
+| AG17-015 | MEDIUM | Snooze menu not showing on first right-click (WPF race) | WINDOWS-ONLY |
 | AG17-019 | MEDIUM | Snooze menu created before WPF fully initialized | WINDOWS-ONLY |
 | AG17-020 | MEDIUM | Stale state — menu items not updated when popup reappears | WINDOWS-ONLY |
 | AG17-021 | HIGH | Context menu events not properly scoped — closure capture | WINDOWS-ONLY |
-| AG17-022 | LOW | No icon file for system tray (if implemented) | **OPEN** (N/A) |
-| AG17-023 | MEDIUM | No event handler deregistration on window close | **OPEN** |
 | AG17-024 | HIGH | Popup window close race condition | WINDOWS-ONLY |
 | AG17-025 | MEDIUM | Missing null checks before accessing `ContextMenu` | RESOLVED |
 
@@ -623,30 +623,30 @@
 
 | Bug ID | Severity | Title | Status |
 |--------|----------|-------|--------|
-| AG18-001 | CRITICAL | Non-atomic config write in `Save-Config` | RESOLVED |
-| AG18-002 | CRITICAL | Non-atomic popup config write in `Set-PopupConfig` | RESOLVED |
-| AG18-003 | CRITICAL | Non-atomic `tasks.json` write in `Save-TasksJson` | RESOLVED |
 | AG18-004 | HIGH | Single-item array flattening in `Get-TasksJson` | **OPEN** |
 | AG18-005 | MEDIUM | Encoding mismatch on config read in `Get-Config` | **OPEN** |
 | AG18-006 | HIGH | No backup before destructive delete in `Remove-MotivationTask` | **OPEN** |
 | AG18-007 | MEDIUM | Integer overflow in snooze duration | **OPEN** |
 | AG18-008 | LOW | Float precision in countdown timer | **OPEN** |
+| AG18-013 | MEDIUM | Missing checksums for data integrity verification | **OPEN** |
+| AG18-014 | LOW | Data truncation risk in string fields | **OPEN** |
+| AG18-016 | LOW | Sort order not deterministic in task list | **OPEN** |
+| AG18-017 | HIGH | Read-modify-write without locking in snooze handler | **OPEN** |
+| AG18-020 | HIGH | No validation of scheduled time (past date) | **OPEN** |
+| AG18-021 | MEDIUM | Missing data migration rollback | **OPEN** |
+| AG18-022 | MEDIUM | Integer overflow in undo timer countdown | **OPEN** |
+| AG18-024 | MEDIUM | Time zone conversion issues in scheduled time | **OPEN** |
+| AG18-001 | CRITICAL | Non-atomic config write in `Save-Config` | RESOLVED |
+| AG18-002 | CRITICAL | Non-atomic popup config write in `Set-PopupConfig` | RESOLVED |
+| AG18-003 | CRITICAL | Non-atomic `tasks.json` write in `Save-TasksJson` | RESOLVED |
 | AG18-009 | HIGH | String-to-number conversion without error handling | RESOLVED |
 | AG18-010 | HIGH | No schema validation on loaded tasks | RESOLVED |
 | AG18-011 | HIGH | No referential integrity check between tasks and OS | WINDOWS-ONLY |
 | AG18-012 | HIGH | Concurrent write access without locking | NEEDS-REVIEW |
-| AG18-013 | MEDIUM | Missing checksums for data integrity verification | **OPEN** |
-| AG18-014 | LOW | Data truncation risk in string fields | **OPEN** |
 | AG18-015 | HIGH | Missing deduplication on task add (race condition) | NEEDS-REVIEW |
-| AG18-016 | LOW | Sort order not deterministic in task list | **OPEN** |
-| AG18-017 | HIGH | Read-modify-write without locking in snooze handler | **OPEN** |
 | AG18-018 | MEDIUM | Data loss when array contains null elements | NEEDS-REVIEW |
 | AG18-019 | HIGH | No rollback on partial failure in `New-MotivationTask` | NEEDS-REVIEW |
-| AG18-020 | HIGH | No validation of scheduled time (past date) | **OPEN** |
-| AG18-021 | MEDIUM | Missing data migration rollback | **OPEN** |
-| AG18-022 | MEDIUM | Integer overflow in undo timer countdown | **OPEN** |
 | AG18-023 | HIGH | Orphaned temp files on failure | RESOLVED |
-| AG18-024 | MEDIUM | Time zone conversion issues in scheduled time | **OPEN** |
 | AG18-025 | HIGH | Missing bounds check on `task_warning_threshold` | RESOLVED |
 | AG18-026 | HIGH | No validation of folder existence before fallback directory write | RESOLVED |
 
