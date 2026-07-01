@@ -33,7 +33,24 @@ Describe 'Messages array ($Messages)' {
     }
 
     It 'Should contain the expected 10 default messages' {
-        @($Messages).Count | Should -Be 10
+        @($Messages).Count | Should -BeExactly 10
+    }
+
+    # AG8-015: Add boundary case tests for glyph validation
+    It 'Should not have glyphs that are just brackets' {
+        foreach ($msg in $Messages) {
+            # Glyphs like '[]', '[[]]' should not exist
+            $msg.glyph | Should -Not -BeExactly '[]'
+            $msg.glyph | Should -Not -BeExactly '[[]]'
+            $msg.glyph | Should -Not -BeExactly '['
+            $msg.glyph | Should -Not -BeExactly ']'
+        }
+    }
+
+    It 'Should not have glyphs with only whitespace' {
+        foreach ($msg in $Messages) {
+            $msg.glyph.Trim() | Should -Not -BeExactly '' -Because "Glyphs must contain a visible character"
+        }
     }
 }
 
