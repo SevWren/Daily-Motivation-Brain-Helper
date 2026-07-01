@@ -772,9 +772,7 @@ function New-MotivationTask {
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
             }
             catch { $isMappedDrive = $false }
-            finally {
-                if ($driveInfo) { $driveInfo.Dispose() }  # AG14-007: Dispose DriveInfo
-            }
+            # Note: DriveInfo is a value type and does not implement IDisposable
         }
         $isNetworkPath = $isUncPath -or $isMappedDrive
 
@@ -1289,9 +1287,7 @@ function Invoke-FolderScheduling {
             $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
         }
         catch { $isMappedDrive = $false }
-        finally {
-            if ($driveInfo) { $driveInfo.Dispose() }  # AG14-007: Dispose DriveInfo
-        }
+        # Note: DriveInfo is a value type and does not implement IDisposable
     }
     $isNetworkPath = $isUncPath -or $isMappedDrive
 
