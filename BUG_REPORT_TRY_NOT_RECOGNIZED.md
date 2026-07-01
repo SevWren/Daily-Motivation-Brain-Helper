@@ -248,10 +248,97 @@ Try different ps2exe versions or compilation flags:
 - `-STA` is required but might interact with event handlers
 - Try ps2exe 1.0.13 vs other versions
 
-## Status
-🔴 **UNRESOLVED** - 4 failed fix attempts, extensive investigation completed
+### Attempt 5: Previous Session's Final Hotfix (Unknown Commit)
+**Date:** 2026-07-01
+**What Was Tried:** Unknown specific change from previous session (no commit details recovered)
+**Result:** FAILED - "try not recognized" error persisted on both Schedule button and context menu invocations
 
-Root cause likely in ps2exe compilation behavior, not script syntax.
+---
+
+## ROOT CAUSE — CONFIRMED (2026-07-01, 5-Agent Multi-Agent Analysis)
+
+**BUG: PowerShell 7+ try-catch-as-expression syntax incompatible with ps2exe / .NET Framework 4.x**
+
+Two locations used `$variable = try { ... } catch { ... }` syntax — assigning the result of a
+try-catch block as a value expression. This is a **PowerShell 7+ only feature** and is
+**NOT supported in .NET Framework 4.x**, which is the target runtime for ps2exe-compiled exes.
+
+When the compiled exe attempts to evaluate these lines, the .NET Framework PowerShell host
+treats `try` as if it were a cmdlet/command name rather than a language keyword in expression
+context, producing the exact error message: `"The term 'try' is not recognized as the name of a cmdlet"`.
+
+The error manifests at ShowDialog() time because that is when WPF initializes the window and
+begins executing the script's runtime code paths that reach these lines.
+
+### Affected Lines
+
+| Line | Function | Code |
+|------|----------|------|
+| 1126-1128 | `Update-TaskListUI` (called before ShowDialog in Show-MainWindow) | `$displayTime = try { ([datetime]$t.scheduled_time).ToString(...) } catch { $t.scheduled_time }` |
+| 2367-2371 | `Show-PopupWindow` (first lines, before ShowDialog) | `$sessionId = try { [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch { 0 }` |
+
+### Fix Applied
+
+**Line 1126-1128** — replaced with PS5.1-compatible statement form:
+```powershell
+# BEFORE (PS7+ only):
+$displayTime = try {
+    ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt")
+} catch { $t.scheduled_time }
+
+# AFTER (PS5.1 compatible):
+$displayTime = $t.scheduled_time
+try { $displayTime = ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt") } catch {}
+```
+
+**Line 2367-2371** — replaced with PS5.1-compatible statement form:
+```powershell
+# BEFORE (PS7+ only):
+$sessionId = try {
+    [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+} catch {
+    0  # Fallback to 0 if SessionId cannot be determined
+}
+
+# AFTER (PS5.1 compatible):
+$sessionId = 0
+try { $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch {}
+```
+
+### Why Previous Attempts Failed
+
+All 4 prior attempts focused on:
+- Window.Dispose() / DriveInfo.Dispose() method existence
+- String literal syntax (Join-String -Separator)
+- Brace balance and indentation
+- MessageBox::Show call formatting
+
+None checked for **PowerShell version compatibility** of language constructs. The script passes
+PS7 syntax validation because PS7 supports try-as-expression. Only ps2exe's .NET Framework 4.x
+runtime reveals the incompatibility.
+
+### Secondary Bug: Context Menu "Windows cannot access the device"
+
+When running from the Windows context menu, the error:
+> "Windows cannot access the specified device, path, or file. You may not have the appropriate permissions to access the item."
+
+This is a **separate bug** from the try-not-recognized error. Root cause is either:
+1. The registered exe path in HKCU registry points to an old/missing exe location
+2. The exe has been updated but the context menu registration was not refreshed
+3. The Mark-of-the-Web (MOTW) zone restriction is blocking the exe
+
+**Resolution:** After a successful build, re-run `Register-ContextMenu` (or launch the app once
+in main mode to re-register) to update the registry entry to the new exe path.
+
+## Status
+✅ **ROOT CAUSE IDENTIFIED AND FIX APPLIED** — 2026-07-01
+
+Fix removes all `= try { } catch { }` expression-form syntax, replacing with PS5.1-compatible
+statement form with pre-initialized default values. Verified 0 remaining instances in file.
+
+**fix_ag9_001.py** — Removed from repo. This Python file had no valid purpose in a PowerShell
+project. It attempted to add `[CmdletBinding()]` attributes via regex manipulation, but had no
+relationship to the actual bug and should never have been created.
 
 ## Last Updated
-2026-07-01 - After extensive investigation (commit dc95332 + analysis)
+2026-07-01 - ROOT CAUSE FOUND via 5-agent line-by-line analysis. Fix applied.

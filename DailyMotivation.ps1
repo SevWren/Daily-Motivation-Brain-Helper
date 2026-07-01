@@ -1123,9 +1123,8 @@ function Update-TaskListUI {
     # Wrap in @() so a single task doesn't collapse to a bare PSCustomObject (IEnumerable required)
     $displayTasks = @($pending | ForEach-Object {
         $t = $_
-        $displayTime = try {
-            ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt")
-        } catch { $t.scheduled_time }
+        $displayTime = $t.scheduled_time
+        try { $displayTime = ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt") } catch {}
         $displayName = if ($t.folder_name) {
             # Replace hyphens/underscores with spaces and title-case
             $n = ($t.folder_name -replace '[-_]', ' ')
@@ -2364,11 +2363,8 @@ function Show-PopupWindow {
 
     # Named mutex - one popup at a time (SSOT-006 / TASK-006)
     # FIX AG10-012: Add user and session isolation to prevent DoS between users
-    $sessionId = try {
-        [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-    } catch {
-        0  # Fallback to 0 if SessionId cannot be determined
-    }
+    $sessionId = 0
+    try { $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch {}
     $mutexName  = "Global\DailyMotivationBrainHelperPopup_$env:USERNAME`_$sessionId"
     Write-DLog "Using mutex: $mutexName"
     $mutexOwned = $false
