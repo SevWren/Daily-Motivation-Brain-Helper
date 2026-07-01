@@ -2193,7 +2193,14 @@ function Show-PopupWindow {
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time (SSOT-006 / TASK-006)
-    $mutexName  = "Global\DailyMotivationBrainHelperPopup"
+    # FIX AG10-012: Add user and session isolation to prevent DoS between users
+    $sessionId = try {
+        [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+    } catch {
+        0  # Fallback to 0 if SessionId cannot be determined
+    }
+    $mutexName  = "Global\DailyMotivationBrainHelperPopup_$env:USERNAME`_$sessionId"
+    Write-DLog "Using mutex: $mutexName"
     $mutexOwned = $false
     $mutex      = $null
     try {
