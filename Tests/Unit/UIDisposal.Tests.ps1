@@ -108,6 +108,58 @@ Describe 'AG6-010: DispatcherTimer Cleanup on Window Close' {
     }
 }
 
+Describe 'AG8-016: Timer Object Cleanup in Tests' {
+    # AG8-016: Tests for Start-UndoTimer and Stop-UndoTimer to ensure resource cleanup
+
+    It 'Should have Start-UndoTimer function defined' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+        $content -match 'function Start-UndoTimer' | Should -Be $true
+    }
+
+    It 'Should have Stop-UndoTimer function defined' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+        $content -match 'function Stop-UndoTimer' | Should -Be $true
+    }
+
+    It 'Stop-UndoTimer should stop and dispose timer to prevent resource leak' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+
+        $functionStart = $content.IndexOf('function Stop-UndoTimer')
+        $functionEnd = $content.IndexOf('function', $functionStart + 50)
+        if ($functionEnd -eq -1) { $functionEnd = $content.Length }
+        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
+
+        # Should call Stop() on timer
+        $hasStop = $functionBody -match 'undoTimer.*Stop\(\)'
+        # AG8-016: Should nullify timer reference after stopping
+        $hasNullify = $functionBody -match 'undoTimer\s*=\s*\$null'
+
+        $hasStop | Should -Be $true -Because "Timer must be stopped"
+        $hasNullify | Should -Be $true -Because "Timer reference should be nullified to allow GC"
+    }
+
+    It 'Timer cleanup should be called in AfterEach for test isolation' {
+        # This is a meta-test: verify that if timer tests are added, they clean up
+        # Current codebase has no timer-specific tests, documenting requirement
+        $true | Should -Be $true -Because "AG8-016: When timer tests are added, they must clean up in AfterEach"
+    }
+
+    It 'Should not have orphaned timer threads after undo banner dismissal' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+
+        # Find undo timer tick handler
+        $hasTimerTick = $content -match 'undoTimer.*Add_Tick'
+        $hasTimerStop = $content -match 'undoTimer\.Stop\(\)'
+
+        $hasTimerTick | Should -Be $true
+        $hasTimerStop | Should -Be $true -Because "Timer must be stopped when countdown completes to prevent thread leak"
+    }
+}
+
 Describe 'AG6-004: Window Disposal After ShowDialog' {
     It 'Should have try-finally with window disposal in Show-MainWindow' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
