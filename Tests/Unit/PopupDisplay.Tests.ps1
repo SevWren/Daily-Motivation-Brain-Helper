@@ -119,3 +119,47 @@ Describe 'Message title and body validation' {
         }
     }
 }
+
+Describe 'Strip-MarkupText' {
+    Context 'AG12-005: Remove markdown and HTML formatting' {
+        It 'Should strip markdown bold syntax' {
+            $result = Strip-MarkupText '**bold text**'
+            $result | Should -Be 'bold text'
+        }
+
+        It 'Should strip markdown italic syntax' {
+            $result = Strip-MarkupText '*italic text*'
+            $result | Should -Be 'italic text'
+        }
+
+        It 'Should strip markdown links' {
+            $result = Strip-MarkupText '[link text](http://example.com)'
+            $result | Should -Be 'link text'
+        }
+
+        It 'Should strip HTML tags' {
+            $result = Strip-MarkupText '<b>bold</b> and <a href="url">link</a>'
+            $result | Should -Be 'bold and link'
+        }
+
+        It 'Should strip multiple markdown formats' {
+            $result = Strip-MarkupText '**bold** and *italic* and ~~strike~~'
+            $result | Should -Be 'bold and italic and strike'
+        }
+
+        It 'Should handle text with no markup' {
+            $result = Strip-MarkupText 'plain text'
+            $result | Should -Be 'plain text'
+        }
+
+        It 'Should handle empty string' {
+            $result = Strip-MarkupText ''
+            $result | Should -Be ''
+        }
+
+        It 'Should handle null input gracefully' {
+            $result = Strip-MarkupText $null
+            $result | Should -Be ''
+        }
+    }
+}
