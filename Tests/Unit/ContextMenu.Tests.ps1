@@ -44,47 +44,86 @@ AfterAll {
 Describe 'Register-ContextMenu' {
     BeforeEach {
         Remove-Item $script:VerbKey -Recurse -Force -ErrorAction SilentlyContinue
+
+        # AG8-006: Platform-aware mock setup for cross-platform testing
+        if (-not $IsWindows) {
+            # Mock registry operations for non-Windows platforms
+            Mock New-Item { return [PSCustomObject]@{ PSPath = $Path } } -ParameterFilter { $Path -like 'HKCU:*' }
+            Mock Set-ItemProperty { }  -ParameterFilter { $Path -like 'HKCU:*' }
+            Mock Get-ItemProperty { return [PSCustomObject]@{ '(default)' = $Value } } -ParameterFilter { $Path -like 'HKCU:*' }
+            Mock Test-Path { return $true } -ParameterFilter { $Path -like 'HKCU:*' }
+            Mock Get-ChildItem { return @([PSCustomObject]@{ Name = 'command' }) } -ParameterFilter { $Path -like 'HKCU:*' }
+        }
     }
 
-    It 'Should create the registry verb key' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+    It 'Should create the registry verb key' {
         Register-ContextMenu -ExePath $script:TestExe
-        Test-Path $script:VerbKey | Should -Be $true
+        if ($IsWindows) {
+            Test-Path $script:VerbKey | Should -Be $true
+        } else {
+            # On non-Windows, verify mock was called
+            Should -Invoke New-Item -Times 1 -ParameterFilter { $Path -like '*ScheduleMotivation*' }
+        }
     }
 
-    It 'Should set the verb display name' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+    It 'Should set the verb display name' {
         Register-ContextMenu -ExePath $script:TestExe
-        $val = (Get-ItemProperty -Path $script:VerbKey -ErrorAction SilentlyContinue).'(default)'
-        $val | Should -Match "Daily Motivation"
+        if ($IsWindows) {
+            $val = (Get-ItemProperty -Path $script:VerbKey -ErrorAction SilentlyContinue).'(default)'
+            $val | Should -Match "Daily Motivation"
+        } else {
+            # Verify Set-ItemProperty was called with the display name
+            Should -Invoke Set-ItemProperty -Times 1 -ParameterFilter {
+                $Name -eq '(default)' -and $Value -match 'Daily Motivation'
+            }
+        }
     }
 
-    It 'Should set the command to exe /setfolder "%1"' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+    It 'Should set the command to exe /setfolder "%1"' {
         Register-ContextMenu -ExePath $script:TestExe
-        $cmdKey = "$($script:VerbKey)\command"
-        $cmd = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
-        $cmd | Should -Match ([regex]::Escape($script:TestExe))
-        $cmd | Should -Match '/setfolder'
-        $cmd | Should -Match '"%1"'
+        if ($IsWindows) {
+            $cmdKey = "$($script:VerbKey)\command"
+            $cmd = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+            $cmd | Should -Match ([regex]::Escape($script:TestExe))
+            $cmd | Should -Match '/setfolder'
+            $cmd | Should -Match '"%1"'
+        } else {
+            # Verify Set-ItemProperty was called with the command
+            Should -Invoke Set-ItemProperty -Times 1 -ParameterFilter {
+                $Value -match [regex]::Escape($script:TestExe) -and
+                $Value -match '/setfolder' -and
+                $Value -match '"%1"'
+            }
+        }
     }
 
-    It 'Should not throw when called multiple times (idempotent)' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+    It 'Should not throw when called multiple times (idempotent)' {
         # AG8-022: Verify true idempotency - state unchanged after second call
-        # Verify initial state
-        Test-Path $script:VerbKey | Should -Be $false
+        if ($IsWindows) {
+            # Verify initial state
+            Test-Path $script:VerbKey | Should -Be $false
 
-        # First call
-        Register-ContextMenu -ExePath $script:TestExe
-        $cmdKey = "$($script:VerbKey)\command"
-        $val1 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+            # First call
+            Register-ContextMenu -ExePath $script:TestExe
+            $cmdKey = "$($script:VerbKey)\command"
+            $val1 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
 
-        # Second call
-        Register-ContextMenu -ExePath $script:TestExe
-        $val2 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
+            # Second call
+            Register-ContextMenu -ExePath $script:TestExe
+            $val2 = (Get-ItemProperty -Path $cmdKey -ErrorAction SilentlyContinue).'(default)'
 
-        # AG8-022: Verify values are identical (no duplication, no cruft)
-        $val2 | Should -BeExactly $val1
-        # Verify no leftover subkeys
-        $subkeys = Get-ChildItem -Path $script:VerbKey -ErrorAction SilentlyContinue
-        $subkeys.Count | Should -Be 1  # Only 'command' subkey
+            # AG8-022: Verify values are identical (no duplication, no cruft)
+            $val2 | Should -BeExactly $val1
+            # Verify no leftover subkeys
+            $subkeys = Get-ChildItem -Path $script:VerbKey -ErrorAction SilentlyContinue
+            $subkeys.Count | Should -Be 1  # Only 'command' subkey
+        } else {
+            # On non-Windows, verify behavior through mocks
+            Register-ContextMenu -ExePath $script:TestExe
+            Register-ContextMenu -ExePath $script:TestExe
+            # Both calls should succeed without errors
+            $true | Should -Be $true
+        }
     }
 
     It 'Should skip registration and not write to registry when ExePath is a .ps1 file' {
@@ -105,10 +144,22 @@ Describe 'Register-ContextMenu' {
 }
 
 Describe 'Unregister-ContextMenu' {
-    It 'Should remove the registry verb key when it exists' -Skip:(-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) {
+    BeforeEach {
+        # AG8-006: Platform-aware mock for Remove-Item
+        if (-not $IsWindows) {
+            Mock Remove-Item { } -ParameterFilter { $Path -like 'HKCU:*' }
+        }
+    }
+
+    It 'Should remove the registry verb key when it exists' {
         Register-ContextMenu -ExePath $script:TestExe
         Unregister-ContextMenu
-        Test-Path $script:VerbKey | Should -Be $false
+        if ($IsWindows) {
+            Test-Path $script:VerbKey | Should -Be $false
+        } else {
+            # Verify Remove-Item was called on non-Windows
+            Should -Invoke Remove-Item -Times 1 -ParameterFilter { $Path -like '*ScheduleMotivation*' }
+        }
     }
 
     It 'Should not throw when the key does not exist' {
