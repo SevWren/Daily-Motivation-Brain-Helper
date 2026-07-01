@@ -52,7 +52,30 @@ Describe 'Get-RandomMessage' {
 
     It 'Should return a message whose glyph is in the expected bracket format' {
         $msg = Get-RandomMessage
+        # AG8-015: Use -Match for regex validation
         $msg.glyph | Should -Match '^\[.\]$'
+    }
+
+    # AG8-015: Add strict glyph validation tests
+    It 'Should return glyphs without trailing spaces (strict validation)' {
+        $msg = Get-RandomMessage
+        # Verify glyph doesn't have trailing space: '[+] ' should fail
+        $msg.glyph | Should -Not -Match '\s$'
+    }
+
+    It 'Should use exact glyph format from known set' {
+        # AG8-015: Test that glyphs match expected exact values
+        $knownGlyphs = @('[+]', '[♦]', '[●]', '[■]', '[▲]', '[★]', '[◆]', '[○]', '[□]', '[☼]')
+        $msg = Get-RandomMessage
+        # Glyph should be exactly one of the known values (case-sensitive)
+        $knownGlyphs | Should -Contain $msg.glyph
+    }
+
+    It 'Each message glyph should be exactly 3 characters long' {
+        # AG8-015: Strict length validation
+        foreach ($msg in $Messages) {
+            $msg.glyph.Length | Should -BeExactly 3 -Because "Glyphs are '[char]' format"
+        }
     }
 
     It 'Should return different messages across multiple calls (randomness check)' {

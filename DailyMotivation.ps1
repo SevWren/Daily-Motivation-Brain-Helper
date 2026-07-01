@@ -400,9 +400,47 @@ function Write-OutcomeLog {
         [string]$Outcome,
         [int]$SnoozeCount = 0
     )
-    $ts    = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $entry = "[$ts] | $TaskId | $FolderName | $FolderPath | $Outcome | $SnoozeCount"
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+    # FIX AG10-016: Hash folder path instead of storing plaintext (HIGH severity)
+    # Prevents information disclosure in persistent log files
+    $pathHash = if ($FolderPath -and $FolderPath.Length -gt 0) {
+        $hashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+            [Text.Encoding]::UTF8.GetBytes($FolderPath))
+        ($hashBytes | ForEach-Object { $_.ToString("X2") }) -join ''
+    } else {
+        "NO_PATH"
+    }
+
+    # Store only hash in log, not full path
+    $entry = "[$ts] | $TaskId | $FolderName | HASH:$pathHash | $Outcome | $SnoozeCount"
     Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+
+    # FIX AG10-016: Implement log rotation to prevent indefinite accumulation
+    if (Test-Path $script:LogPath) {
+        try {
+            $logFile = Get-Item $script:LogPath
+            if ($logFile.Length -gt 1MB) {
+                # Rotate log if over 1MB
+                $archiveName = "$($script:LogPath).archive_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
+                Copy-Item -Path $script:LogPath -Destination $archiveName -Force -ErrorAction Stop
+                Clear-Content -Path $script:LogPath -ErrorAction Stop
+                Write-DLog "Log rotated to $archiveName (size was $($logFile.Length) bytes)"
+
+                # Delete archives older than 30 days
+                $archivePattern = "$($script:LogPath).archive_*"
+                Get-ChildItem -Path (Split-Path $script:LogPath -Parent) -Filter "popup_log.txt.archive_*" -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
+                    ForEach-Object {
+                        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                        Write-DLog "Deleted old log archive: $($_.Name)"
+                    }
+            }
+        }
+        catch {
+            Write-DLog "Log rotation failed: $_" "WARN"
+        }
+    }
 }
 
 function Show-ErrorDialog {
