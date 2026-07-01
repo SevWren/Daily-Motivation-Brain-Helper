@@ -689,19 +689,92 @@ function New-MotivationTask {
         $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
 
         try {
-            Register-ScheduledTask `
+            # AG5-001: Capture return value to verify task was actually created
+            $registeredTask = Register-ScheduledTask `
                 -TaskName    $taskName  `
                 -Action      $action    `
                 -Trigger     $trigger   `
                 -Settings    $settings  `
                 -Principal   $principal `
                 -Description $safeDescription `
-                -Force -ErrorAction Stop | Out-Null
-            Write-DLog "Register-ScheduledTask succeeded: $taskName"
+                -Force -ErrorAction Stop
+
+            # AG5-001: Verify the task was actually created and has correct properties
+            if ($null -eq $registeredTask) {
+                Write-DLog "Register-ScheduledTask returned null - task may not have been created" "ERROR"
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task registration returned null" }
+            }
+
+            # AG5-001: Verify task name matches what we expected
+            if ($registeredTask.TaskName -ne $taskName) {
+                Write-DLog "Registered task name '$($registeredTask.TaskName)' does not match expected '$taskName'" "ERROR"
+                # Attempt cleanup of incorrectly named task
+                Unregister-ScheduledTask -TaskName $registeredTask.TaskName -Confirm:$false -ErrorAction SilentlyContinue
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name mismatch after registration" }
+            }
+
+            # AG5-001: Verify task state is Ready (not Disabled)
+            if ($registeredTask.State -ne 'Ready') {
+                Write-DLog "Task registered but state is '$($registeredTask.State)' instead of 'Ready'" "WARN"
+            }
+
+            Write-DLog "Register-ScheduledTask succeeded: $taskName (State: $($registeredTask.State))"
+
+            # AG5-002: Verify task trigger is valid and will actually fire
+            try {
+                $verifyTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+                $trigger = $verifyTask.Triggers | Select-Object -First 1
+
+                if ($null -eq $trigger) {
+                    Write-DLog "Task registered but has no triggers" "ERROR"
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task has no triggers" }
+                }
+
+                # Verify trigger start boundary is parseable and in the future
+                if ($trigger.StartBoundary) {
+                    try {
+                        $triggerStart = [datetime]::Parse($trigger.StartBoundary)
+                        if ($triggerStart -le (Get-Date)) {
+                            Write-DLog "Task trigger time is in the past: $triggerStart" "ERROR"
+                            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Trigger time is in the past" }
+                        }
+                        Write-DLog "Task trigger verified: will fire at $triggerStart (Local time)"
+                    }
+                    catch {
+                        Write-DLog "Failed to parse trigger StartBoundary: $($trigger.StartBoundary)" "ERROR"
+                        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time format" }
+                    }
+                }
+
+                # Verify task state is Ready
+                if ($verifyTask.State -ne 'Ready') {
+                    Write-DLog "Task state is '$($verifyTask.State)' - task may not fire" "WARN"
+                }
+            }
+            catch {
+                Write-DLog "Failed to verify task after registration: $($_.Exception.Message)" "ERROR"
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task verification failed: $($_.Exception.Message)" }
+            }
         }
         catch {
-            Write-DLog "Register-ScheduledTask failed: $($_.Exception.Message)" "ERROR"
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
+            # AG5-021: Provide specific error handling based on exception type
+            $errorMsg = $_.Exception.Message
+            if ($errorMsg -match 'already exists') {
+                Write-DLog "Task collision detected (shouldn't happen after GUID retry): $errorMsg" "ERROR"
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name collision: $errorMsg" }
+            }
+            elseif ($errorMsg -match 'Access Denied|not have permission') {
+                Write-DLog "Permission denied - may need admin rights: $errorMsg" "ERROR"
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Access denied: $errorMsg" }
+            }
+            else {
+                Write-DLog "Register-ScheduledTask failed: $errorMsg" "ERROR"
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $errorMsg }
+            }
         }
     }
 
