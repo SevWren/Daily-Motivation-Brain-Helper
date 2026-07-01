@@ -800,9 +800,10 @@ function New-MotivationTask {
 
         # FIX AG10-001 & AG10-010: Sanitize Description - use hash instead of raw path
         # Prevents information leakage via Task Scheduler description field
-        $pathHash = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+        $pathHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
             [Text.Encoding]::UTF8.GetBytes($FolderPath)) |
-            ForEach-Object { $_.ToString("X2") } | Join-String -Separator ""
+            ForEach-Object { $_.ToString("X2") }
+        $pathHash = $pathHashParts -join ''
         $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
 
         try {
