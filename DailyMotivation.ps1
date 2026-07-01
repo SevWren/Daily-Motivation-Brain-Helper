@@ -204,8 +204,12 @@ function Initialize-AppData {
             New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
         }
         catch {
-            $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
-            Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
+            # FIX AG10-006: Make fallback directory unique per process to prevent data isolation issues
+            $uniqueId = [System.Diagnostics.Process]::GetCurrentProcess().Id
+            $randomSuffix = Get-Random -Minimum 1000 -Maximum 9999
+            $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper_${uniqueId}_${randomSuffix}"
+            Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to unique temp directory '$fallback'."
+            Write-DLog "Using unique fallback directory: $fallback (PID: $uniqueId)" "WARN"
             try {
                 New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop | Out-Null
                 $script:AppDataDir   = $fallback
