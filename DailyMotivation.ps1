@@ -62,6 +62,12 @@ $script:Platform = $null
 
 # AG7-004: Config caching variables (improves performance, prevents inconsistency)
 $script:ConfigCache = $null
+
+# AG7-023: Centralized config defaults (single source of truth)
+$script:ConfigDefaults = [PSCustomObject]@{
+    default_trigger_hour   = 14
+    task_warning_threshold = 5
+}
 $script:ConfigCacheMTime = $null
 
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
@@ -502,6 +508,33 @@ function New-MotivationTask {
         [switch]$Force
     )
 
+    # FIX AG10-003: Validate folder path before storage in Task Scheduler/Registry
+    # Prevent path traversal, command injection, and malicious UNC paths
+    if ($FolderPath -match '\.\.' -or $FolderPath -match '\.\.\\' -or $FolderPath -match '\.\./') {
+        Write-DLog "Path validation failed: path traversal detected in '$FolderPath'" "ERROR"
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: path traversal sequences (..) are not allowed" }
+    }
+
+    if ($FolderPath -match '[<>|*?]') {
+        Write-DLog "Path validation failed: invalid characters in '$FolderPath'" "ERROR"
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: contains invalid characters (<>|*?)" }
+    }
+
+    # Validate path can be normalized
+    try {
+        $normalized = [System.IO.Path]::GetFullPath($FolderPath)
+        Write-DLog "Path normalized successfully: $FolderPath -> $normalized"
+    }
+    catch {
+        Write-DLog "Path validation failed: cannot normalize path '$FolderPath' - $($_.Exception.Message)" "ERROR"
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path format: $_" }
+    }
+
+    # Log warning for UNC paths (security consideration)
+    if ($FolderPath -match '^\\\\') {
+        Write-DLog "UNC path scheduling: $FolderPath - user responsibility for security" "WARN"
+    }
+
     # Sync OS task states before duplicate check so stale ghost entries (tasks that were
     # written to tasks.json but never actually registered in Task Scheduler due to a
     # non-terminating error) are marked DELETED and don't block rescheduling.
@@ -825,7 +858,7 @@ function Get-ScheduleTime {
         [object]$TodayRadioControl
     )
     $cfg  = Get-Config
-    $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
+    $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { $script:ConfigDefaults.default_trigger_hour }
     if ($TodayRadioControl.IsVisible -and $TodayRadioControl.IsChecked) {
         return (Get-Date).Date.AddHours($hour)
     }
@@ -1617,7 +1650,7 @@ function Show-MainWindow {
 
     # Show Today radio only before trigger hour; set dynamic labels from config (A3-BUG-02)
     $cfg  = Get-Config
-    $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
+    $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { $script:ConfigDefaults.default_trigger_hour }
     $timeLabel = [datetime]::Today.AddHours($hour).ToString("h:mm tt")
     $todayRadio.Content    = "Today at $timeLabel"
     $tomorrowRadio         = Find "TomorrowRadio"
@@ -2581,7 +2614,7 @@ if (-not $NoRun) {
             Write-DLog "setfolder: FolderPath='$FolderPath'"
             if ($FolderPath -and (Test-Path $FolderPath -PathType Container)) {
                 $cfg         = Get-Config
-                $triggerHour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { 14 }
+                $triggerHour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { $script:ConfigDefaults.default_trigger_hour }
                 $triggerTime = (Get-Date).Date.AddDays(1).AddHours($triggerHour)
                 $msg         = Get-RandomMessage
                 $result      = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime
