@@ -2563,42 +2563,42 @@ function Show-PopupWindow {
         $timer = [System.Windows.Threading.DispatcherTimer]::new()
         $timer.Interval = [System.TimeSpan]::FromSeconds(1)
         $timer.Add_Tick({
-                try {
-                    # AG11-011: Check if window is still loaded before accessing UI elements
-                    if ($null -eq $window -or -not $window.IsLoaded) {
-                        Write-DLog "Window no longer loaded, stopping timer" "WARN"
-                        $script:windowClosed = $true
-                        $timer.Stop()
-                        return
-                    }
-                    # AG11-011: Check windowClosed flag FIRST before any UI operations
-                    if ($script:windowClosed) {
-                        $timer.Stop()
-                        return
-                    }
-                    if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
-                    $script:remaining--
-                    $countdownText.Text = $script:remaining
-                    if ($script:remaining -le 0 -and -not $script:windowClosed) {
-                        # AG11-011: Set flag BEFORE closing window to prevent race condition
-                        $script:windowClosed = $true
-                        $timer.Stop()
-                        $script:openExplorer = $true
-                        $window.Close()
-                    }
-                }
-                catch {
-                    Write-DLog "Timer error: $_" "ERROR"
+            try {
+                # AG11-011: Check if window is still loaded before accessing UI elements
+                if ($null -eq $window -or -not $window.IsLoaded) {
+                    Write-DLog "Window no longer loaded, stopping timer" "WARN"
                     $script:windowClosed = $true
                     $timer.Stop()
+                    return
                 }
-                finally {
-                    # AG1-011: Always stop timer when countdown completes or window closes
-                    if ($script:remaining -le 0 -or $script:windowClosed) {
-                        $timer.Stop()
-                    }
+                # AG11-011: Check windowClosed flag FIRST before any UI operations
+                if ($script:windowClosed) {
+                    $timer.Stop()
+                    return
                 }
-            })
+                if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
+                $script:remaining--
+                $countdownText.Text = $script:remaining
+                if ($script:remaining -le 0 -and -not $script:windowClosed) {
+                    # AG11-011: Set flag BEFORE closing window to prevent race condition
+                    $script:windowClosed = $true
+                    $timer.Stop()
+                    $script:openExplorer = $true
+                    $window.Close()
+                }
+            }
+            catch {
+                Write-DLog "Timer error: $_" "ERROR"
+                $script:windowClosed = $true
+                $timer.Stop()
+            }
+            finally {
+                # AG1-011: Always stop timer when countdown completes or window closes
+                if ($script:remaining -le 0 -or $script:windowClosed) {
+                    $timer.Stop()
+                }
+            }
+        })
         $timer.Start()
         Write-DLog "Countdown timer started"
     }
@@ -2634,140 +2634,140 @@ function Show-PopupWindow {
 
     # Snooze button
     $snoozeBtn.Add_Click({
-            try {
-                Write-DLog "Snooze clicked ($($script:snoozeMinutes) min)"
-                if (-not $script:pathMissing) { $timer.Stop() }
-                $script:snoozeCount++
-                $script:openExplorer = $false
-                # AG11-003: Validate snoozeMinutes is within valid range (1-1440 minutes = 24 hours)
-                if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
-                    Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
-                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
-                    [void][System.Windows.MessageBox]::Show(
-                        "Snooze duration must be between 1 minute and 24 hours.",
-                        "Invalid Snooze", "OK", "Error")
-                    return
-                }
-                # AG11-003: Add 1-minute buffer to snooze time to prevent scheduling in past
-                # If system processing takes time, this ensures TriggerTime validation won't fail
-                $bufferMinutes = 1
-                $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
-                Write-DLog "Snooze time calculated: $snoozeTime (requested: $($script:snoozeMinutes)m + buffer: ${bufferMinutes}m)"
-                $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
-                if (-not $snoozeResult.Success) {
-                    Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
-                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
-                    [void][System.Windows.MessageBox]::Show(
-                        "Could not snooze the task.`n`n$($snoozeResult.Error)",
-                        "Snooze Failed", "OK", "Error")
-                    return
-                }
-                Write-DLog "Snooze task created for $snoozeTime"
-                $window.Close()
+        try {
+            Write-DLog "Snooze clicked ($($script:snoozeMinutes) min)"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:snoozeCount++
+            $script:openExplorer = $false
+            # AG11-003: Validate snoozeMinutes is within valid range (1-1440 minutes = 24 hours)
+            if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
+                Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                [void][System.Windows.MessageBox]::Show(
+                    "Snooze duration must be between 1 minute and 24 hours.",
+                    "Invalid Snooze", "OK", "Error")
+                return
             }
-            catch {
-                # AG6-017: Ensure timer stops even in exception paths
-                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
-                    $timer.Stop()
-                }
-                Write-DLog "Snooze error: $_" "ERROR"
-                $window.Close()
+            # AG11-003: Add 1-minute buffer to snooze time to prevent scheduling in past
+            # If system processing takes time, this ensures TriggerTime validation won't fail
+            $bufferMinutes = 1
+            $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
+            Write-DLog "Snooze time calculated: $snoozeTime (requested: $($script:snoozeMinutes)m + buffer: ${bufferMinutes}m)"
+            $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
+            if (-not $snoozeResult.Success) {
+                Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                [void][System.Windows.MessageBox]::Show(
+                    "Could not snooze the task.`n`n$($snoozeResult.Error)",
+                    "Snooze Failed", "OK", "Error")
+                return
             }
-        })
+            Write-DLog "Snooze task created for $snoozeTime"
+            $window.Close()
+        }
+        catch {
+            # AG6-017: Ensure timer stops even in exception paths
+            if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                $timer.Stop()
+            }
+            Write-DLog "Snooze error: $_" "ERROR"
+            $window.Close()
+        }
+    })
 
     # Dismiss for Today
     $dismissBtn.Add_Click({
-            try {
-                Write-DLog "Dismiss for Today clicked"
-                if (-not $script:pathMissing) { $timer.Stop() }
-                $script:openExplorer = $false
-                if ($config.explorer_path) {
-                    $pending = Get-MotivationTasks | Where-Object {
-                        $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
-                    }
-                    foreach ($t in $pending) {
-                        $removed = Remove-MotivationTask -TaskId $t.task_id
-                        if (-not $removed) {
-                            Write-DLog "Failed to remove task $($t.task_id) during dismiss" "WARN"
-                        }
+        try {
+            Write-DLog "Dismiss for Today clicked"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:openExplorer = $false
+            if ($config.explorer_path) {
+                $pending = Get-MotivationTasks | Where-Object {
+                    $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
+                }
+                foreach ($t in $pending) {
+                    $removed = Remove-MotivationTask -TaskId $t.task_id
+                    if (-not $removed) {
+                        Write-DLog "Failed to remove task $($t.task_id) during dismiss" "WARN"
                     }
                 }
-                $window.Close()
             }
-            catch {
-                # AG6-017: Ensure timer stops even in exception paths
-                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
-                    $timer.Stop()
-                }
-                Write-DLog "Dismiss error: $_" "ERROR"
-                $window.Close()
+            $window.Close()
+        }
+        catch {
+            # AG6-017: Ensure timer stops even in exception paths
+            if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                $timer.Stop()
             }
-        })
+            Write-DLog "Dismiss error: $_" "ERROR"
+            $window.Close()
+        }
+    })
 
     # Open Folder button
     $letsGoBtn.Add_Click({
-            try {
-                Write-DLog "Open Folder clicked"
-                if (-not $script:pathMissing) { $timer.Stop() }
-                $script:openExplorer = $true
-                $window.Close()
+        try {
+            Write-DLog "Open Folder clicked"
+            if (-not $script:pathMissing) { $timer.Stop() }
+            $script:openExplorer = $true
+            $window.Close()
+        }
+        catch {
+            # AG6-017: Ensure timer stops even in exception paths
+            if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
+                $timer.Stop()
             }
-            catch {
-                # AG6-017: Ensure timer stops even in exception paths
-                if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
-                    $timer.Stop()
-                }
-                Write-DLog "LetsGo error: $_" "ERROR"
-            }
-        })
+            Write-DLog "LetsGo error: $_" "ERROR"
+        }
+    })
 
     # Path missing - Dismiss
     $pathDismissBtn.Add_Click({
-            Write-DLog "Path-missing Dismiss clicked"
-            $script:openExplorer = $false
-            $window.Close()
-        })
+        Write-DLog "Path-missing Dismiss clicked"
+        $script:openExplorer = $false
+        $window.Close()
+    })
 
     # Path missing - Re-pick folder
     $rePickBtn.Add_Click({
-            Write-DLog "Re-pick clicked"
-            $dialog = $null
-            try {
-                $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-                $dialog.Description         = "Choose the new location for this folder"
-                $dialog.ShowNewFolderButton = $false
-                if ($dialog.ShowDialog() -eq "OK") {
-                    $newPath = $dialog.SelectedPath
-                    Write-DLog "Re-pick: $newPath"
-                    try {
-                        # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
-                        $c = Get-PopupConfig
-                        # AG9-007: Removed backtick line continuation
-                        $popupParams = @{
-                            Glyph        = $c.glyph
-                            Title        = $c.title
-                            Body         = $c.body
-                            ExplorerPath = $newPath
-                            TaskId       = $c.task_id
-                        }
-                        Set-PopupConfig @popupParams
-                        # ERR-002: only update state if write succeeded
-                        $script:newExplorerPath = $newPath
-                        $script:openExplorer    = $true
-                        $window.Close()
+        Write-DLog "Re-pick clicked"
+        $dialog = $null
+        try {
+            $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+            $dialog.Description         = "Choose the new location for this folder"
+            $dialog.ShowNewFolderButton = $false
+            if ($dialog.ShowDialog() -eq "OK") {
+                $newPath = $dialog.SelectedPath
+                Write-DLog "Re-pick: $newPath"
+                try {
+                    # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
+                    $c = Get-PopupConfig
+                    # AG9-007: Removed backtick line continuation
+                    $popupParams = @{
+                        Glyph        = $c.glyph
+                        Title        = $c.title
+                        Body         = $c.body
+                        ExplorerPath = $newPath
+                        TaskId       = $c.task_id
                     }
-                    catch {
-                        Write-DLog "Config update failed: $_" "ERROR"  # AG9-003
-                        [void][System.Windows.MessageBox]::Show(
-                            "Could not save the new folder path.`n`n$($_.Exception.Message)",
-                            "Save Failed", "OK", "Error")
-                    }
+                    Set-PopupConfig @popupParams
+                    # ERR-002: only update state if write succeeded
+                    $script:newExplorerPath = $newPath
+                    $script:openExplorer    = $true
+                    $window.Close()
+                }
+                catch {
+                    Write-DLog "Config update failed: $_" "ERROR"  # AG9-003
+                    [void][System.Windows.MessageBox]::Show(
+                        "Could not save the new folder path.`n`n$($_.Exception.Message)",
+                        "Save Failed", "OK", "Error")
                 }
             }
-            finally {
-                if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
-            }
-        })
+        }
+        finally {
+            if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
+        }
+    })
 
     # AG3-013, AG3-014: Add window cleanup handler for timers
     $window.Add_Closed({
