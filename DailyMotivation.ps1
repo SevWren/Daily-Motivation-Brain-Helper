@@ -654,16 +654,41 @@ function New-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic
-        # Generate task ID with collision retry (GAP-007)
-        $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-        $taskName = "DailyMotivation_$taskId"
+        # FIX AG10-022: Generate task ID with exponential backoff collision retry
+        $maxRetries = 10
+        $backoffMs = 50
+        $taskId = $null
+        $taskName = $null
         $attempts = 0
-        while ((Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) -and ($attempts -lt 5)) {
-            # AG5-025: Add sleep between retry attempts to avoid CPU spinning
-            Start-Sleep -Milliseconds (100 * ($attempts + 1))
-            $taskId   = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+
+        for ($attempts = 0; $attempts -lt $maxRetries; $attempts++) {
+            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
-            $attempts++
+
+            try {
+                $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
+                # Task exists, retry with exponential backoff
+                Write-DLog "Task name collision on attempt $($attempts + 1): $taskName" "WARN"
+                Start-Sleep -Milliseconds $backoffMs
+                $backoffMs = [Math]::Min($backoffMs * 2, 5000)  # Cap at 5 seconds
+            }
+            catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+                # Task doesn't exist - collision resolved
+                Write-DLog "Unique task name generated: $taskName (attempt $($attempts + 1))"
+                break
+            }
+            catch {
+                # Other error - log and retry
+                Write-DLog "Task name check error: $_" "WARN"
+                Start-Sleep -Milliseconds $backoffMs
+                $backoffMs = [Math]::Min($backoffMs * 2, 5000)
+            }
+        }
+
+        # Check if we exhausted retries
+        if ($attempts -ge $maxRetries) {
+            Write-DLog "Could not generate unique task name after $maxRetries attempts" "ERROR"
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Could not generate unique task ID after $maxRetries attempts (collision retry exhausted)" }
         }
 
         # Task Scheduler action: call this exe directly with /popup
