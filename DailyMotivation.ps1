@@ -201,13 +201,15 @@ function Initialize-AppData {
 
     if (-not (Test-Path $script:AppDataDir)) {
         try {
-            New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void](New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop)
         }
         catch {
             $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
             try {
-                New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop | Out-Null
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                [void](New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop)
                 $script:AppDataDir   = $fallback
                 $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
                 $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
@@ -490,13 +492,15 @@ function Show-ErrorDialog {
     $safeMessage = Get-SafeErrorMessage -ErrorMessage $Message
 
     try {
-        [System.Windows.MessageBox]::Show($safeMessage, $Title, "OK", "Error") | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void][System.Windows.MessageBox]::Show($safeMessage, $Title, "OK", "Error")
     }
     catch {
         try {
-            [System.Windows.Forms.MessageBox]::Show($safeMessage, $Title,
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.Forms.MessageBox]::Show($safeMessage, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error) | Out-Null
+                [System.Windows.Forms.MessageBoxIcon]::Error)
         }
         catch { [Console]::Error.WriteLine("ERROR [$Title]: $safeMessage") }
     }
@@ -511,13 +515,15 @@ function Show-InfoDialog {
         [string]$Title = "Daily Motivation Brain Helper"
     )
     try {
-        [System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information") | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information")
     }
     catch {
         try {
-            [System.Windows.Forms.MessageBox]::Show($Message, $Title,
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.Forms.MessageBox]::Show($Message, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+                [System.Windows.Forms.MessageBoxIcon]::Information)
         }
         catch { [Console]::Out.WriteLine("INFO [$Title]: $Message") }
     }
@@ -1358,9 +1364,11 @@ function Register-ContextMenu {
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
     try {
-        New-Item -Path $verbKey -Force | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void](New-Item -Path $verbKey -Force)
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
-        New-Item -Path $cmdKey -Force | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void](New-Item -Path $cmdKey -Force)
         $escapedPath = $ExePath -replace '([\\"`])', '`$1'
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
 
@@ -1855,7 +1863,8 @@ function Show-MainWindow {
         # Handle validation errors
         if (-not $result.Success -and -not $result.IsDuplicate) {
             if ($result.Error) {
-                [System.Windows.MessageBox]::Show($result.Error, "Invalid Folder", "OK", "Warning") | Out-Null
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                [void][System.Windows.MessageBox]::Show($result.Error, "Invalid Folder", "OK", "Warning")
             }
             else {
                 Show-ErrorDialog "Could not create the scheduled task."
@@ -2839,6 +2848,43 @@ $Messages = @(
     [PSCustomObject]@{ Glyph = "[=]"; Title = "Steady Wins";         Body = "Slow, steady, and deliberate is how great work gets done. Today's session is a brick in something bigger." }
 )
 
+
+# ============================================================
+# SECTION 10.5: Text Escaping and Sanitization
+# ============================================================
+
+function Escape-XmlText {
+    <#
+    .SYNOPSIS
+    Escapes XML special characters for safe display in WPF TextBlock elements.
+
+    .DESCRIPTION
+    FIX AG12-001: Folder names and user-provided text containing XML special
+    characters (<, >, &, ", ') must be escaped before assignment to WPF
+    TextBlock.Text properties to prevent rendering errors and UI corruption.
+
+    .PARAMETER Text
+    The text string to escape. Null or empty strings are handled gracefully.
+
+    .EXAMPLE
+    $safe = Escape-XmlText 'Project <Q4> & "Marketing"'
+    # Returns: 'Project &lt;Q4&gt; &amp; &quot;Marketing&quot;'
+    #>
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    # Handle null or empty input
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ''
+    }
+
+    # Use .NET SecurityElement.Escape for standard XML entity escaping
+    # This handles: < > & " '
+    return [System.Security.SecurityElement]::Escape($Text)
+}
 function Get-RandomMessage {
     return $Messages | Get-Random
 }
