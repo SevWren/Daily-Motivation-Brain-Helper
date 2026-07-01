@@ -631,11 +631,13 @@ function New-MotivationTask {
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
             # Check property exists first (guard against malformed/legacy task objects)
-            ($null -ne $_ -and $_.PSObject.Properties['folder_path']) -and
-            $_.folder_path -and $_.folder_path.Length -gt 0 -and
-            [System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -eq $normalizedInput -and
-            (try { ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date } catch { $false }) -and
-            $_.status -eq "PENDING"
+            if ($null -eq $_ -or -not $_.PSObject.Properties['folder_path']) { return $false }
+            if (-not $_.folder_path -or $_.folder_path.Length -eq 0) { return $false }
+            if ([System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -ne $normalizedInput) { return $false }
+            if ($_.status -ne "PENDING") { return $false }
+            $dateMatch = $false
+            try { $dateMatch = ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date } catch {}
+            return $dateMatch
         }
         if ($existing) {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $true }
