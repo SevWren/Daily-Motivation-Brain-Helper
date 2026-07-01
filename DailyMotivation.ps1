@@ -2570,6 +2570,11 @@ function Show-PopupWindow {
     # Snooze duration helpers
     # AG6-022: Set proper ContextMenu placement to avoid off-screen positioning
     $snoozeDropBtn.Add_Click({
+        # AG17-025: Check if ContextMenu exists before accessing properties
+        if ($null -eq $snoozeDropBtn.ContextMenu) {
+            Write-DLog "ERROR: SnoozeDropBtn ContextMenu is null - XAML may have failed to load" "ERROR"
+            return
+        }
         $snoozeDropBtn.ContextMenu.PlacementTarget = $snoozeDropBtn
         $snoozeDropBtn.ContextMenu.Placement = 'Bottom'
         $snoozeDropBtn.ContextMenu.IsOpen = $true
