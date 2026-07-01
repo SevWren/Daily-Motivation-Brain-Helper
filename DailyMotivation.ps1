@@ -1325,7 +1325,10 @@ function Invoke-FolderScheduling {
 
     # REQ-010: Register context menu on successful scheduling
     if ($script:ExePath) {
-        Register-ContextMenu -ExePath $script:ExePath
+        $regResult = Register-ContextMenu -ExePath $script:ExePath
+        if (-not $regResult.Success) {
+            Write-DLog "Register-ContextMenu failed: $($regResult.Reason)" "WARN"
+        }
     }
 
     # Return success with all metadata
@@ -1350,7 +1353,7 @@ function Register-ContextMenu {
     # when Explorer invokes the verb, because Windows tries to execute a text file as a PE.
     if (-not $ExePath -or $ExePath -notmatch '\.exe$') {
         Write-DLog "Register-ContextMenu: skipped — ExePath is not a compiled exe ('$ExePath'). Run the compiled DailyMotivation.exe to register the context menu." "WARN"
-        return
+        return @{ Success = $false; Reason = "ExePath is not a compiled exe" }
     }
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
@@ -1360,10 +1363,23 @@ function Register-ContextMenu {
         New-Item -Path $cmdKey -Force | Out-Null
         $escapedPath = $ExePath -replace '([\\"`])', '`$1'
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
+
+        # AG17-002: Verify the keys were created successfully
+        if (-not (Test-Path $verbKey)) {
+            Write-DLog "Register-ContextMenu: Verification failed - verbKey does not exist" "ERROR"
+            return @{ Success = $false; Reason = "Registry verb key verification failed" }
+        }
+        if (-not (Test-Path $cmdKey)) {
+            Write-DLog "Register-ContextMenu: Verification failed - command key does not exist" "ERROR"
+            return @{ Success = $false; Reason = "Registry command key verification failed" }
+        }
+
         Write-DLog "Context menu registered for: $ExePath"
+        return @{ Success = $true; Reason = "" }
     }
     catch {
         Write-DLog "Register-ContextMenu failed: $_" "WARN"
+        return @{ Success = $false; Reason = $_.Exception.Message }
     }
 }
 
@@ -2882,7 +2898,11 @@ if (-not $NoRun) {
         default {
             # REQ-010: Ensure context menu is registered every time the exe launches.
             # This self-heals if the user manually deleted the registry key.
-            Register-ContextMenu -ExePath $script:ExePath
+            # AG17-002: Check registration result
+            $regResult = Register-ContextMenu -ExePath $script:ExePath
+            if (-not $regResult.Success) {
+                Write-DLog "Context menu registration failed: $($regResult.Reason)" "WARN"
+            }
             Show-MainWindow
         }
     }
