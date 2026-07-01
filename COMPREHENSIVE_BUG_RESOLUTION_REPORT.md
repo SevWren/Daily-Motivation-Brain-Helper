@@ -327,6 +327,47 @@ TBD = Not fully analyzed in this session
 
 ---
 
+---
+
+## HANDOFF SESSION P0 FIXES (2026-07-01)
+
+Following the 4-agent handoff review, three P0 items were resolved:
+
+### P0-1: PS7+ Syntax CI Gate Added
+
+**Problem:** `#Requires -Version 7.0` in `DailyMotivation.ps1` is intentional (project is PS7 for Windows/Linux compatibility), but ps2exe compiles to .NET Framework 4.x. PS7-only features slipping into the source (Join-String, null-coalescing `??`, null-conditional `?.`, ForEach-Object -Parallel) cause runtime failures in the compiled exe. 4 prior hotfixes and 4 PS5.1 compatibility fixes were caused by this gap.
+
+**Fix:** Added `Check for PS7-only syntax incompatible with ps2exe` step to the `analyze` CI job in `.github/workflows/test.yml`. Greps for 4 known-bad patterns and fails the workflow if any are found. Also added `project-restart-pwsh7` branch to the CI trigger list (it was missing).
+
+**Files changed:** `.github/workflows/test.yml`
+
+---
+
+### P0-2: Broken Performance.Tests.ps1 AG14-007 Test Fixed
+
+**Problem:** `Tests/Unit/Performance.Tests.ps1` — the `AG14-007: DriveInfo Not Disposed` describe block asserted `$hasDisposal | Should -Be $true` when DriveInfo was found in the function. HOTFIX commit 92e5f60 correctly removed DriveInfo.Dispose() calls (DriveInfo does not implement IDisposable), leaving the test asserting for code that must not exist. This caused the test to permanently fail.
+
+**Fix:** Inverted the assertion. The test now verifies that `driveInfo.Dispose()` is NOT present, documenting that DriveInfo is not IDisposable and any future re-addition of `.Dispose()` would be a regression.
+
+**Files changed:** `Tests/Unit/Performance.Tests.ps1`
+
+---
+
+### P0-3: Four Coverage-Theater Tests Converted to Real Assertions
+
+All four tests that used `$true | Should -BeTrue` (unconditional pass) were replaced with behavioral assertions that verify the actual code fixes are present. All four underlying bugs had already been fixed in the codebase.
+
+| Test File | Bug | What the real test now verifies |
+|-----------|-----|--------------------------------|
+| `AG19-010.TabOrder.Tests.ps1` | Tab order on all controls | Asserts correct `TabIndex` values on 5 main-window + 4 popup controls via XAML attribute regex |
+| `AG17-009.UndoFeedbackTimer.Tests.ps1` | Timer disposal after stop | Asserts `undoFeedbackTimer.Stop()` AND `undoFeedbackTimer.Dispose()` exist in the Tick handler, in correct order |
+| `AG17-025.ContextMenuNullCheck.Tests.ps1` | Null check before ContextMenu.IsOpen | Asserts null guard exists, has a return statement, logs an error, and that .IsOpen access comes after the guard |
+| `AG17-002.ContextMenuVerification.Tests.ps1` | Registry key verification | Asserts Test-Path on verbKey and cmdKey, success/failure result shape, and call-site check in Invoke-FolderScheduling |
+
+**Files changed:** `Tests/Unit/AG19-010.TabOrder.Tests.ps1`, `Tests/Unit/AG17-009.UndoFeedbackTimer.Tests.ps1`, `Tests/Unit/AG17-025.ContextMenuNullCheck.Tests.ps1`, `Tests/Unit/AG17-002.ContextMenuVerification.Tests.ps1`
+
+---
+
 ## REMAINING CRITICAL BUGS (Immediate Action Required)
 
 ### CRITICAL Priority (9 bugs)

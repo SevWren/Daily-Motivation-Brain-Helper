@@ -2,9 +2,9 @@ name: Test Suite
 
 on:
   push:
-    branches: [ main, develop, project-restart ]
+    branches: [ main, develop, project-restart, project-restart-pwsh7 ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main, develop, project-restart-pwsh7 ]
   workflow_dispatch:
 
 jobs:
@@ -94,6 +94,31 @@ jobs:
             $results | Format-Table -AutoSize
             throw "PSScriptAnalyzer found $($results.Count) violation(s)"
           }
+
+      - name: Check for PS7-only syntax incompatible with ps2exe
+        shell: powershell
+        run: |
+          # ps2exe compiles DailyMotivation.ps1 to a .NET Framework 4.x exe.
+          # These PS7+ features are not available in .NET Framework 4.x and will
+          # cause runtime failures in the compiled exe despite #Requires -Version 7.0.
+          $patterns = [ordered]@{
+            'Join-String cmdlet (use -join operator instead)'  = '(?<![A-Za-z0-9_\-])Join-String\b'
+            'Null coalescing operator ?? (PS7+)'               = '[^\?]\?\?[^=\?]'
+            'Null conditional operator ?. (PS7+)'              = '\?\.'
+            'ForEach-Object -Parallel (PS7+)'                  = 'ForEach-Object\s+-Parallel'
+          }
+          $content = Get-Content DailyMotivation.ps1 -Raw
+          $violations = @()
+          foreach ($desc in $patterns.Keys) {
+            if ($content -match $patterns[$desc]) {
+              $violations += "FAIL: $desc — pattern: $($patterns[$desc])"
+            }
+          }
+          if ($violations) {
+            $violations | ForEach-Object { Write-Host "::error::$_" }
+            throw "PS7+ syntax incompatible with ps2exe .NET Framework 4.x found in DailyMotivation.ps1"
+          }
+          Write-Host "PS7+ syntax gate passed — no ps2exe-incompatible patterns detected"
 
   build:
     name: Build EXE
