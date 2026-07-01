@@ -36,10 +36,7 @@ if ($PSCmdlet.ShouldProcess($OutputFile, "Build executable")) {
         -company "SevWren"
 
     # AG16-001: Check exit code after Invoke-ps2exe
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Build failed: ps2exe returned exit code $LASTEXITCODE"
-        exit 1
-    }
+    if ($LASTEXITCODE -ne 0) { Write-Error "Build failed: ps2exe returned exit code $LASTEXITCODE"; exit 1 }
 
     # AG16-002: Validate output file exists and has minimum size
     if (Test-Path $OutputFile) {
