@@ -2093,7 +2093,8 @@ function Show-MainWindow {
     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
     # AG6-004: Wrap ShowDialog in try-finally to ensure window disposal
     try {
-        $window.ShowDialog() | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void]$window.ShowDialog()
     }
     finally {
         if ($window) {
@@ -2461,20 +2462,20 @@ function Show-PopupWindow {
         $pathMissingPanel.Visibility = "Visible"
         $folderName = if ($config.explorer_path) { Split-Path -Leaf $config.explorer_path } else { "Unknown" }
         if (-not $folderName -or $folderName.Length -eq 0) { $folderName = "Unknown" }
-        $missingPathLabel.Text = "This folder can't be found: $folderName"
+        $missingPathLabel.Text = "This folder can't be found: $(Escape-XmlText $folderName)"
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
-        $glyphText.Text = $config.glyph
-        $titleText.Text = $config.title
-        $bodyText.Text  = $config.body
+        $glyphText.Text = Escape-XmlText $config.glyph
+        $titleText.Text = Escape-XmlText $config.title
+        $bodyText.Text  = Escape-XmlText $config.body
         if ($config.folder_name -and $config.folder_name -ne "") {
             # UB-004: UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
                 $config.explorer_path
             }
             else { $config.folder_name }
-            $folderNameText.Text       = "Folder: $displayName"
+            $folderNameText.Text       = "Folder: $(Escape-XmlText $displayName)"
             $folderNameText.Visibility = "Visible"
         }
     }
