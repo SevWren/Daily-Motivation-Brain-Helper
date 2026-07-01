@@ -204,12 +204,8 @@ function Initialize-AppData {
             New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop | Out-Null
         }
         catch {
-            # FIX AG10-006: Make fallback directory unique per process to prevent data isolation issues
-            $uniqueId = [System.Diagnostics.Process]::GetCurrentProcess().Id
-            $randomSuffix = Get-Random -Minimum 1000 -Maximum 9999
-            $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper_${uniqueId}_${randomSuffix}"
-            Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to unique temp directory '$fallback'."
-            Write-DLog "Using unique fallback directory: $fallback (PID: $uniqueId)" "WARN"
+            $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
+            Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
             try {
                 New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop | Out-Null
                 $script:AppDataDir   = $fallback
@@ -837,9 +833,45 @@ function New-MotivationTask {
         Save-TasksJson $tasks
     }
     catch {
-        # Rollback: unregister the OS task to keep Task Scheduler and tasks.json in sync
+        # AG5-015 & AG5-020: Rollback with verification - unregister the OS task to keep Task Scheduler and tasks.json in sync
         if (-not $script:Platform) {
-            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            try {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
+                Write-DLog "Rollback: Successfully unregistered task $taskName after JSON save failure" "WARN"
+
+                # AG5-015: Verify task was actually removed to prevent race conditions
+                $attempts = 0
+                $maxAttempts = 3
+                $taskStillExists = $true
+
+                while ($taskStillExists -and $attempts -lt $maxAttempts) {
+                    Start-Sleep -Milliseconds (100 * ($attempts + 1))
+                    try {
+                        Get-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null
+                        $taskStillExists = $true
+                        $attempts++
+                        Write-DLog "Rollback: Task still exists after unregister, attempt $attempts/$maxAttempts" "WARN"
+                    }
+                    catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
+                        # Task not found - this is what we want
+                        $taskStillExists = $false
+                        Write-DLog "Rollback: Verified task $taskName was removed" "INFO"
+                    }
+                    catch {
+                        # Other error - assume task still exists
+                        $attempts++
+                    }
+                }
+
+                if ($taskStillExists) {
+                    Write-DLog "Rollback: WARNING - Task may still exist after unregister attempts" "ERROR"
+                }
+            }
+            catch {
+                # AG5-020: Log and report unregister failure - creates inconsistent state
+                Write-DLog "Rollback FAILED: Could not unregister task $taskName - INCONSISTENT STATE: $($_.Exception.Message)" "ERROR"
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Failed to save task record AND failed to rollback: Task may remain in Task Scheduler. Error: $($_.Exception.Message)" }
+            }
         }
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Failed to save task record: $($_.Exception.Message)" }
     }
