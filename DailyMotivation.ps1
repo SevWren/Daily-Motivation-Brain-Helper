@@ -1412,8 +1412,8 @@ function Register-ContextMenu {
 }
 
 function Unregister-ContextMenu {
-    Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" `
-        -Recurse -Force -ErrorAction SilentlyContinue
+    # AG9-007: Removed backtick line continuation - simple cmdlet call fits on one line
+    Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" -Recurse -Force -ErrorAction SilentlyContinue
     Write-DLog "Context menu unregistered"
 }
 
@@ -2495,9 +2495,10 @@ function Show-PopupWindow {
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
+        # AG12-005: Strip markdown/HTML before escaping and displaying
         $glyphText.Text = Escape-XmlText $config.glyph
-        $titleText.Text = Escape-XmlText $config.title
-        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText $config.body) -MaxLength 150
+        $titleText.Text = Escape-XmlText (Strip-MarkupText $config.title)
+        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $config.body)) -MaxLength 150
         if ($config.folder_name -and $config.folder_name -ne "") {
             # UB-004: UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
@@ -2745,8 +2746,15 @@ function Show-PopupWindow {
                     try {
                         # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
                         $c = Get-PopupConfig
-                        Set-PopupConfig -Glyph $c.glyph -Title $c.title -Body $c.body `
-                            -ExplorerPath $newPath -TaskId $c.task_id
+                        # AG9-007: Removed backtick line continuation
+                        $popupParams = @{
+                            Glyph        = $c.glyph
+                            Title        = $c.title
+                            Body         = $c.body
+                            ExplorerPath = $newPath
+                            TaskId       = $c.task_id
+                        }
+                        Set-PopupConfig @popupParams
                         # ERR-002: only update state if write succeeded
                         $script:newExplorerPath = $newPath
                         $script:openExplorer    = $true
@@ -2858,8 +2866,8 @@ function Show-PopupWindow {
                elseif ($script:openExplorer) { "Opened" }
                elseif ($script:snoozeCount -gt 0) { "Snoozed" }
                else { "Dismissed" }
-    Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name `
-        -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
+    # AG9-007: Removed backtick line continuation
+    Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
 
     Write-DLog "====== POPUP COMPLETE: $outcome ======"
 }
@@ -2960,6 +2968,57 @@ function Truncate-TextForDisplay {
     $truncated = $Text.Substring(0, $MaxLength - 3) + "..."
     return $truncated
 }
+
+function Strip-MarkupText {
+    <#
+    .SYNOPSIS
+    Strips markdown and HTML markup from text for plain display.
+
+    .DESCRIPTION
+    FIX AG12-005: Title and body text must not contain markdown or HTML
+    formatting when displayed in WPF TextBlock. Markup would render as
+    literal text (e.g., **bold** instead of bold).
+
+    .PARAMETER Text
+    The text string to strip markup from.
+
+    .EXAMPLE
+    $plain = Strip-MarkupText '**Bold** and *italic*'
+    # Returns: 'Bold and italic'
+    #>
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Text
+    )
+
+    # Handle null or empty input
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ''
+    }
+
+    # Strip markdown and HTML formatting
+    # Order matters: do links first, then other formats
+
+    # Markdown links: [text](url) -> text
+    $result = $Text -replace '\[([^\]]+)\]\([^\)]+\)', '$1'
+    
+    # HTML tags: <tag>content</tag> -> content
+    $result = $result -replace '<[^>]+>', ''
+    
+    # Markdown bold/underline: **text** or __text__ -> text
+    $result = $result -replace '\*\*([^\*]+)\*\*', '$1'
+    $result = $result -replace '__([^_]+)__', '$1'
+    
+    # Markdown italic: *text* or _text_ -> text
+    $result = $result -replace '\*([^\*]+)\*', '$1'
+    $result = $result -replace '_([^_]+)_', '$1'
+    
+    # Markdown strikethrough: ~~text~~ -> text
+    $result = $result -replace '~~([^~]+)~~', '$1'
+
+    return $result
+}
 function Get-RandomMessage {
     return $Messages | Get-Random
 }
@@ -3003,22 +3062,18 @@ if (-not $NoRun) {
                 $result      = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime
                 Write-DLog "setfolder: New-MotivationTask result Success=$($result.Success) IsDuplicate=$($result.IsDuplicate) Error='$($result.Error)'"
                 if ($result.Success) {
-                    Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body `
-                        -ExplorerPath $FolderPath -TaskId $result.TaskId
+                    Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body -ExplorerPath $FolderPath -TaskId $result.TaskId
                     # AG6-019: Use Show-InfoDialog (WPF→WinForms→Console fallback) instead of
                     # direct [System.Windows.MessageBox] to handle non-WPF environments.
                     $folderLeaf = Split-Path -Leaf $FolderPath; if (-not $folderLeaf -or $folderLeaf.Length -eq 0) { $folderLeaf = "Unknown Folder" }
                     $schedDisplay = $triggerTime.ToString("dddd 'at' h:mm tt")
-                    Show-InfoDialog -Message "'$folderLeaf' scheduled for $schedDisplay." `
-                        -Title "Folder Scheduled"
+                    Show-InfoDialog -Message "'$folderLeaf' scheduled for $schedDisplay." -Title "Folder Scheduled"
                 }
                 elseif ($result.IsDuplicate) {
-                    Show-InfoDialog -Message "'$FolderPath' is already scheduled for tomorrow." `
-                        -Title "Already Scheduled"
+                    Show-InfoDialog -Message "'$FolderPath' is already scheduled for tomorrow." -Title "Already Scheduled"
                 }
                 else {
-                    Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$($result.Error)" `
-                        -Title "Schedule Failed"
+                    Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$($result.Error)" -Title "Schedule Failed"
                 }
             }
             else {
