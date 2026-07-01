@@ -1970,6 +1970,8 @@ function Show-MainWindow {
                 $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(1500)
                 $undoFeedbackTimer.Add_Tick({
                     $undoFeedbackTimer.Stop()
+                    # AG17-009: Dispose timer to prevent resource leak
+                    try { $undoFeedbackTimer.Dispose() } catch {}
                     $undoBanner.Visibility = "Collapsed"
                 })
                 $undoFeedbackTimer.Start()
