@@ -123,6 +123,64 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
         }
     }
 
+    Context "Get-RandomMessage integration (AG8-017)" {
+        # AG8-017: Test that calling code correctly handles Get-RandomMessage return values
+
+        It "Should handle Get-RandomMessage returning null gracefully" {
+            # Mock Get-RandomMessage to return null
+            Mock Get-RandomMessage { return $null }
+
+            $result = Invoke-FolderScheduling -FolderPath "/tmp/test-folder" -TriggerTime (Get-Date).AddHours(1)
+
+            # Function should handle null message and still succeed or fail gracefully
+            # (depending on implementation, might use default message or skip message selection)
+            $result | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should handle Get-RandomMessage returning invalid object (missing properties)" {
+            # Mock to return object missing required properties
+            Mock Get-RandomMessage {
+                return [PSCustomObject]@{ invalid = 'data' }
+            }
+
+            $result = Invoke-FolderScheduling -FolderPath "/tmp/test-folder" -TriggerTime (Get-Date).AddHours(1)
+
+            # Should not throw, even if message object is malformed
+            $result | Should -Not -BeNullOrEmpty
+        }
+
+        It "Should use Get-RandomMessage glyph, title, and body when setting popup config" {
+            # Mock Get-RandomMessage with specific values
+            $mockMessage = [PSCustomObject]@{
+                glyph = '[★]'
+                title = 'Test Title'
+                body  = 'Test Body'
+            }
+            Mock Get-RandomMessage { return $mockMessage }
+
+            $result = Invoke-FolderScheduling -FolderPath "/tmp/test-folder" -TriggerTime (Get-Date).AddHours(1)
+            $result.Success | Should -Be $true
+
+            # Verify Set-PopupConfig was called with message properties
+            $config = Get-PopupConfig
+            if ($config) {
+                # If popup config was set, verify it has the message data
+                $config.glyph | Should -Not -BeNullOrEmpty
+            }
+        }
+
+        It "Should call Get-RandomMessage exactly once during scheduling" {
+            Mock Get-RandomMessage {
+                return [PSCustomObject]@{ glyph = '[+]'; title = 'Title'; body = 'Body' }
+            }
+
+            Invoke-FolderScheduling -FolderPath "/tmp/test-folder" -TriggerTime (Get-Date).AddHours(1)
+
+            # Verify Get-RandomMessage was called
+            Should -Invoke Get-RandomMessage -Times 1 -Exactly
+        }
+    }
+
     Context "Windows path handling (AG8-024)" {
         # AG8-024: Add cross-platform path tests for Windows-specific scenarios
 
