@@ -20,6 +20,19 @@ BeforeAll {
     $script:TestFolder1 = 'C:\Projects\TestFolder1'
     $script:TestFolder2 = 'C:\Projects\TestFolder2'
 
+    # AG8-009: Mock Scope Documentation
+    # ===================================
+    # These mocks are scoped to BeforeAll, meaning they affect ALL tests in this file.
+    # This is intentional for baseline behavior: most tests expect Register-ScheduledTask
+    # to succeed and Get-ScheduledTask to return $null (no collision).
+    #
+    # Individual Context blocks override these mocks when testing specific scenarios:
+    # - 'Collision detection retry loop' overrides Get-ScheduledTask to simulate collisions
+    # - 'Error paths' overrides Register-ScheduledTask to throw exceptions
+    #
+    # Mock overrides in Context/It blocks are cleaned up in AfterEach to restore baseline.
+    # This prevents test pollution where one test's mock affects subsequent tests.
+
     # Mock Windows Task Scheduler cmdlets so tests run without admin rights
     # Mock Register-ScheduledTask at the highest level to bypass CimInstance type validation
     # Real Task Scheduler cmdlets return CimInstance objects, which cannot be easily mocked.
