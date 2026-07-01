@@ -753,11 +753,14 @@ function New-MotivationTask {
         # AG5-014: EndBoundary should account for the execution time limit
         $trigger.EndBoundary = $TriggerTime.Add($executionTimeLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
         Write-DLog "Trigger EndBoundary set to $($trigger.EndBoundary)"
-        $settings = New-ScheduledTaskSettingsSet `
-            -StartWhenAvailable `
-            -ExecutionTimeLimit  $executionTimeLimit `
-            -MultipleInstances   IgnoreNew `
-            -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 30)
+        # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+        $settingsParams = @{
+            StartWhenAvailable      = $true
+            ExecutionTimeLimit      = $executionTimeLimit
+            MultipleInstances       = 'IgnoreNew'
+            DeleteExpiredTaskAfter  = New-TimeSpan -Seconds 30
+        }
+        $settings = New-ScheduledTaskSettingsSet @settingsParams
 
         # GAP-010: network path detection for RunLevel assignment
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
@@ -2643,6 +2646,7 @@ function Show-PopupWindow {
                 if (-not $snoozeResult.Success) {
                     Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
                     # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                    [void][System.Windows.MessageBox]::Show(
                         "Could not snooze the task.`n`n$($snoozeResult.Error)",
                         "Snooze Failed", "OK", "Error")
                     return
