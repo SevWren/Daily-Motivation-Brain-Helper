@@ -2070,8 +2070,8 @@ function Show-MainWindow {
     }
     finally {
         if ($window) {
-            $window.Dispose()
-            Write-DLog "MainWindow disposed"
+            $window.Close()
+            Write-DLog "MainWindow closed"
         }
     }
 }
@@ -2730,13 +2730,13 @@ function Show-PopupWindow {
     }
     catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
     finally {
-        # AG6-004: Dispose WPF window to prevent memory leaks
+        # AG6-004: Close WPF window to release resources
         if ($window) {
             try {
-                $window.Dispose()
-                Write-DLog "PopupWindow disposed"
+                $window.Close()
+                Write-DLog "PopupWindow closed"
             }
-            catch { Write-DLog "Window disposal error: $_" "WARN" }
+            catch { Write-DLog "Window close error: $_" "WARN" }
         }
 
         # AG3-005, AG3-006, AG3-007, AG3-018, AG3-019: Reset state variables
