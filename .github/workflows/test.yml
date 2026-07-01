@@ -11,6 +11,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: windows-latest
+    timeout-minutes: 30  # AG16-017: Prevent hanging workflows
 
     steps:
       - name: Checkout code
@@ -20,7 +21,8 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck
+          # AG16-005: Pin exact Pester version to prevent breaking changes
+          Install-Module -Name Pester -RequiredVersion 5.6.1 -Force -SkipPublisherCheck
 
       - name: Show environment
         shell: powershell
@@ -68,6 +70,7 @@ jobs:
   analyze:
     name: Static Analysis
     runs-on: windows-latest
+    timeout-minutes: 10  # AG16-017: Prevent hanging workflows
 
     steps:
       - name: Checkout code
@@ -77,19 +80,27 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name PSScriptAnalyzer -Force
+          # AG16-006: Pin PSScriptAnalyzer version to prevent unexpected rule changes
+          Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
 
       - name: Run PSScriptAnalyzer
         shell: powershell
         run: |
-          Invoke-ScriptAnalyzer -Path DailyMotivation.ps1 `
+          # AG16-009: Fail workflow if PSScriptAnalyzer finds violations
+          $results = Invoke-ScriptAnalyzer -Path DailyMotivation.ps1 `
             -Settings .PSScriptAnalyzerSettings.psd1 `
             -Severity Warning,Error
+          if ($results) {
+            $results | Format-Table -AutoSize
+            throw "PSScriptAnalyzer found $($results.Count) violation(s)"
+          }
 
   build:
     name: Build EXE
     runs-on: windows-latest
-    needs: test
+    # AG16-010: Require both test AND analyze jobs before build
+    needs: [test, analyze]
+    timeout-minutes: 15  # AG16-017: Prevent hanging workflows
 
     steps:
       - name: Checkout code
@@ -99,12 +110,30 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          Install-Module -Name ps2exe -Force
+          # AG16-007: Pin ps2exe version to prevent build failures
+          Install-Module -Name ps2exe -RequiredVersion 1.0.14 -Force
+          # AG16-022: Validate ps2exe installation
+          if (-not (Get-Module -Name ps2exe -ListAvailable)) {
+            throw "ps2exe installation failed"
+          }
 
       - name: Build DailyMotivation.exe
         shell: powershell
         run: |
           .\build.ps1
+
+      # AG16-011: Smoke test to validate exe before artifact upload
+      - name: Validate executable (smoke test)
+        shell: powershell
+        run: |
+          if (-not (Test-Path DailyMotivation.exe)) {
+            throw "DailyMotivation.exe not found"
+          }
+          $size = (Get-Item DailyMotivation.exe).Length
+          if ($size -lt 100KB) {
+            throw "Exe too small ($size bytes), likely corrupted"
+          }
+          Write-Host "Exe validated successfully: $([math]::Round($size/1MB, 2)) MB"
 
       - name: Upload executable artifact
         uses: actions/upload-artifact@v4

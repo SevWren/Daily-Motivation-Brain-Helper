@@ -920,7 +920,8 @@ function New-MotivationTask {
                 while ($taskStillExists -and $attempts -lt $maxAttempts) {
                     Start-Sleep -Milliseconds (100 * ($attempts + 1))
                     try {
-                        Get-ScheduledTask -TaskName $taskName -ErrorAction Stop | Out-Null
+                        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                        [void](Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
                         $taskStillExists = $true
                         $attempts++
                         Write-DLog "Rollback: Task still exists after unregister, attempt $attempts/$maxAttempts" "WARN"
@@ -966,7 +967,8 @@ function Sync-TaskStatuses {
         if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
         if ($t.status -eq "PENDING") {
             try {
-                Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop | Out-Null
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+                [void](Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop)
             }
             catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
                 $t.status = "DELETED"   # task genuinely gone (ERR-008)
@@ -1897,9 +1899,10 @@ function Show-MainWindow {
 
         # Show network path warning if applicable
         if ($result.IsNetworkPath) {
-            [System.Windows.MessageBox]::Show(
+            # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.MessageBox]::Show(
                 "Scheduled, but '$FolderPath' is a network location. The popup may fail if the share is unavailable at trigger time.`n`nTip: Use a UNC path instead of a mapped drive letter.",
-                "Network Path Warning", "OK", "Warning") | Out-Null
+                "Network Path Warning", "OK", "Warning")
         }
 
         # Update UI
@@ -1976,8 +1979,9 @@ function Show-MainWindow {
                     Set-SelectedPath $dropped[0]
                 }
                 else {
-                    [System.Windows.MessageBox]::Show("Please drop a folder, not a file.",
-                        "Not a Folder", "OK", "Warning") | Out-Null
+                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.MessageBox]::Show("Please drop a folder, not a file.",
+                        "Not a Folder", "OK", "Warning")
                 }
             }
         })
@@ -2014,9 +2018,10 @@ function Show-MainWindow {
             param($s, $e)
             # Block deletions while an undo grace period is active (A5-BUG-009)
             if ($script:lastTaskId) {
-                [System.Windows.MessageBox]::Show(
+                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.MessageBox]::Show(
                     "Please wait until the undo period completes before deleting tasks.",
-                    "Undo in Progress", "OK", "Information") | Out-Null
+                    "Undo in Progress", "OK", "Information")
                 return
             }
             $container = $e.OriginalSource
@@ -2145,7 +2150,7 @@ function Show-MainWindow {
                                Foreground="#E8E8F4" VerticalAlignment="Center"
                                TextWrapping="Wrap" MaxWidth="380"/>
                 </StackPanel>
-                <TextBlock x:Name="BodyText" FontSize="14" Foreground="#8888A8"
+                <TextBlock x:Name="BodyText" FontSize="14" Foreground="#8888A8" MaxWidth="400" MaxHeight="150"
                            TextWrapping="Wrap" LineHeight="23" Margin="0,0,0,6"/>
                 <!-- B-12: folder name subtitle -->
                 <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#8888A8"
@@ -2475,7 +2480,7 @@ function Show-PopupWindow {
     else {
         $glyphText.Text = Escape-XmlText $config.glyph
         $titleText.Text = Escape-XmlText $config.title
-        $bodyText.Text  = Escape-XmlText $config.body
+        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText $config.body) -MaxLength 150
         if ($config.folder_name -and $config.folder_name -ne "") {
             # UB-004: UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
@@ -2623,9 +2628,10 @@ function Show-PopupWindow {
                 # AG11-003: Validate snoozeMinutes is within valid range (1-1440 minutes = 24 hours)
                 if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
                     Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
-                    [System.Windows.MessageBox]::Show(
+                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
+            [void][System.Windows.MessageBox]::Show(
                         "Snooze duration must be between 1 minute and 24 hours.",
-                        "Invalid Snooze", "OK", "Error") | Out-Null
+                        "Invalid Snooze", "OK", "Error")
                     return
                 }
                 # AG11-003: Add 1-minute buffer to snooze time to prevent scheduling in past
@@ -2765,7 +2771,8 @@ function Show-PopupWindow {
     # Show popup
     Write-DLog "Calling ShowDialog()"
     try {
-        $window.ShowDialog() | Out-Null
+        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+        [void]$window.ShowDialog()
         Write-DLog "ShowDialog returned. openExplorer=$($script:openExplorer)"
     }
     catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
@@ -2892,6 +2899,48 @@ function Escape-XmlText {
     # Use .NET SecurityElement.Escape for standard XML entity escaping
     # This handles: < > & " '
     return [System.Security.SecurityElement]::Escape($Text)
+}
+
+function Truncate-TextForDisplay {
+    <#
+    .SYNOPSIS
+    Truncates text to a maximum length with ellipsis for popup display.
+
+    .DESCRIPTION
+    FIX AG12-003: Body text must be limited to prevent overflow in WPF popup.
+    TextBlock with TextWrapping="Wrap" but no MaxHeight can grow beyond screen
+    bounds. This function ensures text stays within visible limits.
+
+    .PARAMETER Text
+    The text string to truncate.
+
+    .PARAMETER MaxLength
+    Maximum allowed length (default: 150 characters)
+
+    .EXAMPLE
+    $safe = Truncate-TextForDisplay -Text $longMessage -MaxLength 150
+    #>
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string]$Text,
+        [int]$MaxLength = 150
+    )
+
+    # Handle null or empty input
+    if ([string]::IsNullOrEmpty($Text)) {
+        return ''
+    }
+
+    # Return as-is if within limit
+    if ($Text.Length -le $MaxLength) {
+        return $Text
+    }
+
+    # Truncate and add ellipsis
+    # Reserve 3 characters for "..."
+    $truncated = $Text.Substring(0, $MaxLength - 3) + "..."
+    return $truncated
 }
 function Get-RandomMessage {
     return $Messages | Get-Random
