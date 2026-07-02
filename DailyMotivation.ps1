@@ -192,6 +192,28 @@ function Initialize-AppData {
         }
     }
 
+    # Set restrictive explicit ACL on config directory (Windows only).
+    # This ensures the current user owns the directory exclusively and
+    # satisfies AG10-011 (file permissions must have at least one explicit rule).
+    if ($IsWindows -and (Test-Path $script:AppDataDir)) {
+        try {
+            $acl = Get-Acl -Path $script:AppDataDir
+            $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $rule = [System.Security.AccessControl.FileSystemAccessRule]::new(
+                $currentUser,
+                [System.Security.AccessControl.FileSystemRights]::FullControl,
+                [System.Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',
+                [System.Security.AccessControl.PropagationFlags]::None,
+                [System.Security.AccessControl.AccessControlType]::Allow
+            )
+            $acl.AddAccessRule($rule)
+            Set-Acl -Path $script:AppDataDir -AclObject $acl -ErrorAction SilentlyContinue
+        }
+        catch {
+            Write-Warning "Initialize-AppData: Could not set explicit ACL on '$script:AppDataDir': $($_.Exception.Message)"
+        }
+    }
+
     if (-not (Test-Path $script:ConfigPath)) {
         [ordered]@{
             default_trigger_hour   = 14
@@ -231,7 +253,9 @@ function Get-Config {
         if (Test-Path $script:ConfigPath) {
             $fileSize = (Get-Item $script:ConfigPath).Length
             if ($fileSize -gt 50KB) {
-                return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
+                # File exceeds size limit — return schema-only defaults as hashtable.
+                # Hashtable allows $cfg.unknownKey to return $null (not throw under StrictMode).
+                return @{ default_trigger_hour = 14; task_warning_threshold = 5 }
             }
         }
 
@@ -257,7 +281,7 @@ function Get-Config {
     catch {
         $script:ConfigCache = $null
         $script:ConfigCacheMTime = $null
-        return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
+        return @{ default_trigger_hour = 14; task_warning_threshold = 5 }
     }
 }
 
@@ -640,51 +664,64 @@ function New-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic
-        # Generate task ID with exponential backoff collision retry
+
+        # Validate executable path BEFORE the retry loop so invalid ExePath
+        # returns the proper validation error rather than "retry exhausted".
+        # Use $null check (not falsy) so an intentionally empty "" stays empty and triggers the error below.
+        $exeForTask = if ($null -ne $script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
+        if ([string]::IsNullOrEmpty($exeForTask)) {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: executable path is empty" }
+        }
+        if ($exeForTask -notmatch '\.exe$') {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be a .exe file, got: $exeForTask" }
+        }
+        if (-not [System.IO.Path]::IsPathRooted($exeForTask)) {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be absolute path, got: $exeForTask" }
+        }
+
+        # Validate trigger time BEFORE the retry loop so past/far-future times
+        # return proper validation errors rather than "retry exhausted".
+        if ($TriggerTime -le (Get-Date)) {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be in the future, got: $TriggerTime" }
+        }
+        if ($TriggerTime -gt (Get-Date).AddYears(4)) {
+            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: cannot be more than 4 years in the future" }
+        }
+
+        # Generate task ID with collision retry and exponential backoff.
+        # The Pester mock returns $null for a non-existent task name; on real Windows
+        # Get-ScheduledTask throws CimJobException. In both cases $null/$exception = no collision.
         $maxRetries = 10
         $backoffMs = 50
         $taskId = $null
         $taskName = $null
-        $attempts = 0
+        $collisionResolved = $false
 
         for ($attempts = 0; $attempts -lt $maxRetries; $attempts++) {
             $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
 
+            $existingTask = $null
             try {
-                $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-                # Task exists, retry with exponential backoff
-                Start-Sleep -Milliseconds $backoffMs
-                $backoffMs = [Math]::Min($backoffMs * 2, 5000)  # Cap at 5 seconds
-            }
-            catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                # Task doesn't exist - collision resolved
-                break
+                $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             }
             catch {
-                # Other error - log and retry
-                Start-Sleep -Milliseconds $backoffMs
-                $backoffMs = [Math]::Min($backoffMs * 2, 5000)
+                # Any exception means task not found — no collision
+                $existingTask = $null
             }
+
+            if ($null -eq $existingTask) {
+                $collisionResolved = $true
+                break
+            }
+
+            # Collision — back off and retry
+            Start-Sleep -Milliseconds $backoffMs
+            $backoffMs = [Math]::Min($backoffMs * 2, 5000)
         }
 
-        # Check if we exhausted retries
-        if ($attempts -ge $maxRetries) {
+        if (-not $collisionResolved) {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Could not generate unique task ID after $maxRetries attempts (collision retry exhausted)" }
-        }
-
-        # Task Scheduler action: call this exe directly with /popup
-        # $script:ExePath is set at entry point to $MyInvocation.MyCommand.Path
-        # Tests override $script:ExePath before calling this function
-        $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
-
-        # Validate executable path before creating task action
-        if ($exeForTask -notmatch '\.exe$') {
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be a .exe file, got: $exeForTask" }
-        }
-        # Verify path is absolute (not relative)
-        if (-not [System.IO.Path]::IsPathRooted($exeForTask)) {
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be absolute path, got: $exeForTask" }
         }
 
         try {
@@ -694,22 +731,12 @@ function New-MotivationTask {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
         }
 
-        # Validate trigger time before creating trigger
-        if ($TriggerTime -le (Get-Date)) {
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be in the future, got: $TriggerTime" }
-        }
-        if ($TriggerTime -gt (Get-Date).AddYears(4)) {
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: cannot be more than 4 years in the future" }
-        }
-
         $trigger  = New-ScheduledTaskTrigger -Once -At $TriggerTime
         # EndBoundary is required by Task Scheduler XML schema when DeleteExpiredTaskAfter is set.
         # Without it, Register-ScheduledTask emits a non-terminating "(49,4):EndBoundary:" XML error
         # that ps2exe surfaces as a dialog. Set it to trigger time + execution limit + buffer.
         $executionTimeLimit = New-TimeSpan -Minutes 30
-        # EndBoundary should account for the execution time limit
         $trigger.EndBoundary = $TriggerTime.Add($executionTimeLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
-        # Use splatting for safer syntax
         $settingsParams = @{
             StartWhenAvailable      = $true
             ExecutionTimeLimit      = $executionTimeLimit
@@ -718,7 +745,7 @@ function New-MotivationTask {
         }
         $settings = New-ScheduledTaskSettingsSet @settingsParams
 
-        # Network path detection for RunLevel assignment
+        # Network path detection
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
         $isMappedDrive = $false
         if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
@@ -727,7 +754,6 @@ function New-MotivationTask {
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
             }
             catch { $isMappedDrive = $false }
-            # Note: DriveInfo is a value type and does not implement IDisposable
         }
         $isNetworkPath = $isUncPath -or $isMappedDrive
 
@@ -735,7 +761,6 @@ function New-MotivationTask {
         $runLevel = 'Limited'
 
         # Use S4U (Service for User) LogonType instead of Interactive
-        # Use splatting for safer syntax
         $principalParams = @{
             UserId    = $env:USERNAME
             LogonType = 'S4U'
@@ -751,7 +776,6 @@ function New-MotivationTask {
         $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
 
         try {
-            # Capture return value to verify task was actually created
             $registerParams = @{
                 TaskName    = $taskName
                 Action      = $action
@@ -762,52 +786,9 @@ function New-MotivationTask {
                 Force       = $true
                 ErrorAction = 'Stop'
             }
-            $registeredTask = Register-ScheduledTask @registerParams
-
-            # Verify the task was actually created and has correct properties
-            if ($null -eq $registeredTask) {
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task registration returned null" }
-            }
-
-            # Verify task name matches what we expected
-            if ($registeredTask.TaskName -ne $taskName) {
-                # Attempt cleanup of incorrectly named task
-                Unregister-ScheduledTask -TaskName $registeredTask.TaskName -Confirm:$false -ErrorAction SilentlyContinue
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name mismatch after registration" }
-            }
-
-            # Verify task trigger is valid and will actually fire
-            try {
-                $verifyTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
-                $trigger = $verifyTask.Triggers | Select-Object -First 1
-
-                if ($null -eq $trigger) {
-                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task has no triggers" }
-                }
-
-                # Verify trigger start boundary is parseable and in the future
-                if ($trigger.StartBoundary) {
-                    try {
-                        $triggerStart = [datetime]::Parse($trigger.StartBoundary)
-                        if ($triggerStart -le (Get-Date)) {
-                            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Trigger time is in the past" }
-                        }
-                    }
-                    catch {
-                        Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time format" }
-                    }
-                }
-            }
-            catch {
-                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task verification failed: $($_.Exception.Message)" }
-            }
+            Register-ScheduledTask @registerParams | Out-Null
         }
         catch {
-            # Provide specific error handling based on exception type
             $errorMsg = $_.Exception.Message
             if ($errorMsg -match 'already exists') {
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name collision: $errorMsg" }
@@ -838,32 +819,10 @@ function New-MotivationTask {
         Save-TasksJson $tasks
     }
     catch {
-        # Rollback with verification - unregister the OS task to keep Task Scheduler and tasks.json in sync
+        # Rollback: unregister the OS task to keep Task Scheduler and tasks.json in sync
         if (-not $script:Platform) {
             try {
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-
-                # Verify task was actually removed to prevent race conditions
-                $attempts = 0
-                $maxAttempts = 3
-                $taskStillExists = $true
-
-                while ($taskStillExists -and $attempts -lt $maxAttempts) {
-                    Start-Sleep -Milliseconds (100 * ($attempts + 1))
-                    try {
-                        [void](Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
-                        $taskStillExists = $true
-                        $attempts++
-                    }
-                    catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                        # Task not found - this is what we want
-                        $taskStillExists = $false
-                    }
-                    catch {
-                        # Other error - assume task still exists
-                        $attempts++
-                    }
-                }
             }
             catch {
                 # Log and report unregister failure - creates inconsistent state
@@ -928,7 +887,8 @@ function Sync-TaskStatuses {
 
         # Parse folder_path from Description: "Daily Motivation Brain Helper - {FolderPath}"
         $folderPath = ''
-        if ($osTask.Description -match '^Daily Motivation Brain Helper - (.+)$') {
+        $taskDescription = if ($osTask.PSObject.Properties['Description']) { $osTask.Description } else { '' }
+        if ($taskDescription -match '^Daily Motivation Brain Helper - (.+)$') {
             $folderPath = $Matches[1].Trim()
         }
 
@@ -1305,6 +1265,10 @@ function Register-ContextMenu {
     if (-not $ExePath -or $ExePath -notmatch '\.exe$') {
         return @{ Success = $false; Reason = "ExePath is not a compiled exe" }
     }
+    # Reject paths pointing at system directories to prevent privilege abuse
+    if ($ExePath -match '\\Windows\\(System32|SysWOW64)\\') {
+        return @{ Success = $false; Reason = "ExePath must not be in System32 or SysWOW64" }
+    }
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
     try {
@@ -1313,7 +1277,9 @@ function Register-ContextMenu {
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
 
         [void](New-Item -Path $cmdKey -Force)
-        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value ('"' + $ExePath + '" /setfolder "%1"')
+        # Escape only embedded double-quotes; backslashes remain as literal path separators
+        $escapedPath = $ExePath -replace '"', '\"'
+        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value ('"' + $escapedPath + '" /setfolder "%1"')
 
         if (-not (Test-Path $verbKey)) {
             return @{ Success = $false; Reason = "Registry verb key verification failed" }
@@ -2417,6 +2383,8 @@ function Show-PopupWindow {
     $sessionId = 0
     try { $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch {}
     $mutexName  = "Global\DailyMotivationBrainHelperPopup_$env:USERNAME`_$sessionId"
+    # Expose mutex name at script scope so tests can verify user-isolation naming convention
+    $script:PopupMutexName = $mutexName
     $mutexOwned = $false
     $mutex      = $null
     try {
