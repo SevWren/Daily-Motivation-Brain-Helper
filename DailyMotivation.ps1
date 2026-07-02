@@ -1163,10 +1163,14 @@ function Invoke-FolderScheduling {
         Hashtable with Success, TaskId, IsDuplicate, IsNetworkPath keys.
     #>
     param(
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
+        [Parameter(Mandatory)][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )
+
+    if ([string]::IsNullOrEmpty($FolderPath)) {
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; IsNetworkPath = $false; Error = "FolderPath cannot be null or empty" }
+    }
 
     # Detect network paths (UNC or mapped drives)
     $isUncPath = $FolderPath -match '^\\\\[^\\]'
@@ -2126,7 +2130,7 @@ function Show-MainWindow {
     }
     finally {
         if ($window) {
-            $window.Close()
+            $window.Dispose()
         }
     }
 }
@@ -2534,7 +2538,9 @@ function Show-PopupWindow {
             # Fallback: if opacity is still 0 after 500ms, force it visible
             $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
             $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
-            $fallbackTimer.Interval = $fallbackInterval
+            if ($fallbackInterval.TotalMilliseconds -gt 0) {
+                $fallbackTimer.Interval = $fallbackInterval
+            }
             $fallbackTimer.Add_Tick({
                 $fallbackTimer.Stop()
                 if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
@@ -2744,6 +2750,12 @@ function Show-PopupWindow {
         }
     })
 
+    # AG6-010: Stop timers when window is closing to prevent resource leaks
+    $window.Add_Closing({
+        if ($null -ne $timer -and $timer.IsEnabled) { $timer.Stop() }
+        if ($null -ne $fallbackTimer -and $fallbackTimer.IsEnabled) { $fallbackTimer.Stop() }
+    })
+
     # Add window cleanup handler for timers
     $window.Add_Closed({
         try {
@@ -2772,10 +2784,10 @@ function Show-PopupWindow {
     }
     catch {}
     finally {
-        # Close WPF window to release resources
+        # Dispose WPF window to release resources
         if ($window) {
             try {
-                $window.Close()
+                $window.Dispose()
             }
             catch {}
         }
