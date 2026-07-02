@@ -153,6 +153,14 @@ fi
 - FIX-001: `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time (enables test redirects)
 - FIX-003: `Get-TasksJson` wraps result in `@()` for consistent array handling
 
+## Code Quality Rules
+
+### No Startup Popups
+**CRITICAL:** DailyMotivation.exe must NEVER display a popup message on startup in main mode. The application should launch directly into the main window UI without any blocking dialogs, confirmation prompts, or informational messages. Startup popups degrade user experience and violate the principle of instant usability.
+
+### Comment Hygiene
+Remove bloat comments that reference bug IDs (e.g., `# AG19-003:`, `# AG7-004:`). Keep only comments that explain **why** code exists or **what** non-obvious behavior is expected. Bug tracking belongs in commit history and bug reports, not inline comments.
+
 ## Requirements Reference
 
 See `DailyMotivationBrainHelper_TechnicalReflection_2026-06-12_v2_1_CORRECTED.md` (kept outside repo) for the full requirements, NFRs, success criteria, and phased roadmap.

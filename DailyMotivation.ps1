@@ -36,7 +36,7 @@ param(
 # Cross-platform temp directory resolution
 $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
 
-# FIX AG10-005: Use unique log name to prevent symlink attacks and collisions
+# Unique log name to prevent symlink attacks and collisions
 $uniqueId = [System.Diagnostics.Process]::GetCurrentProcess().Id
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug_${uniqueId}_${timestamp}.log"
@@ -60,21 +60,14 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
 # Platform adapter (null by default, tests can inject HeadlessPlatform)
 $script:Platform = $null
 
-# AG7-004: Config caching variables (improves performance, prevents inconsistency)
 $script:ConfigCache = $null
-
-# AG7-023: Centralized config defaults (single source of truth)
-$script:ConfigDefaults = [PSCustomObject]@{
-    default_trigger_hour   = 14
-    task_warning_threshold = 5
-}
 $script:ConfigCacheMTime = $null
 
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
 
 function Initialize-WindowsAssemblies {
-    # AG12-006: Split WPF and WinForms loads so WinForms can be used as a fallback
+    # WPF and WinForms loads are split so WinForms can be used as a fallback
     # error-display mechanism when WPF fails, instead of a silent hard exit.
     if ($script:AssembliesLoaded) { return }
     $wpfErr = $null
@@ -97,7 +90,6 @@ function Initialize-WindowsAssemblies {
         $errMsg = "Could not load WPF UI components (.NET Framework 4.x required). The application cannot display its interface.`n`nDetails: $wpfErr"
         Write-DLog "WPF assembly load failed: $wpfErr" "ERROR"
         if ($script:FormsLoaded) {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.Forms.MessageBox]::Show($errMsg, "Daily Motivation Brain Helper",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -130,41 +122,33 @@ function Initialize-WindowsAssemblies {
 
 class HeadlessPlatform {
     [string] GetAppDataPath() {
-        # Always return Unix-style cross-platform path for testing
-        # Simulate Linux XDG Base Directory spec even when running on Windows
-        # This allows tests to verify cross-platform behavior
+        # Return Unix-style cross-platform path for testing
+        # Simulates Linux XDG Base Directory spec even when running on Windows
         if ($env:HOME -and $env:HOME -notlike "C:\*") {
-            # Running on actual Linux/Unix or HOME is set to Unix-style path
             return Join-Path $env:HOME ".local/share/DailyMotivationBrainHelper"
         }
-        # Running on Windows - return Unix-style path for test compatibility
         # Use /tmp as base to avoid Windows-specific paths (C:\, AppData, etc.)
         return "/tmp/.local/share/DailyMotivationBrainHelper"
     }
 
     [void] OpenFolder([string]$path) {
-        # No-op for headless testing
         Write-DLog "HeadlessPlatform: OpenFolder($path) - no-op"
     }
 
     [hashtable] ScheduleTask([hashtable]$params) {
-        # Mock task scheduling
         Write-DLog "HeadlessPlatform: ScheduleTask - mock"
         return @{ Success = $true; TaskId = "headless-mock-" + [guid]::NewGuid().ToString("N").Substring(0, 16) }
     }
 
     [void] UnscheduleTask([string]$taskId) {
-        # No-op for headless testing
         Write-DLog "HeadlessPlatform: UnscheduleTask($taskId) - no-op"
     }
 
     [void] RegisterContextMenu([string]$exePath) {
-        # No-op for headless testing
         Write-DLog "HeadlessPlatform: RegisterContextMenu($exePath) - no-op"
     }
 
     [string] ShowDialog([string]$message, [string]$title, [string]$buttons, [string]$icon) {
-        # Return default button for headless testing
         Write-DLog "HeadlessPlatform: ShowDialog - returning default"
         return "OK"
     }
@@ -181,7 +165,7 @@ function Initialize-AppData {
     Creates platform-specific app data directory and default config files.
     Uses platform adapter if available (for cross-platform testing).
     Falls back to %APPDATA% on Windows, $HOME/.local/share on Linux.
-    Re-resolves all paths from current environment so test redirects work (FIX-001).
+    Re-resolves all paths from current environment so test redirects work.
     #>
     # Use platform adapter if injected (for testing), otherwise use environment
     if ($script:Platform) {
@@ -191,7 +175,6 @@ function Initialize-AppData {
         $script:AppDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
     }
     else {
-        # Linux fallback: XDG Base Directory spec
         $baseDir = if ($env:HOME) { $env:HOME } else { "~" }
         $script:AppDataDir = Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
     }
@@ -202,14 +185,13 @@ function Initialize-AppData {
 
     if (-not (Test-Path $script:AppDataDir)) {
         try {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void](New-Item -ItemType Directory -Path $script:AppDataDir -Force -ErrorAction Stop)
         }
         catch {
             $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
             try {
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
                 [void](New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop)
                 $script:AppDataDir   = $fallback
                 $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
@@ -224,7 +206,6 @@ function Initialize-AppData {
         }
     }
 
-    # config.json - app settings (2-key schema per NFR-002)
     if (-not (Test-Path $script:ConfigPath)) {
         [ordered]@{
             default_trigger_hour   = 14
@@ -232,7 +213,6 @@ function Initialize-AppData {
         } | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding UTF8
     }
 
-    # popup_config.json - written by main/setfolder mode, read by /popup mode
     if (-not (Test-Path $script:PopupCfgPath)) {
         [ordered]@{
             glyph         = "[+]"
@@ -244,7 +224,6 @@ function Initialize-AppData {
         } | ConvertTo-Json | Set-Content -Path $script:PopupCfgPath -Encoding UTF8
     }
 
-    # tasks.json
     if (-not (Test-Path $script:TasksPath)) {
         Set-Content -Path $script:TasksPath -Value "[]" -Encoding UTF8 -NoNewline
     }
@@ -253,19 +232,16 @@ function Initialize-AppData {
 function Get-Config {
     [CmdletBinding()]
     param()
-    # AG7-004: Check cache first, reload only if file has changed
     try {
         $mtime = $null
         if (Test-Path $script:ConfigPath) {
             $mtime = (Get-Item $script:ConfigPath -ErrorAction SilentlyContinue).LastWriteTime
         }
 
-        # Return cached config if valid and file hasn't changed
         if ($null -ne $script:ConfigCache -and $null -ne $mtime -and $mtime -eq $script:ConfigCacheMTime) {
             return $script:ConfigCache
         }
 
-        # FIX AG10-017: Validate file size before parsing to prevent DoS via large JSON
         if (Test-Path $script:ConfigPath) {
             $fileSize = (Get-Item $script:ConfigPath).Length
             if ($fileSize -gt 50KB) {
@@ -274,10 +250,9 @@ function Get-Config {
             }
         }
 
-        # Load from disk
         $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
 
-        # AG7-006: Validate config properties — reject out-of-range values to prevent downstream errors
+        # Validate config properties to prevent downstream errors
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
             [int]$cfg.default_trigger_hour -lt 0 -or [int]$cfg.default_trigger_hour -gt 23) {
@@ -291,14 +266,12 @@ function Get-Config {
             $cfg.task_warning_threshold = 5
         }
 
-        # Cache the loaded config
         $script:ConfigCache = $cfg
         $script:ConfigCacheMTime = $mtime
 
         return $cfg
     }
     catch {
-        # Clear cache on error
         $script:ConfigCache = $null
         $script:ConfigCacheMTime = $null
         return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
@@ -306,9 +279,6 @@ function Get-Config {
 }
 
 function Save-Config {
-    # AG3-016 / AG7-002 / AG7-010: Atomic write — write to .tmp then rename to prevent
-    # partial-write corruption if the process is killed mid-write.
-    # AG7-004: Invalidate cache after save to force reload on next Get-Config.
     [CmdletBinding()]
     param([PSCustomObject]$Config)
     $tempPath = $script:ConfigPath + ".tmp"
@@ -316,7 +286,6 @@ function Save-Config {
         $Config | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:ConfigPath -Force -ErrorAction Stop
 
-        # Invalidate cache
         $script:ConfigCache = $null
         $script:ConfigCacheMTime = $null
     }
@@ -329,8 +298,6 @@ function Save-Config {
 function Get-PopupConfig {
     [CmdletBinding()]
     param()
-    # AG4-010: Check if file exists before attempting to read
-    # This distinguishes between "file not found" (expected) vs "file corrupted" (error)
     if (-not (Test-Path -Path "$script:PopupCfgPath" -PathType Leaf)) {
         Write-DLog "Get-PopupConfig: file does not exist — returning defaults" "INFO"
         return [PSCustomObject]@{
@@ -343,10 +310,8 @@ function Get-PopupConfig {
         }
     }
 
-    # AG7-015: Return a default PSCustomObject on error instead of $null to prevent
-    # null-reference crashes in callers that access properties without null checks.
     try {
-        # FIX AG10-017: Validate file size before parsing
+        # Validate file size before parsing
         if (Test-Path $script:PopupCfgPath) {
             $fileSize = (Get-Item $script:PopupCfgPath).Length
             if ($fileSize -gt 50KB) {
@@ -373,8 +338,6 @@ function Get-PopupConfig {
 }
 
 function Set-PopupConfig {
-    # AG3-008 / AG3-016: Use named mutex + atomic write (temp file + rename) to prevent
-    # file corruption when /setfolder and /popup modes run concurrently.
     [CmdletBinding()]
     param(
         [string]$Glyph,
@@ -425,8 +388,7 @@ function Write-OutcomeLog {
     )
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
-    # FIX AG10-016: Hash folder path instead of storing plaintext (HIGH severity)
-    # Prevents information disclosure in persistent log files
+    # Hash folder path instead of storing plaintext
     $pathHash = if ($FolderPath -and $FolderPath.Length -gt 0) {
         $hashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
             [Text.Encoding]::UTF8.GetBytes($FolderPath))
@@ -439,7 +401,7 @@ function Write-OutcomeLog {
     $entry = "[$ts] | $TaskId | $FolderName | HASH:$pathHash | $Outcome | $SnoozeCount"
     Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
 
-    # FIX AG10-016: Implement log rotation to prevent indefinite accumulation
+    # Implement log rotation to prevent indefinite accumulation
     if (Test-Path $script:LogPath) {
         try {
             $logFile = Get-Item $script:LogPath
@@ -467,8 +429,8 @@ function Write-OutcomeLog {
 }
 
 function Get-SafeErrorMessage {
-    # FIX AG10-013: Sanitize error messages to prevent path exposure
-    # AG19-003: Also strip raw stack trace lines so users never see internal script paths
+    # Sanitize error messages to prevent path exposure
+    # Also strip raw stack trace lines so users never see internal script paths
     param([Parameter(Mandatory)][string]$ErrorMessage)
 
     # Remove file paths (Windows and UNC)
@@ -481,24 +443,22 @@ function Get-SafeErrorMessage {
     # Remove $env: variable references that might contain paths
     $safe = $safe -replace '\$env:[A-Z_]+\\[^\s"]*', '[ENV_PATH]'
 
-    # AG19-003: Strip PowerShell/dotnet stack trace lines (e.g. "at DailyMotivation.ps1:line 123")
+    # Strip PowerShell/dotnet stack trace lines (e.g. "at DailyMotivation.ps1:line 123")
     $safe = $safe -replace '(?m)\r?\n\s+at\s+[^\r\n]+', ''
 
     return $safe
 }
 
 function Show-ErrorDialog {
-    # AG19-022: Custom scrollable WPF dialog for long error messages
-    # AG19-003: Uses Get-SafeErrorMessage to strip stack traces before display
     param(
         [Parameter(Mandatory)][string]$Message,
         [string]$Title = "Daily Motivation Brain Helper"
     )
 
-    # FIX AG10-013 / AG19-003: Sanitize error message (strips paths, credentials, stack traces)
+    # Sanitize error message (strips paths, credentials, stack traces)
     $safeMessage = Get-SafeErrorMessage -ErrorMessage $Message
 
-    # AG19-022: Try WPF custom scrollable dialog first
+    # Try WPF custom scrollable dialog first
     if ($script:WpfLoaded) {
         try {
             $errXamlStr = '<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" WindowStyle="ToolWindow" ResizeMode="NoResize" Width="480" SizeToContent="Height" MaxHeight="440" WindowStartupLocation="CenterScreen" Background="#0D1117" FontFamily="Segoe UI"><Border Padding="24,20"><StackPanel><ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16" Background="#111B22" Padding="10,8"><TextBlock x:Name="MsgText" TextWrapping="Wrap" FontSize="13" Foreground="#E8E8F4" LineHeight="22"/></ScrollViewer><Button x:Name="OkBtn" Content="OK" Width="80" HorizontalAlignment="Right" Background="#00BCD4" Foreground="#0D1117" FontWeight="Bold" Padding="0,8" Cursor="Hand" BorderThickness="0"/></StackPanel></Border></Window>'
@@ -525,12 +485,11 @@ function Show-ErrorDialog {
 
     # Fallback: plain MessageBox (WPF not available)
     try {
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void][System.Windows.MessageBox]::Show($safeMessage, $Title, "OK", "Error")
     }
     catch {
         try {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.Forms.MessageBox]::Show($safeMessage, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error)
@@ -540,20 +499,16 @@ function Show-ErrorDialog {
 }
 
 function Show-InfoDialog {
-    # AG6-019: Centralised informational dialog with WPF→WinForms→Console fallback.
-    # Use this instead of direct [System.Windows.MessageBox] calls in code paths
-    # that may run before/without WPF assemblies (e.g. /setfolder on non-WPF systems).
     param(
         [Parameter(Mandatory)][string]$Message,
         [string]$Title = "Daily Motivation Brain Helper"
     )
     try {
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information")
     }
     catch {
         try {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.Forms.MessageBox]::Show($Message, $Title,
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information)
@@ -567,17 +522,17 @@ function Show-InfoDialog {
 # ============================================================
 
 function Get-TasksJson {
-    # AG5-022: Valid task status values
+    # Valid task status values
     $script:ValidTaskStatuses = @('PENDING', 'DELETED', 'COMPLETED', 'FAILED')
 
     $path = $script:TasksPath
     if (-not (Test-Path $path)) { return @() }
     try {
         $result = Get-Content -Path "$path" -Raw -Encoding UTF8 | ConvertFrom-Json
-        # FIX-003: Ensure consistent array handling for empty JSON arrays
+        # Ensure consistent array handling for empty JSON arrays
         if ($null -eq $result) { return @() }
 
-        # AG5-022: Validate and normalize task status values
+        # Validate and normalize task status values
         $tasks = @($result)
         foreach ($task in $tasks) {
             if ($null -ne $task -and $task.PSObject.Properties['status']) {
@@ -594,8 +549,6 @@ function Get-TasksJson {
 }
 
 function Save-TasksJson {
-    # AG3-009 / AG18-001: Atomic write — write to .tmp then rename to prevent partial-write
-    # corruption if the process is killed mid-write. FIX-003 null/empty handling preserved.
     param([object[]]$Tasks)
     $path     = $script:TasksPath
     $tempPath = $path + ".tmp"
@@ -626,8 +579,7 @@ function New-MotivationTask {
         [switch]$Force
     )
 
-    # FIX AG10-003: Validate folder path before storage in Task Scheduler/Registry
-    # Prevent path traversal, command injection, and malicious UNC paths
+    # Validate folder path before storage in Task Scheduler/Registry
     if ($FolderPath -match '\.\.' -or $FolderPath -match '\.\.\\' -or $FolderPath -match '\.\./') {
         Write-DLog "Path validation failed: path traversal detected in '$FolderPath'" "ERROR"
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: path traversal sequences (..) are not allowed" }
@@ -658,7 +610,7 @@ function New-MotivationTask {
     # non-terminating error) are marked DELETED and don't block rescheduling.
     if (-not $script:Platform) { Sync-TaskStatuses }
 
-    # Duplicate check (B-16) - case-insensitive path, same date (GAP-006)
+    # Duplicate check - case-insensitive path, same date
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
@@ -695,7 +647,7 @@ function New-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic
-        # FIX AG10-022: Generate task ID with exponential backoff collision retry
+        # Generate task ID with exponential backoff collision retry
         $maxRetries = 10
         $backoffMs = 50
         $taskId = $null
@@ -737,7 +689,7 @@ function New-MotivationTask {
         # Tests override $script:ExePath before calling this function
         $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
 
-        # AG5-005: Validate executable path before creating task action
+        # Validate executable path before creating task action
         if ([string]::IsNullOrWhiteSpace($exeForTask)) {
             Write-DLog "Task action executable path is empty or null" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: path cannot be empty" }
@@ -746,7 +698,7 @@ function New-MotivationTask {
             Write-DLog "Task action path must be an .exe file: $exeForTask" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be a .exe file, got: $exeForTask" }
         }
-        # AG5-023: Verify path is absolute (not relative)
+        # Verify path is absolute (not relative)
         if (-not [System.IO.Path]::IsPathRooted($exeForTask)) {
             Write-DLog "Task action path must be absolute: $exeForTask" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be absolute path, got: $exeForTask" }
@@ -763,7 +715,7 @@ function New-MotivationTask {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
         }
 
-        # AG5-007: Validate trigger time before creating trigger
+        # Validate trigger time before creating trigger
         if ($null -eq $TriggerTime -or $TriggerTime -isnot [datetime]) {
             Write-DLog "TriggerTime must be a valid DateTime object" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be a DateTime object" }
@@ -781,13 +733,11 @@ function New-MotivationTask {
         # EndBoundary is required by Task Scheduler XML schema when DeleteExpiredTaskAfter is set.
         # Without it, Register-ScheduledTask emits a non-terminating "(49,4):EndBoundary:" XML error
         # that ps2exe surfaces as a dialog. Set it to trigger time + execution limit + buffer.
-        # AG5-012: Increased ExecutionTimeLimit from 10 to 30 minutes to allow adequate time
-        # for user interaction with popup window and folder opening
         $executionTimeLimit = New-TimeSpan -Minutes 30
-        # AG5-014: EndBoundary should account for the execution time limit
+        # EndBoundary should account for the execution time limit
         $trigger.EndBoundary = $TriggerTime.Add($executionTimeLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
         Write-DLog "Trigger EndBoundary set to $($trigger.EndBoundary)"
-        # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+        # Use splatting for safer syntax
         $settingsParams = @{
             StartWhenAvailable      = $true
             ExecutionTimeLimit      = $executionTimeLimit
@@ -796,7 +746,7 @@ function New-MotivationTask {
         }
         $settings = New-ScheduledTaskSettingsSet @settingsParams
 
-        # GAP-010: network path detection for RunLevel assignment
+        # Network path detection for RunLevel assignment
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
         $isMappedDrive = $false
         if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
@@ -810,19 +760,15 @@ function New-MotivationTask {
         }
         $isNetworkPath = $isUncPath -or $isMappedDrive
 
-        # FIX AG10-004: CRITICAL - Never use 'Highest' RunLevel for security
-        # Network paths do NOT require admin elevation. Using 'Limited' for all tasks
-        # prevents privilege escalation attacks where attacker controls network path.
+        # CRITICAL - Never use 'Highest' RunLevel for security
         $runLevel = 'Limited'
 
-        # Log warning for network paths (AG10-004)
         if ($isNetworkPath) {
             Write-DLog "SECURITY: Network path detected: $FolderPath - using Limited RunLevel to prevent privilege escalation" "WARN"
         }
 
-        # AG5-010: Use S4U (Service for User) LogonType instead of Interactive
-        # so tasks can fire even when user is not actively logged in (e.g., workstation locked)
-        # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+        # Use S4U (Service for User) LogonType instead of Interactive
+        # Use splatting for safer syntax
         $principalParams = @{
             UserId    = $env:USERNAME
             LogonType = 'S4U'
@@ -830,8 +776,7 @@ function New-MotivationTask {
         }
         $principal = New-ScheduledTaskPrincipal @principalParams
 
-        # FIX AG10-001 & AG10-010: Sanitize Description - use hash instead of raw path
-        # Prevents information leakage via Task Scheduler description field
+        # Sanitize Description - use hash instead of raw path
         $pathHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
             [Text.Encoding]::UTF8.GetBytes($FolderPath)) |
             ForEach-Object { $_.ToString("X2") }
@@ -839,8 +784,7 @@ function New-MotivationTask {
         $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
 
         try {
-            # AG5-001: Capture return value to verify task was actually created
-            # AG9-007: Use splatting instead of backtick line continuation for safer syntax
+            # Capture return value to verify task was actually created
             $registerParams = @{
                 TaskName    = $taskName
                 Action      = $action
@@ -853,13 +797,13 @@ function New-MotivationTask {
             }
             $registeredTask = Register-ScheduledTask @registerParams
 
-            # AG5-001: Verify the task was actually created and has correct properties
+            # Verify the task was actually created and has correct properties
             if ($null -eq $registeredTask) {
                 Write-DLog "Register-ScheduledTask returned null - task may not have been created" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task registration returned null" }
             }
 
-            # AG5-001: Verify task name matches what we expected
+            # Verify task name matches what we expected
             if ($registeredTask.TaskName -ne $taskName) {
                 Write-DLog "Registered task name '$($registeredTask.TaskName)' does not match expected '$taskName'" "ERROR"
                 # Attempt cleanup of incorrectly named task
@@ -867,14 +811,14 @@ function New-MotivationTask {
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name mismatch after registration" }
             }
 
-            # AG5-001: Verify task state is Ready (not Disabled)
+            # Verify task state is Ready (not Disabled)
             if ($registeredTask.State -ne 'Ready') {
                 Write-DLog "Task registered but state is '$($registeredTask.State)' instead of 'Ready'" "WARN"
             }
 
             Write-DLog "Register-ScheduledTask succeeded: $taskName (State: $($registeredTask.State))"
 
-            # AG5-002: Verify task trigger is valid and will actually fire
+            # Verify task trigger is valid and will actually fire
             try {
                 $verifyTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
                 $trigger = $verifyTask.Triggers | Select-Object -First 1
@@ -915,7 +859,7 @@ function New-MotivationTask {
             }
         }
         catch {
-            # AG5-021: Provide specific error handling based on exception type
+            # Provide specific error handling based on exception type
             $errorMsg = $_.Exception.Message
             if ($errorMsg -match 'already exists') {
                 Write-DLog "Task collision detected (shouldn't happen after GUID retry): $errorMsg" "ERROR"
@@ -949,13 +893,13 @@ function New-MotivationTask {
         Save-TasksJson $tasks
     }
     catch {
-        # AG5-015 & AG5-020: Rollback with verification - unregister the OS task to keep Task Scheduler and tasks.json in sync
+        # Rollback with verification - unregister the OS task to keep Task Scheduler and tasks.json in sync
         if (-not $script:Platform) {
             try {
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
                 Write-DLog "Rollback: Successfully unregistered task $taskName after JSON save failure" "WARN"
 
-                # AG5-015: Verify task was actually removed to prevent race conditions
+                # Verify task was actually removed to prevent race conditions
                 $attempts = 0
                 $maxAttempts = 3
                 $taskStillExists = $true
@@ -963,7 +907,6 @@ function New-MotivationTask {
                 while ($taskStillExists -and $attempts -lt $maxAttempts) {
                     Start-Sleep -Milliseconds (100 * ($attempts + 1))
                     try {
-                        # AG9-003: Use [void] cast instead of | Out-Null for better performance
                         [void](Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
                         $taskStillExists = $true
                         $attempts++
@@ -985,7 +928,7 @@ function New-MotivationTask {
                 }
             }
             catch {
-                # AG5-020: Log and report unregister failure - creates inconsistent state
+                # Log and report unregister failure - creates inconsistent state
                 Write-DLog "Rollback FAILED: Could not unregister task $taskName - INCONSISTENT STATE: $($_.Exception.Message)" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Failed to save task record AND failed to rollback: Task may remain in Task Scheduler. Error: $($_.Exception.Message)" }
             }
@@ -1005,16 +948,16 @@ function Sync-TaskStatuses {
     $tasks = @(Get-TasksJson)
     $changed = $false
 
-    # Direction 1: JSON → OS Scheduler — mark tasks DELETED if OS task is gone (ERR-008)
+    # Direction 1: JSON → OS Scheduler — mark tasks DELETED if OS task is gone
     foreach ($t in $tasks) {
         if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
         if ($t.status -eq "PENDING") {
             try {
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
                 [void](Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop)
             }
             catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                $t.status = "DELETED"   # task genuinely gone (ERR-008)
+                $t.status = "DELETED"   # task genuinely gone
                 $changed = $true
             }
             catch [System.UnauthorizedAccessException] {
@@ -1026,7 +969,7 @@ function Sync-TaskStatuses {
         }
     }
 
-    # Direction 2: OS Scheduler → JSON — recover orphaned OS tasks missing from tasks.json (FIX-SYNC-002)
+    # Direction 2: OS Scheduler → JSON — recover orphaned OS tasks missing from tasks.json
     # This handles the case where Register-ScheduledTask succeeded but Save-TasksJson failed,
     # leaving an OS task with no corresponding record in tasks.json.
     $knownNames = @($tasks | Where-Object { $null -ne $_ -and $_.PSObject.Properties['task_name'] } | ForEach-Object { $_.task_name })
@@ -1083,8 +1026,7 @@ function Get-MotivationTasks {
 function Remove-MotivationTask {
     param([Parameter(Mandatory)][string]$TaskId)
 
-    # AG5-017: Call Sync-TaskStatuses before removal to ensure task state is current
-    # This prevents attempting to unregister tasks that were already deleted manually
+    # Call Sync-TaskStatuses before removal to ensure task state is current
     if (-not $script:Platform) {
         Sync-TaskStatuses
     }
@@ -1093,7 +1035,7 @@ function Remove-MotivationTask {
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
     if (-not $target) { return $false }
 
-    # AG5-017: If task is already marked DELETED, skip OS unregister
+    # If task is already marked DELETED, skip OS unregister
     if ($target.status -eq 'DELETED') {
         Write-DLog "Remove-MotivationTask: Task $TaskId already DELETED in OS, removing from JSON only" "INFO"
         $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
@@ -1107,7 +1049,7 @@ function Remove-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic
-        # AG5-020: Verify unregister succeeded and handle failures properly
+        # Verify unregister succeeded and handle failures properly
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
             # Verify task was actually removed
@@ -1118,7 +1060,7 @@ function Remove-MotivationTask {
         }
         catch {
             Write-DLog "Remove-MotivationTask: Failed to unregister '$($target.task_name)': $_" "ERROR"
-            # AG5-020: Don't remove from tasks.json if unregister failed (maintain consistency)
+            # Don't remove from tasks.json if unregister failed (maintain consistency)
             return $false
         }
     }
@@ -1154,8 +1096,6 @@ function Update-TaskListUI {
     )
     $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
     $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
-    # SS-F-01: format ISO timestamp to human-readable; SS-F-06: humanize hyphenated folder name
-    # Wrap in @() so a single task doesn't collapse to a bare PSCustomObject (IEnumerable required)
     $displayTasks = @($pending | ForEach-Object {
         $t = $_
         $displayTime = $t.scheduled_time
@@ -1172,7 +1112,7 @@ function Update-TaskListUI {
             status       = $t.status
         }
     })
-    # AG6-007: Ensure ItemsSource is always an array (even if empty) to prevent WPF property iteration
+    # Ensure ItemsSource is always an array (even if empty) to prevent WPF property iteration
     if (-not $displayTasks) { $displayTasks = @() }
     $TaskListControl.ItemsSource          = $displayTasks
     $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
@@ -1208,14 +1148,12 @@ function Get-HistoryData {
 }
 
 function Update-HistoryUI {
-    # AG19-028: Accept sort order param; default newest-first
     param(
         [Parameter(Mandatory)]
         [object]$HistoryListControl,
         [string]$SortOrder = "newest"
     )
     $items = @(Get-HistoryData)
-    # AG19-028: Sort by timestamp
     if ($items.Count -gt 0) {
         if ($SortOrder -eq "newest") {
             $items = @($items | Sort-Object { $_.Timestamp } -Descending)
@@ -1252,7 +1190,6 @@ function Start-UndoTimer {
     $UndoProgressControl.Value    = 30
     $UndoBannerControl.Visibility = "Visible"
     $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
-    # AG6-016: Validate timer interval to prevent CPU spike from zero/negative interval
     $interval = [System.TimeSpan]::FromSeconds(1)
     if ($interval.TotalMilliseconds -le 0) {
         Write-DLog "FATAL: Undo timer interval must be positive (got $($interval.TotalMilliseconds)ms)" "ERROR"
@@ -1380,7 +1317,6 @@ function Invoke-FolderScheduling {
     }
 
     # Write popup config for the scheduled task
-    # AG9-007: Removed backtick line continuation - use splatting for complex calls
     $popupConfigParams = @{
         Glyph        = $msg.Glyph
         Title        = $msg.Title
@@ -1425,15 +1361,14 @@ function Register-ContextMenu {
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
     try {
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void](New-Item -Path $verbKey -Force)
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void](New-Item -Path $cmdKey -Force)
         $escapedPath = $ExePath -replace '([\\"`])', '`$1'
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
 
-        # AG17-002: Verify the keys were created successfully
         if (-not (Test-Path $verbKey)) {
             Write-DLog "Register-ContextMenu: Verification failed - verbKey does not exist" "ERROR"
             return @{ Success = $false; Reason = "Registry verb key verification failed" }
@@ -1453,7 +1388,6 @@ function Register-ContextMenu {
 }
 
 function Unregister-ContextMenu {
-    # AG9-007: Removed backtick line continuation - simple cmdlet call fits on one line
     Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" -Recurse -Force -ErrorAction SilentlyContinue
     Write-DLog "Context menu unregistered"
 }
@@ -1532,7 +1466,7 @@ function Unregister-ContextMenu {
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Dark-aware RadioButton — replaces system BulletChrome (SS-D-01) -->
+        <!-- Dark-aware RadioButton — replaces system BulletChrome -->
         <Style TargetType="RadioButton">
             <Setter Property="Foreground"       Value="#E8E8F4"/>
             <Setter Property="FontSize"         Value="12"/>
@@ -1566,10 +1500,10 @@ function Unregister-ContextMenu {
     <Border Background="#0D1117" Padding="28,0,28,24">
         <StackPanel>
 
-            <!-- Header accent bar — edge-to-edge, no top dead zone (SS-A-02, SS-B-02) -->
+            <!-- Header accent bar — edge-to-edge, no top dead zone -->
             <Border Background="#00BCD4" Height="3" Margin="-28,0,-28,16"/>
 
-            <!-- Context label — replaces duplicated OS title (SS-A-03) -->
+            <!-- Context label — replaces duplicated OS title -->
             <TextBlock Text="Schedule a Folder Reminder"
                        FontSize="15" FontWeight="SemiBold" Foreground="#C8C8E8"
                        Margin="0,16,0,16"/>
@@ -1603,7 +1537,7 @@ function Unregister-ContextMenu {
                 </Grid>
             </Border>
 
-            <!-- Drop Zone + Select Folder (SS-C-03: visible border; SS-H-02: left-aligned) -->
+            <!-- Drop Zone + Select Folder (visible border, left-aligned) -->
             <Border x:Name="DropZone"
                     Background="#111B22" BorderBrush="#3A4A5A" BorderThickness="1.5"
                     CornerRadius="8" Padding="20,18" Margin="0,0,0,16"
@@ -1650,8 +1584,7 @@ function Unregister-ContextMenu {
                 </StackPanel>
             </StackPanel>
 
-            <!-- Schedule Button (SS-E-01: padding fixed; SS-E-02: stretch) -->
-            <!-- AG19-011: AutomationProperties for screen reader support -->
+            <!-- Schedule Button -->
             <Button x:Name="ScheduleBtn"
                     Content="Schedule Reminder"
                     Style="{StaticResource PrimaryBtn}"
@@ -1662,14 +1595,12 @@ function Unregister-ContextMenu {
                     AutomationProperties.Name="Schedule folder reminder"
                     ToolTip="Create a reminder to open this folder at the scheduled time (Enter)"/>
 
-            <!-- AG19-001: Hint shown while Schedule button is disabled -->
             <TextBlock x:Name="ScheduleHintLabel"
                        Text="Select a folder above to enable scheduling"
                        FontSize="11" Foreground="#5A6A7A"
                        HorizontalAlignment="Center" Margin="0,6,0,0"
                        Visibility="Visible"/>
 
-            <!-- AG19-002: Operation status shown during task creation / deletion -->
             <TextBlock x:Name="OperationStatusLabel"
                        Text="" FontSize="11" Foreground="#00BCD4"
                        HorizontalAlignment="Center" Margin="0,4,0,0"
@@ -1704,7 +1635,7 @@ function Unregister-ContextMenu {
                 </Grid>
             </Border>
 
-            <!-- Divider (SS-F-08: raised to 3:1 contrast) -->
+            <!-- Divider (raised to 3:1 contrast) -->
             <Border Background="#3A3A5A" Height="1" Margin="0,20,0,20"/>
 
             <!-- Recent Folders (B-02) - hidden until reimplemented -->
@@ -1736,10 +1667,9 @@ function Unregister-ContextMenu {
                 </ItemsControl>
             </StackPanel>
 
-            <!-- Scheduled Tasks (SS-F-07: header given more weight than body labels) -->
+            <!-- Scheduled Tasks -->
             <TextBlock Text="Scheduled Tasks"
                        FontSize="13" FontWeight="Bold" Foreground="#C8C8E8" Margin="0,0,0,6"/>
-            <!-- AG19-008: Loading indicator while tasks are being fetched/synced -->
             <TextBlock x:Name="TaskLoadingLabel"
                        Text="Syncing tasks..."
                        FontSize="11" Foreground="#8888A8" FontStyle="Italic"
@@ -1758,7 +1688,7 @@ function Unregister-ContextMenu {
                                     <TextBlock Text="{Binding folder_name}" FontSize="12" Foreground="#C8C8E8"/>
                                     <TextBlock Text="{Binding display_time}" FontSize="10" Foreground="#8888A8"/>
                                 </StackPanel>
-                                <!-- PENDING badge (SS-F-03: cyan → neutral; SS-I-02: no cyan overload) -->
+                                <!-- PENDING badge (neutral color) -->
                                 <Border Grid.Column="1"
                                         Background="#1F1F30" CornerRadius="4" Padding="6,2" Margin="8,0">
                                     <TextBlock Text="{Binding status}" FontSize="10" Foreground="#7A7A9A"/>
@@ -1774,7 +1704,6 @@ function Unregister-ContextMenu {
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
-            <!-- AG19-009: Visually distinct empty state with icon and call-to-action -->
             <Border x:Name="NoTasksLabel"
                     Background="#0D1520" BorderBrush="#2A3A4A" BorderThickness="1"
                     CornerRadius="6" Padding="16,12" Margin="0,8,0,0"
@@ -1790,8 +1719,7 @@ function Unregister-ContextMenu {
                 </StackPanel>
             </Border>
 
-            <!-- History Toggle (SS-G-01: no emoji hack; SS-G-03: stretch not orphaned) -->
-            <!-- AG19-011: AutomationProperties; AG19-024: keyboard shortcut hint -->
+            <!-- History Toggle -->
             <Button x:Name="HistoryToggleBtn"
                     Content="View History"
                     Style="{StaticResource SecondaryBtn}"
@@ -1806,7 +1734,6 @@ function Unregister-ContextMenu {
                     CornerRadius="7" Padding="14,12" Margin="0,8,0,8"
                     Visibility="Collapsed">
                 <StackPanel>
-                    <!-- AG19-028: History header with sort toggle and clear button -->
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -1861,13 +1788,11 @@ function Unregister-ContextMenu {
 # ============================================================
 
 function Show-MainWindow {
-    # AG6-001: Guard — verify WPF assemblies are loaded before attempting any UI operations
     if (-not $script:AssembliesLoaded) {
         Write-DLog "Show-MainWindow: WPF assemblies not loaded — cannot display UI" "ERROR"
         [Console]::Error.WriteLine("UI cannot display: .NET Framework WPF assemblies not available.")
         return
     }
-    # AG6-003: Warn if not running on an STA thread (required for WPF ShowDialog)
     if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
         Write-DLog "Show-MainWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
     }
@@ -1893,7 +1818,6 @@ function Show-MainWindow {
     $localXaml = $MainXaml.Clone()
     try { $localXaml.Window.RemoveAttribute("x:Name") } catch {}
     $reader = [System.Xml.XmlNodeReader]::new($localXaml)
-    # AG6-002: Wrap XamlReader.Load() in try-catch — it throws on malformed XAML
     try {
         $window = [Windows.Markup.XamlReader]::Load($reader)
     }
@@ -1910,7 +1834,6 @@ function Show-MainWindow {
         return
     }
 
-    # AG6-014: Validate FindName() returns non-null to prevent "member on null" errors
     function Find {
         param($n)
         $control = $window.FindName($n)
@@ -1938,18 +1861,14 @@ function Show-MainWindow {
     $historyList       = Find "HistoryList"
     $clearHistoryBtn   = Find "ClearHistoryBtn"
     $sortHistoryBtn    = Find "SortHistoryBtn"
-    # AG19-001: Hint label under schedule button
     $scheduleHintLabel    = Find "ScheduleHintLabel"
-    # AG19-002: Status label during operations
     $operationStatusLabel = Find "OperationStatusLabel"
-    # AG19-008: Loading label during task sync
     $taskLoadingLabel     = Find "TaskLoadingLabel"
 
     # Features not yet reimplemented - keep panels hidden
     $lastFolderBanner.Visibility                  = "Collapsed"
     (Find "RecentFoldersPanel").Visibility         = "Collapsed"
 
-    # AG19-005: First-run onboarding — show once, then write flag file
     $firstRunPath = Join-Path $script:AppDataDir "first_run.done"
     if (-not (Test-Path $firstRunPath)) {
         try {
@@ -1965,7 +1884,7 @@ function Show-MainWindow {
                 "  Escape      Close this window`n" +
                 "  F1          Show this help again`n" +
                 "  H           Toggle history panel`n`n" +
-                "AG19-015 — Settings Info:`n" +
+                "Settings Info:`n" +
                 "  Trigger hour and thresholds are configured in:`n" +
                 "  $cfgDir\config.json`n" +
                 "  Changes take effect the next time you open this window.",
@@ -1984,7 +1903,6 @@ function Show-MainWindow {
     function Set-SelectedPath {
         param([string]$Path)
         if (-not (Test-Path $Path -PathType Container)) {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.MessageBox]::Show(
                 "That path does not exist or is not a folder:`n$Path",
                 "Invalid Folder", "OK", "Warning")
@@ -1994,13 +1912,12 @@ function Show-MainWindow {
         $selectedPathLabel.Text       = $Path
         $selectedPathLabel.Foreground = "#C8C8E8"
         $scheduleBtn.IsEnabled        = $true
-        # AG19-001: Hide hint once a folder is selected
         $scheduleHintLabel.Visibility = "Collapsed"
     }
 
     function Do-Schedule {
         param([string]$FolderPath)
-        # Re-evaluate Today radio visibility at schedule time (A10-ISSUE-05)
+        # Re-evaluate Today radio visibility at schedule time
         if ($todayRadio.Visibility -eq "Visible" -and (Get-Date).Hour -ge $hour) {
             $todayRadio.Visibility  = "Collapsed"
             $todayRadio.IsChecked   = $false
@@ -2008,7 +1925,6 @@ function Show-MainWindow {
         }
         $triggerTime = Get-ScheduleTime -TodayRadioControl $todayRadio
 
-        # AG19-002: Show loading state during task creation; disable button to prevent double-click
         $scheduleBtn.IsEnabled        = $false
         $operationStatusLabel.Text    = "Creating reminder..."
         $operationStatusLabel.Visibility = "Visible"
@@ -2019,14 +1935,13 @@ function Show-MainWindow {
         # Attempt to schedule the folder (business logic extracted to Invoke-FolderScheduling)
         $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime
 
-        # AG19-002: Restore UI after scheduling attempt
         $operationStatusLabel.Visibility = "Collapsed"
         $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
 
         # Handle validation errors
         if (-not $result.Success -and -not $result.IsDuplicate) {
             if ($result.Error) {
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
                 [void][System.Windows.MessageBox]::Show($result.Error, "Invalid Folder", "OK", "Warning")
             }
             else {
@@ -2053,7 +1968,6 @@ function Show-MainWindow {
 
         # Show network path warning if applicable
         if ($result.IsNetworkPath) {
-            # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.MessageBox]::Show(
                 "Scheduled, but '$FolderPath' is a network location. The popup may fail if the share is unavailable at trigger time.`n`nTip: Use a UNC path instead of a mapped drive letter.",
                 "Network Path Warning", "OK", "Warning")
@@ -2065,7 +1979,7 @@ function Show-MainWindow {
         Start-UndoTimer -TaskId $result.TaskId -ScheduledFor $dateLabel -UndoLabelControl $undoLabel -UndoProgressControl $undoProgress -UndoBannerControl $undoBanner
     }
 
-    # Show Today radio only before trigger hour; set dynamic labels from config (A3-BUG-02)
+    # Show Today radio only before trigger hour; set dynamic labels from config
     $cfg  = Get-Config
     $hour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { $script:ConfigDefaults.default_trigger_hour }
     $timeLabel = [datetime]::Today.AddHours($hour).ToString("h:mm tt")
@@ -2084,12 +1998,10 @@ function Show-MainWindow {
                 if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
             }
             finally {
-                if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
+                if ($dialog) { $dialog.Dispose() }
             }
         })
 
-    # SS-C-05: drag-over visual feedback
-    # AG14-006: Reuse single BrushConverter instance to prevent WPF resource fragmentation
     $converter = [System.Windows.Media.BrushConverter]::new()
     $script:dropZoneBrushNormal = $converter.ConvertFrom("#3A4A5A")
     $script:dropZoneBrushHover  = $converter.ConvertFrom("#00BCD4")
@@ -2133,7 +2045,6 @@ function Show-MainWindow {
                     Set-SelectedPath $dropped[0]
                 }
                 else {
-                    # AG9-003: Use [void] cast instead of | Out-Null for better performance
             [void][System.Windows.MessageBox]::Show("Please drop a folder, not a file.",
                         "Not a Folder", "OK", "Warning")
                 }
@@ -2153,14 +2064,12 @@ function Show-MainWindow {
                 $script:undoScheduledFor = $null
                 Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
-                # AG19-020: More informative status message with longer display time
                 $undoLabel.Text        = "Reminder cancelled successfully. Your folder was not scheduled."
                 $undoBanner.Visibility = "Visible"
                 $undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
                 $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
                 $undoFeedbackTimer.Add_Tick({
                     $undoFeedbackTimer.Stop()
-                    # AG17-009: Dispose timer to prevent resource leak
                     try { $undoFeedbackTimer.Dispose() } catch {}
                     $undoBanner.Visibility = "Collapsed"
                 })
@@ -2170,9 +2079,9 @@ function Show-MainWindow {
 
     $taskList.Add_PreviewMouseLeftButtonUp({
             param($s, $e)
-            # Block deletions while an undo grace period is active (A5-BUG-009)
+            # Block deletions while an undo grace period is active
             if ($script:lastTaskId) {
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
             [void][System.Windows.MessageBox]::Show(
                     "Please wait until the undo period completes before deleting tasks.",
                     "Undo in Progress", "OK", "Information")
@@ -2194,7 +2103,6 @@ function Show-MainWindow {
             }
         })
 
-    # AG19-028: Track sort order state
     $script:historySortOrder = "newest"
 
     $historyToggleBtn.Add_Click({
@@ -2219,7 +2127,6 @@ function Show-MainWindow {
             }
         })
 
-    # AG19-028: Toggle history sort order between newest-first and oldest-first
     $sortHistoryBtn.Add_Click({
         if ($script:historySortOrder -eq "newest") {
             $script:historySortOrder = "oldest"
@@ -2234,7 +2141,6 @@ function Show-MainWindow {
         }
     })
 
-    # AG19-024: Keyboard shortcuts — Enter=Schedule, Escape=Close, F1=Help, H=History
     $window.Add_KeyDown({
         param($ks, $ke)
         switch ($ke.Key) {
@@ -2268,7 +2174,6 @@ function Show-MainWindow {
         }
     })
 
-    # AG3-001, AG3-015, AG3-017: Add window cleanup handler
     $window.Add_Closed({
         try {
             # Stop and dispose undo timer if still running
@@ -2277,7 +2182,6 @@ function Show-MainWindow {
                 try { $script:undoTimer.Dispose() } catch {}
                 $script:undoTimer = $null
             }
-            # AG3-015: Dispose brush objects to prevent memory leak
             foreach ($brush in @($script:dropZoneBrushNormal, $script:dropZoneBrushHover, 
                                  $script:dropZoneBgNormal, $script:dropZoneBgHover)) {
                 if ($brush -is [System.IDisposable]) {
@@ -2292,8 +2196,6 @@ function Show-MainWindow {
         catch { Write-DLog "Window cleanup error: $_" "WARN" }
     })
 
-    # AG6-010: Stop timers when window closes to prevent memory leaks
-    # AG6-011: Cleanup event handlers (best effort - WPF handles most automatically)
     $window.Add_Closing({
         if ($script:undoTimer) {
             $script:undoTimer.Stop()
@@ -2306,7 +2208,6 @@ function Show-MainWindow {
         Write-DLog "MainWindow closing - timers stopped"
     })
 
-    # AG19-008: Defer task sync until after window renders to show loading indicator
     $taskLoadingLabel.Visibility = "Visible"
     $initSyncTimer = [System.Windows.Threading.DispatcherTimer]::new()
     $initSyncTimer.Interval = [System.TimeSpan]::FromMilliseconds(80)
@@ -2319,9 +2220,8 @@ function Show-MainWindow {
     })
     $initSyncTimer.Start()
 
-    # AG6-004: Wrap ShowDialog in try-finally to ensure window disposal
     try {
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void]$window.ShowDialog()
     }
     finally {
@@ -2368,11 +2268,9 @@ function Show-MainWindow {
                 </StackPanel>
                 <TextBlock x:Name="BodyText" FontSize="14" Foreground="#8888A8" MaxWidth="400" MaxHeight="150"
                            TextWrapping="Wrap" LineHeight="23" Margin="0,0,0,6"/>
-                <!-- B-12: folder name subtitle -->
                 <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#8888A8"
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#303050" Height="1" Margin="0,0,0,18"/>
-                <!-- AG19-018: Countdown row with Pause/Resume button -->
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22" VerticalAlignment="Center">
                     <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
@@ -2404,8 +2302,6 @@ function Show-MainWindow {
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <!-- B-11: Dismiss for Today — TabIndex=3 (lowest priority) -->
-                    <!-- AG19-011: AutomationProperties; AG19-014: explicit dismiss action -->
                     <Button x:Name="DismissBtn" Content="Dismiss for Today"
                             Width="148" Height="36" Foreground="#7878A0" FontSize="11"
                             Background="#14141F" BorderBrush="#555580" BorderThickness="1"
@@ -2432,9 +2328,7 @@ function Show-MainWindow {
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <!-- B-10: Snooze split-button -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
-                        <!-- AG19-011: AutomationProperties for snooze button -->
                         <Button x:Name="SnoozeBtn" Content="Snooze 5m" Height="36"
                                 Foreground="#8585A5" FontSize="12" FontWeight="SemiBold"
                                 Background="#1C1C2C" BorderBrush="#3A3A5A"
@@ -2490,14 +2384,12 @@ function Show-MainWindow {
                                     <MenuItem x:Name="Snooze30" Header=" 30 minutes"           Foreground="#E8E8F4" FontSize="12"/>
                                     <MenuItem x:Name="Snooze60" Header=" 1 hour"               Foreground="#E8E8F4" FontSize="12"/>
                                     <Separator/>
-                                    <!-- AG17-011: Exit item so the user can close the popup from the snooze menu -->
                                     <MenuItem x:Name="ExitItem" Header=" Exit"                 Foreground="#7878A0" FontSize="12"/>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
                     </StackPanel>
                     <!-- Open Folder — TabIndex=0 (primary action) -->
-                    <!-- AG19-011: AutomationProperties for primary action -->
                     <Button x:Name="LetsGoBtn" Content="Open Folder &#x2192;" Width="150" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand" TabIndex="0"
@@ -2521,7 +2413,6 @@ function Show-MainWindow {
                 </StackPanel>
             </StackPanel>
 
-            <!-- B-05: Path missing mode -->
             <StackPanel x:Name="PathMissingPanel" Visibility="Collapsed">
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="[!]" FontSize="26" Foreground="#F4A261"
@@ -2591,14 +2482,13 @@ function Show-MainWindow {
 # ============================================================
 
 function Show-PopupWindow {
-    # AG6-003: Warn if not on STA thread (required for WPF ShowDialog)
+    # Warn if not on STA thread (required for WPF ShowDialog)
     if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
         Write-DLog "Show-PopupWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
     }
     $configPath = $script:PopupCfgPath
 
-    # Named mutex - one popup at a time (SSOT-006 / TASK-006)
-    # FIX AG10-012: Add user and session isolation to prevent DoS between users
+    # Named mutex - one popup at a time, with user and session isolation to prevent DoS between users
     $sessionId = 0
     try { $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch {}
     $mutexName  = "Global\DailyMotivationBrainHelperPopup_$env:USERNAME`_$sessionId"
@@ -2610,7 +2500,7 @@ function Show-PopupWindow {
         $mutexOwned = $mutex.WaitOne(0)
         if (-not $mutexOwned) {
             Write-DLog "Mutex held - another popup running. Exiting." "WARN"
-            # AG1-001: Dispose the mutex handle even when we did not acquire ownership,
+            # Dispose the mutex handle even when we did not acquire ownership,
             # to release the kernel object reference and prevent a handle leak.
             if ($mutex) { $mutex.Dispose() }
             return
@@ -2631,7 +2521,7 @@ function Show-PopupWindow {
     catch {
         Write-DLog "Mutex error (non-fatal): $_" "WARN"
         if ($mutex) { $mutex.Dispose() }
-        return  # AG1-002: Exit safely rather than proceed with undefined state
+        return  # Exit safely rather than proceed with undefined state
     }
 
     # Load popup config
@@ -2652,7 +2542,7 @@ function Show-PopupWindow {
         catch { Write-DLog "Config parse failed: $($_.Exception.Message)" "ERROR" }
     }
 
-    # Exit silently if no folder has been configured (GAP-003b)
+    # Exit silently if no folder has been configured
     if (-not $config.explorer_path -or $config.explorer_path -eq "") {
         Write-DLog "No folder configured - exiting" "WARN"
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
@@ -2679,10 +2569,10 @@ function Show-PopupWindow {
         return
     }
     finally {
-        if ($null -ne $reader) { $reader.Dispose() }  # AG1-005: Dispose XmlNodeReader
+        if ($null -ne $reader) { $reader.Dispose() }
     }
 
-    # AG6-014: Validate FindName() returns non-null to prevent "member on null" errors
+    # Validate FindName() returns non-null to prevent "member on null" errors
     function Find {
         param($n)
         $control = $window.FindName($n)
@@ -2712,7 +2602,7 @@ function Show-PopupWindow {
     $missingPathLabel = Find "MissingPathLabel"
     $pathDismissBtn   = Find "PathDismissBtn"
     $rePickBtn        = Find "RePickBtn"
-    # AG19-018: Pause button (only in normal mode; path-missing panel doesn't have countdown)
+    # Pause button (only in normal mode; path-missing panel doesn't have countdown)
     $pauseBtn         = if (-not $script:pathMissing) { Find "PauseBtn" } else { $null }
 
     # Populate UI based on mode (normal vs path-missing)
@@ -2725,12 +2615,11 @@ function Show-PopupWindow {
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
-        # AG12-005: Strip markdown/HTML before escaping and displaying
         $glyphText.Text = Escape-XmlText $config.glyph
         $titleText.Text = Escape-XmlText (Strip-MarkupText $config.title)
         $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $config.body)) -MaxLength 150
         if ($config.folder_name -and $config.folder_name -ne "") {
-            # UB-004: UNC root shares show full path instead of leaf name
+            # UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
                 $config.explorer_path
             }
@@ -2747,10 +2636,10 @@ function Show-PopupWindow {
     $script:firstTick       = $true
     $script:snoozeCount     = 0
     $script:newExplorerPath = ""
-    $script:windowClosed    = $false   # UB-002: guard against queued dispatcher tick
-    $script:timerPaused     = $false   # AG19-018: pause/resume support
+    $script:windowClosed    = $false   # Guard against queued dispatcher tick
+    $script:timerPaused     = $false   # Pause/resume support
 
-    # Fade-in animation with recovery fallback (A6-BUG-01)
+    # Fade-in animation with recovery fallback
     $window.Add_Loaded({
             try {
                 $anim = [System.Windows.Media.Animation.DoubleAnimation]::new(
@@ -2762,7 +2651,6 @@ function Show-PopupWindow {
                 $window.Opacity = 1  # ensure visible if animation fails
             }
             # Fallback: if opacity is still 0 after 500ms, force it visible
-            # AG6-016: Validate fallback timer interval
             $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
             $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
             if ($fallbackInterval.TotalMilliseconds -le 0) {
@@ -2779,7 +2667,7 @@ function Show-PopupWindow {
             }
         })
 
-    # Race condition fix: stop countdown on ANY button press before click handler fires (A9-BUG-12)
+    # Race condition fix: stop countdown on ANY button press before click handler fires
     # PreviewMouseDown fires before Click, so this safely cancels the timer first.
     $cancelCountdown = {
         param($s, $e)
@@ -2799,14 +2687,12 @@ function Show-PopupWindow {
         $timer.Interval = [System.TimeSpan]::FromSeconds(1)
         $timer.Add_Tick({
             try {
-                # AG11-011: Check if window is still loaded before accessing UI elements
                 if ($null -eq $window -or -not $window.IsLoaded) {
                     Write-DLog "Window no longer loaded, stopping timer" "WARN"
                     $script:windowClosed = $true
                     $timer.Stop()
                     return
                 }
-                # AG11-011: Check windowClosed flag FIRST before any UI operations
                 if ($script:windowClosed) {
                     $timer.Stop()
                     return
@@ -2815,7 +2701,6 @@ function Show-PopupWindow {
                 $script:remaining--
                 $countdownText.Text = $script:remaining
                 if ($script:remaining -le 0 -and -not $script:windowClosed) {
-                    # AG11-011: Set flag BEFORE closing window to prevent race condition
                     $script:windowClosed = $true
                     $timer.Stop()
                     $script:openExplorer = $true
@@ -2828,7 +2713,6 @@ function Show-PopupWindow {
                 $timer.Stop()
             }
             finally {
-                # AG1-011: Always stop timer when countdown completes or window closes
                 if ($script:remaining -le 0 -or $script:windowClosed) {
                     $timer.Stop()
                 }
@@ -2837,7 +2721,6 @@ function Show-PopupWindow {
         $timer.Start()
         Write-DLog "Countdown timer started"
 
-        # AG19-018: Pause/Resume button toggles countdown timer
         if ($null -ne $pauseBtn) {
             $pauseBtn.Add_Click({
                 if ($script:timerPaused) {
@@ -2857,9 +2740,7 @@ function Show-PopupWindow {
     }
 
     # Snooze duration helpers
-    # AG6-022: Set proper ContextMenu placement to avoid off-screen positioning
     $snoozeDropBtn.Add_Click({
-        # AG17-025: Check if ContextMenu exists before accessing properties
         if ($null -eq $snoozeDropBtn.ContextMenu) {
             Write-DLog "ERROR: SnoozeDropBtn ContextMenu is null - XAML may have failed to load" "ERROR"
             return
@@ -2874,7 +2755,7 @@ function Show-PopupWindow {
     $snooze30.Add_Click({ Set-SnoozeDuration -Minutes 30 -SnoozeBtnControl $snoozeBtn })
     $snooze60.Add_Click({ Set-SnoozeDuration -Minutes 60 -SnoozeBtnControl $snoozeBtn })
 
-    # AG17-011: Exit item closes the popup without opening explorer (equivalent to Dismiss)
+    # Exit item closes the popup without opening explorer (equivalent to Dismiss)
     if ($exitItem) {
         $exitItem.Add_Click({
             Write-DLog "Exit menu item clicked"
@@ -2892,16 +2773,14 @@ function Show-PopupWindow {
             if (-not $script:pathMissing) { $timer.Stop() }
             $script:snoozeCount++
             $script:openExplorer = $false
-            # AG11-003: Validate snoozeMinutes is within valid range (1-1440 minutes = 24 hours)
             if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
                 Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
                 [void][System.Windows.MessageBox]::Show(
                     "Snooze duration must be between 1 minute and 24 hours.",
                     "Invalid Snooze", "OK", "Error")
                 return
             }
-            # AG11-003: Add 1-minute buffer to snooze time to prevent scheduling in past
             # If system processing takes time, this ensures TriggerTime validation won't fail
             $bufferMinutes = 1
             $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
@@ -2909,7 +2788,7 @@ function Show-PopupWindow {
             $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
             if (-not $snoozeResult.Success) {
                 Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
-                # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
                 [void][System.Windows.MessageBox]::Show(
                     "Could not snooze the task.`n`n$($snoozeResult.Error)",
                     "Snooze Failed", "OK", "Error")
@@ -2919,7 +2798,6 @@ function Show-PopupWindow {
             $window.Close()
         }
         catch {
-            # AG6-017: Ensure timer stops even in exception paths
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
@@ -2948,7 +2826,6 @@ function Show-PopupWindow {
             $window.Close()
         }
         catch {
-            # AG6-017: Ensure timer stops even in exception paths
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
@@ -2966,7 +2843,6 @@ function Show-PopupWindow {
             $window.Close()
         }
         catch {
-            # AG6-017: Ensure timer stops even in exception paths
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
@@ -2993,9 +2869,7 @@ function Show-PopupWindow {
                 $newPath = $dialog.SelectedPath
                 Write-DLog "Re-pick: $newPath"
                 try {
-                    # AG3-008 / AG3-016: Use Set-PopupConfig for atomic write + concurrent-access safety
                     $c = Get-PopupConfig
-                    # AG9-007: Removed backtick line continuation
                     $popupParams = @{
                         Glyph        = $c.glyph
                         Title        = $c.title
@@ -3004,13 +2878,12 @@ function Show-PopupWindow {
                         TaskId       = $c.task_id
                     }
                     Set-PopupConfig @popupParams
-                    # ERR-002: only update state if write succeeded
                     $script:newExplorerPath = $newPath
                     $script:openExplorer    = $true
                     $window.Close()
                 }
                 catch {
-                    Write-DLog "Config update failed: $_" "ERROR"  # AG9-003
+                    Write-DLog "Config update failed: $_" "ERROR"
                     [void][System.Windows.MessageBox]::Show(
                         "Could not save the new folder path.`n`n$($_.Exception.Message)",
                         "Save Failed", "OK", "Error")
@@ -3018,11 +2891,11 @@ function Show-PopupWindow {
             }
         }
         finally {
-            if ($dialog) { $dialog.Dispose() }  # AG14-001: Dispose FolderBrowserDialog
+            if ($dialog) { $dialog.Dispose() }
         }
     })
 
-    # AG3-013, AG3-014: Add window cleanup handler for timers
+    # Add window cleanup handler for timers
     $window.Add_Closed({
         try {
             # Stop and dispose fallback timer if it exists
@@ -3046,13 +2919,13 @@ function Show-PopupWindow {
     # Show popup
     Write-DLog "Calling ShowDialog()"
     try {
-        # AG9-003: Use [void] cast instead of | Out-Null for better performance
+
         [void]$window.ShowDialog()
         Write-DLog "ShowDialog returned. openExplorer=$($script:openExplorer)"
     }
     catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
     finally {
-        # AG6-004: Close WPF window to release resources
+        # Close WPF window to release resources
         if ($window) {
             try {
                 $window.Close()
@@ -3061,8 +2934,7 @@ function Show-PopupWindow {
             catch { Write-DLog "Window close error: $_" "WARN" }
         }
 
-        # AG3-005, AG3-006, AG3-007, AG3-018, AG3-019: Reset state variables
-        # to prevent leakage between popup instances
+        # Reset state variables to prevent leakage between popup instances
         $script:pathMissing = $false
         $script:openExplorer = $true
         $script:newExplorerPath = ""
@@ -3076,7 +2948,7 @@ function Show-PopupWindow {
             catch { Write-DLog "Mutex release error: $_" "WARN" }
         }
         if ($null -ne $mutex) {
-            try { $mutex.Dispose() }  # AG1-010: Dispose mutex handle
+            try { $mutex.Dispose() }
             catch { Write-DLog "Mutex dispose error: $_" "WARN" }
         }
     }
@@ -3087,7 +2959,6 @@ function Show-PopupWindow {
     # trigger expires naturally; manually-run tasks are never considered "expired".
     if ($config.task_id -and $config.task_id -ne "") {
         Write-DLog "Removing originating task: $($config.task_id)"
-        # AG9-011: Check return value instead of discarding with Out-Null
         $removed = Remove-MotivationTask -TaskId $config.task_id
         if (-not $removed) {
             Write-DLog "Failed to remove task: $($config.task_id)" "WARN"
@@ -3115,7 +2986,6 @@ function Show-PopupWindow {
                elseif ($script:openExplorer) { "Opened" }
                elseif ($script:snoozeCount -gt 0) { "Snoozed" }
                else { "Dismissed" }
-    # AG9-007: Removed backtick line continuation
     Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
 
     Write-DLog "====== POPUP COMPLETE: $outcome ======"
@@ -3149,7 +3019,7 @@ function Escape-XmlText {
     Escapes XML special characters for safe display in WPF TextBlock elements.
 
     .DESCRIPTION
-    FIX AG12-001: Folder names and user-provided text containing XML special
+    Folder names and user-provided text containing XML special
     characters (<, >, &, ", ') must be escaped before assignment to WPF
     TextBlock.Text properties to prevent rendering errors and UI corruption.
 
@@ -3182,7 +3052,7 @@ function Truncate-TextForDisplay {
     Truncates text to a maximum length with ellipsis for popup display.
 
     .DESCRIPTION
-    FIX AG12-003: Body text must be limited to prevent overflow in WPF popup.
+    Body text must be limited to prevent overflow in WPF popup.
     TextBlock with TextWrapping="Wrap" but no MaxHeight can grow beyond screen
     bounds. This function ensures text stays within visible limits.
 
@@ -3224,7 +3094,7 @@ function Strip-MarkupText {
     Strips markdown and HTML markup from text for plain display.
 
     .DESCRIPTION
-    FIX AG12-005: Title and body text must not contain markdown or HTML
+    Title and body text must not contain markdown or HTML
     formatting when displayed in WPF TextBlock. Markup would render as
     literal text (e.g., **bold** instead of bold).
 
@@ -3312,8 +3182,6 @@ if (-not $NoRun) {
                 Write-DLog "setfolder: New-MotivationTask result Success=$($result.Success) IsDuplicate=$($result.IsDuplicate) Error='$($result.Error)'"
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body -ExplorerPath $FolderPath -TaskId $result.TaskId
-                    # AG6-019: Use Show-InfoDialog (WPF→WinForms→Console fallback) instead of
-                    # direct [System.Windows.MessageBox] to handle non-WPF environments.
                     $folderLeaf = Split-Path -Leaf $FolderPath; if (-not $folderLeaf -or $folderLeaf.Length -eq 0) { $folderLeaf = "Unknown Folder" }
                     $schedDisplay = $triggerTime.ToString("dddd 'at' h:mm tt")
                     Show-InfoDialog -Message "'$folderLeaf' scheduled for $schedDisplay." -Title "Folder Scheduled"
@@ -3332,7 +3200,6 @@ if (-not $NoRun) {
         default {
             # REQ-010: Ensure context menu is registered every time the exe launches.
             # This self-heals if the user manually deleted the registry key.
-            # AG17-002: Check registration result
             $regResult = Register-ContextMenu -ExePath $script:ExePath
             if (-not $regResult.Success) {
                 Write-DLog "Context menu registration failed: $($regResult.Reason)" "WARN"
