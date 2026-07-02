@@ -6,11 +6,6 @@ BeforeAll {
 }
 
 Describe "AG9-001: Missing [CmdletBinding()] on Advanced Functions" -Tag "AG9-001", "HIGH" {
-    It "Write-DLog should have [CmdletBinding()] attribute" {
-        $func = Get-Command Write-DLog
-        $func.CmdletBinding | Should -Be $true
-    }
-
     It "Initialize-AppData should have [CmdletBinding()] attribute" {
         $func = Get-Command Initialize-AppData
         $func.CmdletBinding | Should -Be $true

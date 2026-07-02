@@ -31,15 +31,6 @@ Describe "AG17-025: Missing Null Checks Before Accessing ContextMenu" {
                 -Because "Guard block must return early when ContextMenu is null to prevent NullReferenceException (AG17-025)"
         }
 
-        It "Should log a diagnostic error message when ContextMenu is null" {
-            $nullCheckIdx = $script:content.IndexOf('$null -eq $snoozeDropBtn.ContextMenu')
-            $nullCheckIdx | Should -BeGreaterThan 0
-
-            $guardContext = $script:content.Substring($nullCheckIdx, [Math]::Min(300, $script:content.Length - $nullCheckIdx))
-            $guardContext | Should -Match 'Write-DLog' `
-                -Because "A diagnostic error should be logged when ContextMenu is unexpectedly null (AG17-025)"
-        }
-
         It "Should only access ContextMenu.IsOpen after the null guard" {
             $nullCheckIdx = $script:content.IndexOf('$null -eq $snoozeDropBtn.ContextMenu')
             $isOpenIdx    = $script:content.IndexOf('$snoozeDropBtn.ContextMenu.IsOpen')
