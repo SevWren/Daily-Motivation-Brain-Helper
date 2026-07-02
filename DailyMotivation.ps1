@@ -51,6 +51,11 @@ $script:Platform = $null
 $script:ConfigCache = $null
 $script:ConfigCacheMTime = $null
 
+$script:ConfigDefaults = [PSCustomObject]@{
+    default_trigger_hour   = 14
+    task_warning_threshold = 5
+}
+
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
 
