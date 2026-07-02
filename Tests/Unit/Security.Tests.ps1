@@ -15,6 +15,23 @@ BeforeAll {
     $script:OriginalAppData = $env:APPDATA
     $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_SecurityTest_$(New-Guid)"
     Initialize-AppData
+
+    # Override ExePath for task creation
+    $script:ExePath = "C:\Test\DailyMotivation.exe"
+
+    # Mock Windows Task Scheduler cmdlets
+    Mock Register-ScheduledTask -Verifiable {
+        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+        return $null
+    }
+    Mock Unregister-ScheduledTask -Verifiable { }
+    Mock Get-ScheduledTask {
+        param($TaskName)
+        if ($TaskName -eq "DailyMotivation_*") {
+            return @()
+        }
+        return $null
+    }
 }
 
 AfterAll {

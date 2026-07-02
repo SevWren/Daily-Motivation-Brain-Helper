@@ -431,7 +431,8 @@ function Show-ErrorDialog {
     $safeMessage = Get-SafeErrorMessage -ErrorMessage $Message
 
     # Try WPF custom scrollable dialog first
-    if ($script:WpfLoaded) {
+    # Check if WpfLoaded variable exists and is true
+    if ((Get-Variable -Name 'WpfLoaded' -Scope Script -ErrorAction SilentlyContinue) -and $script:WpfLoaded) {
         try {
             $errXamlStr = '<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" WindowStyle="ToolWindow" ResizeMode="NoResize" Width="480" SizeToContent="Height" MaxHeight="440" WindowStartupLocation="CenterScreen" Background="#0D1117" FontFamily="Segoe UI"><Border Padding="24,20"><StackPanel><ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16" Background="#111B22" Padding="10,8"><TextBlock x:Name="MsgText" TextWrapping="Wrap" FontSize="13" Foreground="#E8E8F4" LineHeight="22"/></ScrollViewer><Button x:Name="OkBtn" Content="OK" Width="80" HorizontalAlignment="Right" Background="#00BCD4" Foreground="#0D1117" FontWeight="Bold" Padding="0,8" Cursor="Hand" BorderThickness="0"/></StackPanel></Border></Window>'
             $errXml    = [xml]$errXamlStr
@@ -1181,6 +1182,15 @@ function Invoke-FolderScheduling {
 
     # Get random motivational message
     $msg = Get-RandomMessage
+
+    # Defensive null check: fallback to default message if Get-RandomMessage fails
+    if (-not $msg -or -not $msg.PSObject.Properties['Glyph'] -or -not $msg.PSObject.Properties['Title'] -or -not $msg.PSObject.Properties['Body']) {
+        $msg = [PSCustomObject]@{
+            Glyph = '[•]'
+            Title = 'Daily Motivation'
+            Body = 'Time to work on your scheduled task!'
+        }
+    }
 
     # Attempt to create task
     $result = New-MotivationTask -FolderPath $FolderPath -TriggerTime $TriggerTime

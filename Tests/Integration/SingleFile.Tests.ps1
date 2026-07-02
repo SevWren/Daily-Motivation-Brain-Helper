@@ -167,7 +167,11 @@ Describe 'Mode switching and config persistence (AG8-026)' {
     It 'Should verify tasks.json persists across mode switches' {
         # Simulate main mode creating a task
         Mock Register-ScheduledTask { return $null }
-        Mock Get-ScheduledTask { return $null }
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
+        }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
         $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
@@ -191,7 +195,11 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' {
         # Setup for integration tests
         Mock Register-ScheduledTask { return $null }
         Mock Unregister-ScheduledTask { }
-        Mock Get-ScheduledTask { return $null }
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
+        }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
         $script:AppDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'

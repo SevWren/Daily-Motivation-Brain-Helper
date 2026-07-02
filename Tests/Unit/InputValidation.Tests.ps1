@@ -17,7 +17,11 @@ BeforeAll {
     # Mock Windows Task Scheduler cmdlets
     Mock Register-ScheduledTask { return $null }
     Mock Unregister-ScheduledTask { }
-    Mock Get-ScheduledTask { return $null }
+    Mock Get-ScheduledTask {
+        param($TaskName)
+        if ($TaskName -eq "DailyMotivation_*") { return @() }
+        return $null
+    }
 }
 
 AfterAll {

@@ -54,10 +54,17 @@ BeforeAll {
     }
     # AG8-003: Add -Verifiable to Unregister mock for validation
     Mock Unregister-ScheduledTask -Verifiable { }
-    # Mock Get-ScheduledTask - return $null to simulate task not existing
-    # This allows the collision-detection retry loop in New-MotivationTask to work correctly
+    # Mock Get-ScheduledTask - handle both specific task lookups and wildcard queries
+    # - For specific task names: return $null (task not found, allows collision retry)
+    # - For wildcard "DailyMotivation_*": return empty array (no orphaned tasks)
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
-    Mock Get-ScheduledTask { return $null }
+    Mock Get-ScheduledTask {
+        param($TaskName)
+        if ($TaskName -eq "DailyMotivation_*") {
+            return @()  # Empty array for wildcard queries (Sync-TaskStatuses Direction 2)
+        }
+        return $null  # Task not found for specific lookups
+    }
 }
 
 AfterAll {
