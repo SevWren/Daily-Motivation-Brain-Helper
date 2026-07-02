@@ -259,8 +259,8 @@ Describe 'Write-OutcomeLog' {
             Write-OutcomeLog -TaskId 'id1' -FolderName 'Name' -FolderPath 'C:\Project|A|B' -Outcome 'Opened'
             $logPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_log.txt'
             $content = Get-Content $logPath -Raw
-            $lines = $content -split "`n" | Where-Object { $_ -ne '' }
-            $lastLine = $lines[-1]
+            $lines = @($content -split "`n" | Where-Object { $_ -ne '' })
+            $lastLine = [string]$lines[-1]
             # Count delimiters - should be exactly 5 pipes (6 fields)
             $pipeCount = ($lastLine.ToCharArray() | Where-Object { $_ -eq '|' }).Count
             # If more than expected, pipes in data weren't escaped

@@ -263,7 +263,22 @@ function Get-Config {
 
 function Save-Config {
     [CmdletBinding()]
-    param([PSCustomObject]$Config)
+    param(
+        [PSCustomObject]$Config,
+        [Nullable[int]]$DefaultTriggerHour,
+        [Nullable[int]]$TaskWarningThreshold
+    )
+    # If individual params provided, build a config object from current values
+    if ($PSBoundParameters.ContainsKey('DefaultTriggerHour') -or $PSBoundParameters.ContainsKey('TaskWarningThreshold')) {
+        $existing = Get-Config
+        if ($PSBoundParameters.ContainsKey('DefaultTriggerHour')) {
+            $existing.default_trigger_hour = $DefaultTriggerHour
+        }
+        if ($PSBoundParameters.ContainsKey('TaskWarningThreshold')) {
+            $existing.task_warning_threshold = $TaskWarningThreshold
+        }
+        $Config = $existing
+    }
     $tempPath = $script:ConfigPath + ".tmp"
     try {
         $Config | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
@@ -323,7 +338,8 @@ function Set-PopupConfig {
         [string]$Glyph,
         [string]$Title,
         [string]$Body,
-        [string]$ExplorerPath,
+        [Alias('FolderPath')][string]$ExplorerPath,
+        [string]$FolderName,
         [string]$TaskId
     )
     $tempPath    = $script:PopupCfgPath + ".tmp"
@@ -332,13 +348,23 @@ function Set-PopupConfig {
     try {
         $cfgMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationPopupConfigLock")
         $cfgAcquired = $cfgMutex.WaitOne(2000)
+        $resolvedFolderName = if ($FolderName) {
+            $FolderName
+        } elseif ($ExplorerPath) {
+            $leaf = Split-Path -Leaf $ExplorerPath
+            if ($leaf) { $leaf } else { "Unknown Folder" }
+        } else { "Unknown Folder" }
         [ordered]@{
             glyph         = $Glyph
             title         = $Title
             body          = $Body
             explorer_path = $ExplorerPath
-            folder_name   = if ($ExplorerPath) { $leaf = Split-Path -Leaf $ExplorerPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
+            folder_path   = $ExplorerPath
+            folder_name   = $resolvedFolderName
             task_id       = $TaskId
+            message_glyph = $Glyph
+            message_title = $Title
+            message_body  = $Body
         } | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:PopupCfgPath -Force -ErrorAction Stop
     }
