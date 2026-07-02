@@ -78,11 +78,10 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
     Context "Failure scenarios (AG8-023)" {
         It "Should handle ScheduleTask failure gracefully" {
             # AG8-023: Create a failure platform adapter
-            $failPlatform = [PSCustomObject]@{
-                ScheduleTask = {
-                    param($params)
-                    return @{ Success = $false; Error = "Mock failure"; TaskId = $null }
-                }
+            $failPlatform = [PSCustomObject]@{}
+            $failPlatform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
+                param($params)
+                return @{ Success = $false; Error = "Mock failure"; TaskId = $null }
             }
 
             # Verify failure is returned, not exception
@@ -106,11 +105,10 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
 
         It "Should handle ShowDialog returning unexpected button" {
             # AG8-023: Mock dialog returning wrong button
-            $failPlatform = [PSCustomObject]@{
-                ShowDialog = {
-                    param($msg, $title, $btns, $icon)
-                    return "UnexpectedButton"
-                }
+            $failPlatform = [PSCustomObject]@{}
+            $failPlatform | Add-Member -MemberType ScriptMethod -Name 'ShowDialog' -Value {
+                param($msg, $title, $btns, $icon)
+                return "UnexpectedButton"
             }
 
             $result = $failPlatform.ShowDialog("Test", "Title", "OK", "Info")
@@ -120,9 +118,8 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
 
         It "Should handle GetAppDataPath returning null" {
             # AG8-023: Mock GetAppDataPath failure
-            $failPlatform = [PSCustomObject]@{
-                GetAppDataPath = { return $null }
-            }
+            $failPlatform = [PSCustomObject]@{}
+            $failPlatform | Add-Member -MemberType ScriptMethod -Name 'GetAppDataPath' -Value { return $null }
 
             $result = $failPlatform.GetAppDataPath()
             $result | Should -Be $null
