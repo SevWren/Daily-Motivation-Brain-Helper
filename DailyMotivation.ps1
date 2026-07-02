@@ -546,10 +546,14 @@ function New-MotivationTask {
     The task action calls this same exe with /popup argument (-STA baked in by build).
     #>
     param(
-        [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$FolderPath,
+        [Parameter(Mandatory)][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )
+
+    if ([string]::IsNullOrEmpty($FolderPath)) {
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "FolderPath cannot be null or empty" }
+    }
 
     # Validate folder path before storage in Task Scheduler/Registry
     if ($FolderPath -match '\.\.' -or $FolderPath -match '\.\.\\' -or $FolderPath -match '\.\./') {
@@ -871,7 +875,15 @@ function Sync-TaskStatuses {
                 Write-Warning "Sync-TaskStatuses: access denied reading '$($t.task_name)'"
             }
             catch {
-                Write-Warning "Sync-TaskStatuses: unexpected error for '$($t.task_name)': $_"
+                # If the error indicates the task is not found, mark it DELETED
+                $errMsg = "$_"
+                if ($errMsg -match 'cannot find' -or $errMsg -match 'not found' -or $errMsg -match 'No MSFT_ScheduledTask') {
+                    $t.status = "DELETED"
+                    $changed = $true
+                }
+                else {
+                    Write-Warning "Sync-TaskStatuses: unexpected error for '$($t.task_name)': $_"
+                }
             }
         }
     }
@@ -1170,7 +1182,8 @@ function Invoke-FolderScheduling {
     $isNetworkPath = $isUncPath -or $isMappedDrive
 
     # Validate folder path (skip for UNC paths which might not be accessible)
-    if (-not $isUncPath -and -not (Test-Path $FolderPath -PathType Container)) {
+    # Also skip when platform adapter is injected (HeadlessPlatform for cross-platform testing)
+    if (-not $script:Platform -and -not $isUncPath -and -not (Test-Path $FolderPath -PathType Container)) {
         return @{
             Success = $false
             TaskId = $null
@@ -1233,7 +1246,10 @@ function Invoke-FolderScheduling {
 
     # REQ-010: Register context menu on successful scheduling
     if ($script:ExePath) {
-        Register-ContextMenu -ExePath $script:ExePath | Out-Null
+        $regResult = Register-ContextMenu -ExePath $script:ExePath
+        if (-not $regResult.Success) {
+            Write-Warning "Context menu registration failed: $($regResult.Reason)"
+        }
     }
 
     # Return success with all metadata
@@ -1267,8 +1283,7 @@ function Register-ContextMenu {
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
 
         [void](New-Item -Path $cmdKey -Force)
-        $escapedPath = $ExePath -replace '([\\"`])', '`$1'
-        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
+        Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value ('"' + $ExePath + '" /setfolder "%1"')
 
         if (-not (Test-Path $verbKey)) {
             return @{ Success = $false; Reason = "Registry verb key verification failed" }
@@ -1888,7 +1903,7 @@ function Show-MainWindow {
             }
         })
 
-    $converter = [System.Windows.Media.BrushConverter]::new()
+    $converter = [System.Windows.Media.BrushConverter]::new() # AG14-006: Reuse single BrushConverter
     $script:dropZoneBrushNormal = $converter.ConvertFrom("#3A4A5A")
     $script:dropZoneBrushHover  = $converter.ConvertFrom("#00BCD4")
     $script:dropZoneBgNormal    = $converter.ConvertFrom("#111B22")
@@ -2725,7 +2740,7 @@ function Show-PopupWindow {
             }
         }
         finally {
-            if ($dialog) { $dialog.Dispose() }
+            if ($dialog) { $dialog.Dispose() } # AG14-001
         }
     })
 
@@ -2818,15 +2833,15 @@ function Show-PopupWindow {
 # ============================================================
 $Messages = @(
     [PSCustomObject]@{ Glyph = "[+]"; Title = "Time to Show Up";     Body = "Every great outcome starts with showing up. You already did the hardest part - let's make this session count." }
-    [PSCustomObject]@{ Glyph = "[>]"; Title = "One Step Forward";    Body = "You don't have to see the whole staircase. Just take the next step. This folder is that step." }
-    [PSCustomObject]@{ Glyph = "[*]"; Title = "Small Progress Counts"; Body = "Small progress is still progress. Open the folder and do one thing. That's enough." }
-    [PSCustomObject]@{ Glyph = "[-]"; Title = "Back in the Zone";    Body = "The hardest part of any work session is starting. You've already decided to start. Now let's go." }
-    [PSCustomObject]@{ Glyph = "[o]"; Title = "Focus Time";          Body = "Set a timer for 25 minutes. Open the folder. Just start. Everything else can wait." }
-    [PSCustomObject]@{ Glyph = "[^]"; Title = "You Planned This";    Body = "Yesterday-you knew today-you would need a nudge. Here it is. Don't let yesterday-you down." }
-    [PSCustomObject]@{ Glyph = "[#]"; Title = "Build the Streak";    Body = "Consistency beats intensity every time. Show up today, and tomorrow gets easier." }
-    [PSCustomObject]@{ Glyph = "[!]"; Title = "It Matters";          Body = "The work in this folder matters. Not to the whole world maybe - but to you, and to the people counting on you." }
-    [PSCustomObject]@{ Glyph = "[~]"; Title = "Just Look";           Body = "You don't have to do everything today. Just open the folder and look. Momentum will follow." }
-    [PSCustomObject]@{ Glyph = "[=]"; Title = "Steady Wins";         Body = "Slow, steady, and deliberate is how great work gets done. Today's session is a brick in something bigger." }
+    [PSCustomObject]@{ Glyph = "[♦]"; Title = "One Step Forward";    Body = "You don't have to see the whole staircase. Just take the next step. This folder is that step." }
+    [PSCustomObject]@{ Glyph = "[●]"; Title = "Small Progress Counts"; Body = "Small progress is still progress. Open the folder and do one thing. That's enough." }
+    [PSCustomObject]@{ Glyph = "[■]"; Title = "Back in the Zone";    Body = "The hardest part of any work session is starting. You've already decided to start. Now let's go." }
+    [PSCustomObject]@{ Glyph = "[▲]"; Title = "Focus Time";          Body = "Set a timer for 25 minutes. Open the folder. Just start. Everything else can wait." }
+    [PSCustomObject]@{ Glyph = "[★]"; Title = "You Planned This";    Body = "Yesterday-you knew today-you would need a nudge. Here it is. Don't let yesterday-you down." }
+    [PSCustomObject]@{ Glyph = "[◆]"; Title = "Build the Streak";    Body = "Consistency beats intensity every time. Show up today, and tomorrow gets easier." }
+    [PSCustomObject]@{ Glyph = "[○]"; Title = "It Matters";          Body = "The work in this folder matters. Not to the whole world maybe - but to you, and to the people counting on you." }
+    [PSCustomObject]@{ Glyph = "[□]"; Title = "Just Look";           Body = "You don't have to do everything today. Just open the folder and look. Momentum will follow." }
+    [PSCustomObject]@{ Glyph = "[☼]"; Title = "Steady Wins";         Body = "Slow, steady, and deliberate is how great work gets done. Today's session is a brick in something bigger." }
 )
 
 
