@@ -560,8 +560,8 @@ function New-MotivationTask {
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: path traversal sequences (..) are not allowed" }
     }
 
-    if ($FolderPath -match '[<>|*?]') {
-        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: contains invalid characters (<>|*?)" }
+    if ($FolderPath -match '[<>*?]') {
+        return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: contains invalid characters (<>*?)" }
     }
 
     # Validate path can be normalized
