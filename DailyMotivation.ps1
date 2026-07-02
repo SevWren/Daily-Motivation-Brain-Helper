@@ -31,22 +31,10 @@ param(
 )
 
 # ============================================================
-# SECTION 2: Debug logging + platform detection
+# SECTION 2: Platform detection
 # ============================================================
 # Cross-platform temp directory resolution
 $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
-
-# Unique log name to prevent symlink attacks and collisions
-$uniqueId = [System.Diagnostics.Process]::GetCurrentProcess().Id
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$script:DebugLog = Join-Path $script:TempDir "DailyMotivation_debug_${uniqueId}_${timestamp}.log"
-
-function Write-DLog {
-    [CmdletBinding()]
-    param([string]$Msg, [string]$Level = "INFO")
-    $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Msg"
-    Add-Content -Path $script:DebugLog -Value $line -ErrorAction SilentlyContinue
-}
 
 # Platform detection
 # PowerShell 7+ has $IsWindows variable; compiled exe always runs on Windows
@@ -84,11 +72,10 @@ function Initialize-WindowsAssemblies {
         Add-Type -AssemblyName System.Windows.Forms
         $script:FormsLoaded = $true
     }
-    catch { Write-DLog "WinForms assembly load failed: $_" "WARN" }
+    catch {}
 
     if (-not $script:WpfLoaded) {
         $errMsg = "Could not load WPF UI components (.NET Framework 4.x required). The application cannot display its interface.`n`nDetails: $wpfErr"
-        Write-DLog "WPF assembly load failed: $wpfErr" "ERROR"
         if ($script:FormsLoaded) {
             [void][System.Windows.Forms.MessageBox]::Show($errMsg, "Daily Motivation Brain Helper",
                 [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -101,7 +88,6 @@ function Initialize-WindowsAssemblies {
     }
 
     $script:AssembliesLoaded = $true
-    Write-DLog "Assemblies loaded OK (WPF=$($script:WpfLoaded) WinForms=$($script:FormsLoaded))"
 }
 
 # ============================================================
@@ -132,24 +118,19 @@ class HeadlessPlatform {
     }
 
     [void] OpenFolder([string]$path) {
-        Write-DLog "HeadlessPlatform: OpenFolder($path) - no-op"
     }
 
     [hashtable] ScheduleTask([hashtable]$params) {
-        Write-DLog "HeadlessPlatform: ScheduleTask - mock"
         return @{ Success = $true; TaskId = "headless-mock-" + [guid]::NewGuid().ToString("N").Substring(0, 16) }
     }
 
     [void] UnscheduleTask([string]$taskId) {
-        Write-DLog "HeadlessPlatform: UnscheduleTask($taskId) - no-op"
     }
 
     [void] RegisterContextMenu([string]$exePath) {
-        Write-DLog "HeadlessPlatform: RegisterContextMenu($exePath) - no-op"
     }
 
     [string] ShowDialog([string]$message, [string]$title, [string]$buttons, [string]$icon) {
-        Write-DLog "HeadlessPlatform: ShowDialog - returning default"
         return "OK"
     }
 }
@@ -245,7 +226,6 @@ function Get-Config {
         if (Test-Path $script:ConfigPath) {
             $fileSize = (Get-Item $script:ConfigPath).Length
             if ($fileSize -gt 50KB) {
-                Write-DLog "Config file exceeds maximum size (50KB): $fileSize bytes - using defaults" "ERROR"
                 return [PSCustomObject]@{ default_trigger_hour = 14; task_warning_threshold = 5 }
             }
         }
@@ -256,13 +236,11 @@ function Get-Config {
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
             [int]$cfg.default_trigger_hour -lt 0 -or [int]$cfg.default_trigger_hour -gt 23) {
-            Write-DLog "Get-Config: invalid default_trigger_hour '$($cfg.default_trigger_hour)' — resetting to 14" "WARN"
             $cfg.default_trigger_hour = 14
         }
         if ($null -eq $cfg.task_warning_threshold -or
             -not ($cfg.task_warning_threshold -is [int] -or $cfg.task_warning_threshold -is [long] -or $cfg.task_warning_threshold -is [double]) -or
             [int]$cfg.task_warning_threshold -lt 0) {
-            Write-DLog "Get-Config: invalid task_warning_threshold '$($cfg.task_warning_threshold)' — resetting to 5" "WARN"
             $cfg.task_warning_threshold = 5
         }
 
@@ -299,7 +277,6 @@ function Get-PopupConfig {
     [CmdletBinding()]
     param()
     if (-not (Test-Path -Path "$script:PopupCfgPath" -PathType Leaf)) {
-        Write-DLog "Get-PopupConfig: file does not exist — returning defaults" "INFO"
         return [PSCustomObject]@{
             glyph         = "[+]"
             title         = ""
@@ -315,7 +292,6 @@ function Get-PopupConfig {
         if (Test-Path $script:PopupCfgPath) {
             $fileSize = (Get-Item $script:PopupCfgPath).Length
             if ($fileSize -gt 50KB) {
-                Write-DLog "Popup config file exceeds maximum size (50KB): $fileSize bytes - using defaults" "ERROR"
                 return [PSCustomObject]@{
                     glyph = "[+]"; title = ""; body = ""
                     explorer_path = ""; folder_name = ""; task_id = ""
@@ -325,7 +301,6 @@ function Get-PopupConfig {
         return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
     }
     catch {
-        Write-DLog "Get-PopupConfig: failed to parse config (file exists but corrupted) — returning defaults: $_" "ERROR"
         return [PSCustomObject]@{
             glyph         = "[+]"
             title         = ""
@@ -352,9 +327,6 @@ function Set-PopupConfig {
     try {
         $cfgMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationPopupConfigLock")
         $cfgAcquired = $cfgMutex.WaitOne(2000)
-        if (-not $cfgAcquired) {
-            Write-DLog "Set-PopupConfig: could not acquire config mutex within 2s — proceeding without lock" "WARN"
-        }
         [ordered]@{
             glyph         = $Glyph
             title         = $Title
@@ -389,7 +361,7 @@ function Write-OutcomeLog {
     $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
     # Hash folder path instead of storing plaintext
-    $pathHash = if ($FolderPath -and $FolderPath.Length -gt 0) {
+    $pathHash = if ($FolderPath) {
         $hashBytes = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
             [Text.Encoding]::UTF8.GetBytes($FolderPath))
         ($hashBytes | ForEach-Object { $_.ToString("X2") }) -join ''
@@ -410,21 +382,16 @@ function Write-OutcomeLog {
                 $archiveName = "$($script:LogPath).archive_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
                 Copy-Item -Path $script:LogPath -Destination $archiveName -Force -ErrorAction Stop
                 Clear-Content -Path $script:LogPath -ErrorAction Stop
-                Write-DLog "Log rotated to $archiveName (size was $($logFile.Length) bytes)"
 
                 # Delete archives older than 30 days
-                $archivePattern = "$($script:LogPath).archive_*"
                 Get-ChildItem -Path (Split-Path $script:LogPath -Parent) -Filter "popup_log.txt.archive_*" -ErrorAction SilentlyContinue |
                     Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } |
                     ForEach-Object {
                         Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-                        Write-DLog "Deleted old log archive: $($_.Name)"
                     }
             }
         }
-        catch {
-            Write-DLog "Log rotation failed: $_" "WARN"
-        }
+        catch {}
     }
 }
 
@@ -537,7 +504,6 @@ function Get-TasksJson {
         foreach ($task in $tasks) {
             if ($null -ne $task -and $task.PSObject.Properties['status']) {
                 if ($task.status -notin $script:ValidTaskStatuses) {
-                    Write-DLog "Invalid task status '$($task.status)' for task $($task.task_id) - setting to UNKNOWN" "WARN"
                     $task.status = 'UNKNOWN'
                 }
             }
@@ -581,28 +547,19 @@ function New-MotivationTask {
 
     # Validate folder path before storage in Task Scheduler/Registry
     if ($FolderPath -match '\.\.' -or $FolderPath -match '\.\.\\' -or $FolderPath -match '\.\./') {
-        Write-DLog "Path validation failed: path traversal detected in '$FolderPath'" "ERROR"
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: path traversal sequences (..) are not allowed" }
     }
 
     if ($FolderPath -match '[<>|*?]') {
-        Write-DLog "Path validation failed: invalid characters in '$FolderPath'" "ERROR"
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path: contains invalid characters (<>|*?)" }
     }
 
     # Validate path can be normalized
     try {
-        $normalized = [System.IO.Path]::GetFullPath($FolderPath)
-        Write-DLog "Path normalized successfully: $FolderPath -> $normalized"
+        [void][System.IO.Path]::GetFullPath($FolderPath)
     }
     catch {
-        Write-DLog "Path validation failed: cannot normalize path '$FolderPath' - $($_.Exception.Message)" "ERROR"
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path format: $_" }
-    }
-
-    # Log warning for UNC paths (security consideration)
-    if ($FolderPath -match '^\\\\') {
-        Write-DLog "UNC path scheduling: $FolderPath - user responsibility for security" "WARN"
     }
 
     # Sync OS task states before duplicate check so stale ghost entries (tasks that were
@@ -616,7 +573,7 @@ function New-MotivationTask {
         $existing = Get-MotivationTasks | Where-Object {
             # Check property exists first (guard against malformed/legacy task objects)
             if ($null -eq $_ -or -not $_.PSObject.Properties['folder_path']) { return $false }
-            if (-not $_.folder_path -or $_.folder_path.Length -eq 0) { return $false }
+            if (-not $_.folder_path) { return $false }
             if ([System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -ne $normalizedInput) { return $false }
             if ($_.status -ne "PENDING") { return $false }
             $dateMatch = $false
@@ -661,18 +618,15 @@ function New-MotivationTask {
             try {
                 $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
                 # Task exists, retry with exponential backoff
-                Write-DLog "Task name collision on attempt $($attempts + 1): $taskName" "WARN"
                 Start-Sleep -Milliseconds $backoffMs
                 $backoffMs = [Math]::Min($backoffMs * 2, 5000)  # Cap at 5 seconds
             }
             catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
                 # Task doesn't exist - collision resolved
-                Write-DLog "Unique task name generated: $taskName (attempt $($attempts + 1))"
                 break
             }
             catch {
                 # Other error - log and retry
-                Write-DLog "Task name check error: $_" "WARN"
                 Start-Sleep -Milliseconds $backoffMs
                 $backoffMs = [Math]::Min($backoffMs * 2, 5000)
             }
@@ -680,7 +634,6 @@ function New-MotivationTask {
 
         # Check if we exhausted retries
         if ($attempts -ge $maxRetries) {
-            Write-DLog "Could not generate unique task name after $maxRetries attempts" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Could not generate unique task ID after $maxRetries attempts (collision retry exhausted)" }
         }
 
@@ -690,42 +643,26 @@ function New-MotivationTask {
         $exeForTask = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
 
         # Validate executable path before creating task action
-        if ([string]::IsNullOrWhiteSpace($exeForTask)) {
-            Write-DLog "Task action executable path is empty or null" "ERROR"
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: path cannot be empty" }
-        }
         if ($exeForTask -notmatch '\.exe$') {
-            Write-DLog "Task action path must be an .exe file: $exeForTask" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be a .exe file, got: $exeForTask" }
         }
         # Verify path is absolute (not relative)
         if (-not [System.IO.Path]::IsPathRooted($exeForTask)) {
-            Write-DLog "Task action path must be absolute: $exeForTask" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid executable path: must be absolute path, got: $exeForTask" }
         }
 
         try {
             $action = New-ScheduledTaskAction -Execute $exeForTask -Argument "/popup"
-            if ($null -eq $action) {
-                throw [System.Exception]::new("New-ScheduledTaskAction returned null")
-            }
         }
         catch {
-            Write-DLog "Failed to create scheduled task action: $($_.Exception.Message)" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $_.Exception.Message }
         }
 
         # Validate trigger time before creating trigger
-        if ($null -eq $TriggerTime -or $TriggerTime -isnot [datetime]) {
-            Write-DLog "TriggerTime must be a valid DateTime object" "ERROR"
-            return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be a DateTime object" }
-        }
         if ($TriggerTime -le (Get-Date)) {
-            Write-DLog "TriggerTime must be in the future: $TriggerTime" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: must be in the future, got: $TriggerTime" }
         }
         if ($TriggerTime -gt (Get-Date).AddYears(4)) {
-            Write-DLog "TriggerTime is too far in the future: $TriggerTime" "ERROR"
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time: cannot be more than 4 years in the future" }
         }
 
@@ -736,7 +673,6 @@ function New-MotivationTask {
         $executionTimeLimit = New-TimeSpan -Minutes 30
         # EndBoundary should account for the execution time limit
         $trigger.EndBoundary = $TriggerTime.Add($executionTimeLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
-        Write-DLog "Trigger EndBoundary set to $($trigger.EndBoundary)"
         # Use splatting for safer syntax
         $settingsParams = @{
             StartWhenAvailable      = $true
@@ -750,7 +686,6 @@ function New-MotivationTask {
         $isUncPath     = $FolderPath -match '^\\\\[^\\]'
         $isMappedDrive = $false
         if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
-            $driveInfo = $null
             try {
                 $driveInfo     = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
@@ -762,10 +697,6 @@ function New-MotivationTask {
 
         # CRITICAL - Never use 'Highest' RunLevel for security
         $runLevel = 'Limited'
-
-        if ($isNetworkPath) {
-            Write-DLog "SECURITY: Network path detected: $FolderPath - using Limited RunLevel to prevent privilege escalation" "WARN"
-        }
 
         # Use S4U (Service for User) LogonType instead of Interactive
         # Use splatting for safer syntax
@@ -799,24 +730,15 @@ function New-MotivationTask {
 
             # Verify the task was actually created and has correct properties
             if ($null -eq $registeredTask) {
-                Write-DLog "Register-ScheduledTask returned null - task may not have been created" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task registration returned null" }
             }
 
             # Verify task name matches what we expected
             if ($registeredTask.TaskName -ne $taskName) {
-                Write-DLog "Registered task name '$($registeredTask.TaskName)' does not match expected '$taskName'" "ERROR"
                 # Attempt cleanup of incorrectly named task
                 Unregister-ScheduledTask -TaskName $registeredTask.TaskName -Confirm:$false -ErrorAction SilentlyContinue
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name mismatch after registration" }
             }
-
-            # Verify task state is Ready (not Disabled)
-            if ($registeredTask.State -ne 'Ready') {
-                Write-DLog "Task registered but state is '$($registeredTask.State)' instead of 'Ready'" "WARN"
-            }
-
-            Write-DLog "Register-ScheduledTask succeeded: $taskName (State: $($registeredTask.State))"
 
             # Verify task trigger is valid and will actually fire
             try {
@@ -824,7 +746,6 @@ function New-MotivationTask {
                 $trigger = $verifyTask.Triggers | Select-Object -First 1
 
                 if ($null -eq $trigger) {
-                    Write-DLog "Task registered but has no triggers" "ERROR"
                     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                     return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task has no triggers" }
                 }
@@ -834,26 +755,17 @@ function New-MotivationTask {
                     try {
                         $triggerStart = [datetime]::Parse($trigger.StartBoundary)
                         if ($triggerStart -le (Get-Date)) {
-                            Write-DLog "Task trigger time is in the past: $triggerStart" "ERROR"
                             Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Trigger time is in the past" }
                         }
-                        Write-DLog "Task trigger verified: will fire at $triggerStart (Local time)"
                     }
                     catch {
-                        Write-DLog "Failed to parse trigger StartBoundary: $($trigger.StartBoundary)" "ERROR"
                         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid trigger time format" }
                     }
                 }
-
-                # Verify task state is Ready
-                if ($verifyTask.State -ne 'Ready') {
-                    Write-DLog "Task state is '$($verifyTask.State)' - task may not fire" "WARN"
-                }
             }
             catch {
-                Write-DLog "Failed to verify task after registration: $($_.Exception.Message)" "ERROR"
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task verification failed: $($_.Exception.Message)" }
             }
@@ -862,15 +774,12 @@ function New-MotivationTask {
             # Provide specific error handling based on exception type
             $errorMsg = $_.Exception.Message
             if ($errorMsg -match 'already exists') {
-                Write-DLog "Task collision detected (shouldn't happen after GUID retry): $errorMsg" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name collision: $errorMsg" }
             }
             elseif ($errorMsg -match 'Access Denied|not have permission') {
-                Write-DLog "Permission denied - may need admin rights: $errorMsg" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Access denied: $errorMsg" }
             }
             else {
-                Write-DLog "Register-ScheduledTask failed: $errorMsg" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $errorMsg }
             }
         }
@@ -897,7 +806,6 @@ function New-MotivationTask {
         if (-not $script:Platform) {
             try {
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Stop
-                Write-DLog "Rollback: Successfully unregistered task $taskName after JSON save failure" "WARN"
 
                 # Verify task was actually removed to prevent race conditions
                 $attempts = 0
@@ -910,26 +818,19 @@ function New-MotivationTask {
                         [void](Get-ScheduledTask -TaskName $taskName -ErrorAction Stop)
                         $taskStillExists = $true
                         $attempts++
-                        Write-DLog "Rollback: Task still exists after unregister, attempt $attempts/$maxAttempts" "WARN"
                     }
                     catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
                         # Task not found - this is what we want
                         $taskStillExists = $false
-                        Write-DLog "Rollback: Verified task $taskName was removed" "INFO"
                     }
                     catch {
                         # Other error - assume task still exists
                         $attempts++
                     }
                 }
-
-                if ($taskStillExists) {
-                    Write-DLog "Rollback: WARNING - Task may still exist after unregister attempts" "ERROR"
-                }
             }
             catch {
                 # Log and report unregister failure - creates inconsistent state
-                Write-DLog "Rollback FAILED: Could not unregister task $taskName - INCONSISTENT STATE: $($_.Exception.Message)" "ERROR"
                 return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Failed to save task record AND failed to rollback: Task may remain in Task Scheduler. Error: $($_.Exception.Message)" }
             }
         }
@@ -1010,7 +911,6 @@ function Sync-TaskStatuses {
         }
         $tasks = $tasks + $recovered
         $changed = $true
-        Write-DLog "Sync-TaskStatuses: recovered orphaned OS task '$($osTask.TaskName)' into tasks.json"
     }
 
     if ($changed) {
@@ -1037,7 +937,6 @@ function Remove-MotivationTask {
 
     # If task is already marked DELETED, skip OS unregister
     if ($target.status -eq 'DELETED') {
-        Write-DLog "Remove-MotivationTask: Task $TaskId already DELETED in OS, removing from JSON only" "INFO"
         $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
         Save-TasksJson $tasks
         return $true
@@ -1059,7 +958,6 @@ function Remove-MotivationTask {
             }
         }
         catch {
-            Write-DLog "Remove-MotivationTask: Failed to unregister '$($target.task_name)': $_" "ERROR"
             # Don't remove from tasks.json if unregister failed (maintain consistency)
             return $false
         }
@@ -1112,8 +1010,6 @@ function Update-TaskListUI {
             status       = $t.status
         }
     })
-    # Ensure ItemsSource is always an array (even if empty) to prevent WPF property iteration
-    if (-not $displayTasks) { $displayTasks = @() }
     $TaskListControl.ItemsSource          = $displayTasks
     $NoTasksLabelControl.Visibility       = if ($pending.Count -eq 0) { "Visible" } else { "Collapsed" }
 }
@@ -1123,16 +1019,16 @@ function Get-HistoryData {
     $lines = @(Get-Content -Path "$script:LogPath" -Encoding UTF8 |
         Where-Object { $_ -match '^\[' } |
         Select-Object -Last 30)
-    if (-not $lines -or $lines.Count -eq 0) { return @() }
+    if (-not $lines) { return @() }
 
     $items = foreach ($line in $lines) {
         $parts = $line -split '\s*\|\s*'
         if ($parts.Count -ge 5) {
-            $outcome        = $parts[4].Trim()
+            $outcome        = $parts[4]
             $outcomeDisplay = if ($outcome -eq "PathMissing") { "Path Missing" } else { $outcome }
             [PSCustomObject]@{
                 Timestamp      = $parts[0].Trim('[', ']')
-                FolderName     = $parts[2].Trim()
+                FolderName     = $parts[2]
                 OutcomeDisplay = $outcomeDisplay
                 OutcomeColor   = switch ($outcome) {
                     "Opened"      { "#52B788" }
@@ -1191,11 +1087,6 @@ function Start-UndoTimer {
     $UndoBannerControl.Visibility = "Visible"
     $script:undoTimer = [System.Windows.Threading.DispatcherTimer]::new()
     $interval = [System.TimeSpan]::FromSeconds(1)
-    if ($interval.TotalMilliseconds -le 0) {
-        Write-DLog "FATAL: Undo timer interval must be positive (got $($interval.TotalMilliseconds)ms)" "ERROR"
-        $UndoBannerControl.Visibility = "Collapsed"
-        throw "Invalid timer interval: $($interval.TotalMilliseconds)ms"
-    }
     $script:undoTimer.Interval = $interval
     $script:undoTimer.Add_Tick({
             $script:undoSeconds--
@@ -1263,7 +1154,6 @@ function Invoke-FolderScheduling {
     $isUncPath = $FolderPath -match '^\\\\[^\\]'
     $isMappedDrive = $false
     if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
-        $driveInfo = $null
         try {
             $driveInfo = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
             $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
@@ -1328,10 +1218,7 @@ function Invoke-FolderScheduling {
 
     # REQ-010: Register context menu on successful scheduling
     if ($script:ExePath) {
-        $regResult = Register-ContextMenu -ExePath $script:ExePath
-        if (-not $regResult.Success) {
-            Write-DLog "Register-ContextMenu failed: $($regResult.Reason)" "WARN"
-        }
+        Register-ContextMenu -ExePath $script:ExePath | Out-Null
     }
 
     # Return success with all metadata
@@ -1355,7 +1242,6 @@ function Register-ContextMenu {
     # is the .ps1 path. Storing that in the registry causes "This app can't run on your PC"
     # when Explorer invokes the verb, because Windows tries to execute a text file as a PE.
     if (-not $ExePath -or $ExePath -notmatch '\.exe$') {
-        Write-DLog "Register-ContextMenu: skipped — ExePath is not a compiled exe ('$ExePath'). Run the compiled DailyMotivation.exe to register the context menu." "WARN"
         return @{ Success = $false; Reason = "ExePath is not a compiled exe" }
     }
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
@@ -1370,26 +1256,21 @@ function Register-ContextMenu {
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value "`"$escapedPath`" /setfolder `"%1`""
 
         if (-not (Test-Path $verbKey)) {
-            Write-DLog "Register-ContextMenu: Verification failed - verbKey does not exist" "ERROR"
             return @{ Success = $false; Reason = "Registry verb key verification failed" }
         }
         if (-not (Test-Path $cmdKey)) {
-            Write-DLog "Register-ContextMenu: Verification failed - command key does not exist" "ERROR"
             return @{ Success = $false; Reason = "Registry command key verification failed" }
         }
 
-        Write-DLog "Context menu registered for: $ExePath"
         return @{ Success = $true; Reason = "" }
     }
     catch {
-        Write-DLog "Register-ContextMenu failed: $_" "WARN"
         return @{ Success = $false; Reason = $_.Exception.Message }
     }
 }
 
 function Unregister-ContextMenu {
     Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" -Recurse -Force -ErrorAction SilentlyContinue
-    Write-DLog "Context menu unregistered"
 }
 
 # ============================================================
@@ -1789,12 +1670,8 @@ function Unregister-ContextMenu {
 
 function Show-MainWindow {
     if (-not $script:AssembliesLoaded) {
-        Write-DLog "Show-MainWindow: WPF assemblies not loaded — cannot display UI" "ERROR"
         [Console]::Error.WriteLine("UI cannot display: .NET Framework WPF assemblies not available.")
         return
-    }
-    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
-        Write-DLog "Show-MainWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
     }
 
     # Check Task Scheduler service
@@ -1822,7 +1699,6 @@ function Show-MainWindow {
         $window = [Windows.Markup.XamlReader]::Load($reader)
     }
     catch {
-        Write-DLog "FATAL: Main XAML build failed - $_" "ERROR"
         Show-ErrorDialog "UI failed to load: $($_.Exception.Message)`n`nPlease reinstall the application."
         return
     }
@@ -1838,7 +1714,6 @@ function Show-MainWindow {
         param($n)
         $control = $window.FindName($n)
         if ($null -eq $control) {
-            Write-DLog "FATAL: XAML element not found: $n" "ERROR"
             throw "XAML element not found: $n"
         }
         return $control
@@ -1865,10 +1740,6 @@ function Show-MainWindow {
     $operationStatusLabel = Find "OperationStatusLabel"
     $taskLoadingLabel     = Find "TaskLoadingLabel"
 
-    # Features not yet reimplemented - keep panels hidden
-    $lastFolderBanner.Visibility                  = "Collapsed"
-    (Find "RecentFoldersPanel").Visibility         = "Collapsed"
-
     $firstRunPath = Join-Path $script:AppDataDir "first_run.done"
     if (-not (Test-Path $firstRunPath)) {
         try {
@@ -1891,7 +1762,7 @@ function Show-MainWindow {
                 "Welcome! — Daily Motivation Brain Helper", "OK", "Information")
             Set-Content -Path $firstRunPath -Value (Get-Date -Format "yyyy-MM-dd") -Encoding UTF8 -ErrorAction SilentlyContinue
         }
-        catch { Write-DLog "First-run dialog failed: $_" "WARN" }
+        catch {}
     }
 
     # State
@@ -2193,7 +2064,7 @@ function Show-MainWindow {
             $script:undoScheduledFor = $null
             $script:selectedPath = ""
         }
-        catch { Write-DLog "Window cleanup error: $_" "WARN" }
+        catch {}
     })
 
     $window.Add_Closing({
@@ -2205,7 +2076,6 @@ function Show-MainWindow {
             $script:undoFeedbackTimer.Stop()
             $script:undoFeedbackTimer = $null
         }
-        Write-DLog "MainWindow closing - timers stopped"
     })
 
     $taskLoadingLabel.Visibility = "Visible"
@@ -2227,7 +2097,6 @@ function Show-MainWindow {
     finally {
         if ($window) {
             $window.Close()
-            Write-DLog "MainWindow closed"
         }
     }
 }
@@ -2482,44 +2351,35 @@ function Show-MainWindow {
 # ============================================================
 
 function Show-PopupWindow {
-    # Warn if not on STA thread (required for WPF ShowDialog)
-    if ([System.Threading.Thread]::CurrentThread.ApartmentState -ne [System.Threading.ApartmentState]::STA) {
-        Write-DLog "Show-PopupWindow: thread is not STA ($([System.Threading.Thread]::CurrentThread.ApartmentState)) — WPF dialogs may fail" "WARN"
-    }
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time, with user and session isolation to prevent DoS between users
     $sessionId = 0
     try { $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId } catch {}
     $mutexName  = "Global\DailyMotivationBrainHelperPopup_$env:USERNAME`_$sessionId"
-    Write-DLog "Using mutex: $mutexName"
     $mutexOwned = $false
     $mutex      = $null
     try {
         $mutex      = [System.Threading.Mutex]::new($false, $mutexName)
         $mutexOwned = $mutex.WaitOne(0)
         if (-not $mutexOwned) {
-            Write-DLog "Mutex held - another popup running. Exiting." "WARN"
             # Dispose the mutex handle even when we did not acquire ownership,
             # to release the kernel object reference and prevent a handle leak.
             if ($mutex) { $mutex.Dispose() }
             return
         }
-        Write-DLog "Mutex acquired"
     }
     catch [System.Threading.AbandonedMutexException] {
         $mutexOwned = $true
         Start-Sleep -Milliseconds 500
         $stale = Get-Process | Where-Object { $_.MainWindowTitle -like "*Daily Motivation*" -and $_.Id -ne $PID }
         if ($stale) {
-            Write-DLog "Stale popup visible - exiting to avoid duplicate" "WARN"
             if ($mutex) { try { $mutex.ReleaseMutex() } catch {} }
             if ($mutex) { $mutex.Dispose() }
             return
         }
     }
     catch {
-        Write-DLog "Mutex error (non-fatal): $_" "WARN"
         if ($mutex) { $mutex.Dispose() }
         return  # Exit safely rather than proceed with undefined state
     }
@@ -2535,22 +2395,18 @@ function Show-PopupWindow {
     }
     if (Test-Path $configPath) {
         try {
-            $loaded = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
-            $config = $loaded
-            Write-DLog "Popup config loaded. title='$($config.title)' folder='$($config.folder_name)'"
+            $config = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
         }
-        catch { Write-DLog "Config parse failed: $($_.Exception.Message)" "ERROR" }
+        catch {}
     }
 
     # Exit silently if no folder has been configured
-    if (-not $config.explorer_path -or $config.explorer_path -eq "") {
-        Write-DLog "No folder configured - exiting" "WARN"
+    if (-not $config.explorer_path) {
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
 
     $script:pathMissing = -not (Test-Path $config.explorer_path -PathType Container)
-    if ($script:pathMissing) { Write-DLog "Path missing: '$($config.explorer_path)'" "WARN" }
 
     # Build popup window
     $reader = $null
@@ -2558,13 +2414,11 @@ function Show-PopupWindow {
         $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
         $window = [Windows.Markup.XamlReader]::Load($reader)
         if ($null -eq $window) {
-            Write-DLog "FATAL: XamlReader returned null" "ERROR"
             if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
             return
         }
     }
     catch {
-        Write-DLog "FATAL: Popup XAML build failed - $_" "ERROR"
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
@@ -2577,7 +2431,6 @@ function Show-PopupWindow {
         param($n)
         $control = $window.FindName($n)
         if ($null -eq $control) {
-            Write-DLog "FATAL: XAML element not found: $n" "ERROR"
             throw "XAML element not found: $n"
         }
         return $control
@@ -2610,7 +2463,7 @@ function Show-PopupWindow {
         $normalPanel.Visibility      = "Collapsed"
         $pathMissingPanel.Visibility = "Visible"
         $folderName = if ($config.explorer_path) { Split-Path -Leaf $config.explorer_path } else { "Unknown" }
-        if (-not $folderName -or $folderName.Length -eq 0) { $folderName = "Unknown" }
+        if (-not $folderName) { $folderName = "Unknown" }
         $missingPathLabel.Text = "This folder can't be found: $(Escape-XmlText $folderName)"
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
@@ -2618,7 +2471,7 @@ function Show-PopupWindow {
         $glyphText.Text = Escape-XmlText $config.glyph
         $titleText.Text = Escape-XmlText (Strip-MarkupText $config.title)
         $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $config.body)) -MaxLength 150
-        if ($config.folder_name -and $config.folder_name -ne "") {
+        if ($config.folder_name) {
             # UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
                 $config.explorer_path
@@ -2633,7 +2486,6 @@ function Show-PopupWindow {
     $script:openExplorer    = $true
     $script:remaining       = 20
     $script:snoozeMinutes   = 5
-    $script:firstTick       = $true
     $script:snoozeCount     = 0
     $script:newExplorerPath = ""
     $script:windowClosed    = $false   # Guard against queued dispatcher tick
@@ -2647,24 +2499,17 @@ function Show-PopupWindow {
                 $window.BeginAnimation([System.Windows.UIElement]::OpacityProperty, $anim)
             }
             catch {
-                Write-DLog "Fade-in failed: $_" "WARN"
                 $window.Opacity = 1  # ensure visible if animation fails
             }
             # Fallback: if opacity is still 0 after 500ms, force it visible
             $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
             $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
-            if ($fallbackInterval.TotalMilliseconds -le 0) {
-                Write-DLog "WARN: Fallback timer interval invalid, skipping animation fallback" "WARN"
-                $window.Opacity = 1
-            }
-            else {
-                $fallbackTimer.Interval = $fallbackInterval
-                $fallbackTimer.Add_Tick({
-                    $fallbackTimer.Stop()
-                    if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
-                })
-                $fallbackTimer.Start()
-            }
+            $fallbackTimer.Interval = $fallbackInterval
+            $fallbackTimer.Add_Tick({
+                $fallbackTimer.Stop()
+                if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
+            })
+            $fallbackTimer.Start()
         })
 
     # Race condition fix: stop countdown on ANY button press before click handler fires
@@ -2673,7 +2518,6 @@ function Show-PopupWindow {
         param($s, $e)
         if ($null -ne $timer -and $timer.IsEnabled) {
             $timer.Stop()
-            Write-DLog "Countdown cancelled by button PreviewMouseDown"
         }
     }
     $letsGoBtn.Add_PreviewMouseDown($cancelCountdown)
@@ -2688,7 +2532,6 @@ function Show-PopupWindow {
         $timer.Add_Tick({
             try {
                 if ($null -eq $window -or -not $window.IsLoaded) {
-                    Write-DLog "Window no longer loaded, stopping timer" "WARN"
                     $script:windowClosed = $true
                     $timer.Stop()
                     return
@@ -2697,7 +2540,6 @@ function Show-PopupWindow {
                     $timer.Stop()
                     return
                 }
-                if ($script:firstTick) { Write-DLog "Countdown running"; $script:firstTick = $false }
                 $script:remaining--
                 $countdownText.Text = $script:remaining
                 if ($script:remaining -le 0 -and -not $script:windowClosed) {
@@ -2708,7 +2550,6 @@ function Show-PopupWindow {
                 }
             }
             catch {
-                Write-DLog "Timer error: $_" "ERROR"
                 $script:windowClosed = $true
                 $timer.Stop()
             }
@@ -2719,7 +2560,6 @@ function Show-PopupWindow {
             }
         })
         $timer.Start()
-        Write-DLog "Countdown timer started"
 
         if ($null -ne $pauseBtn) {
             $pauseBtn.Add_Click({
@@ -2727,13 +2567,11 @@ function Show-PopupWindow {
                     $timer.Start()
                     $pauseBtn.Content       = "Pause"
                     $script:timerPaused     = $false
-                    Write-DLog "Countdown resumed"
                 }
                 else {
                     $timer.Stop()
                     $pauseBtn.Content       = "Resume"
                     $script:timerPaused     = $true
-                    Write-DLog "Countdown paused"
                 }
             })
         }
@@ -2742,7 +2580,6 @@ function Show-PopupWindow {
     # Snooze duration helpers
     $snoozeDropBtn.Add_Click({
         if ($null -eq $snoozeDropBtn.ContextMenu) {
-            Write-DLog "ERROR: SnoozeDropBtn ContextMenu is null - XAML may have failed to load" "ERROR"
             return
         }
         $snoozeDropBtn.ContextMenu.PlacementTarget = $snoozeDropBtn
@@ -2758,7 +2595,6 @@ function Show-PopupWindow {
     # Exit item closes the popup without opening explorer (equivalent to Dismiss)
     if ($exitItem) {
         $exitItem.Add_Click({
-            Write-DLog "Exit menu item clicked"
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) { $timer.Stop() }
             $script:openExplorer = $false
             $script:windowClosed = $true
@@ -2769,12 +2605,10 @@ function Show-PopupWindow {
     # Snooze button
     $snoozeBtn.Add_Click({
         try {
-            Write-DLog "Snooze clicked ($($script:snoozeMinutes) min)"
             if (-not $script:pathMissing) { $timer.Stop() }
             $script:snoozeCount++
             $script:openExplorer = $false
             if ($script:snoozeMinutes -lt 1 -or $script:snoozeMinutes -gt 1440) {
-                Write-DLog "Invalid snooze duration: $($script:snoozeMinutes) minutes" "ERROR"
 
                 [void][System.Windows.MessageBox]::Show(
                     "Snooze duration must be between 1 minute and 24 hours.",
@@ -2784,24 +2618,20 @@ function Show-PopupWindow {
             # If system processing takes time, this ensures TriggerTime validation won't fail
             $bufferMinutes = 1
             $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
-            Write-DLog "Snooze time calculated: $snoozeTime (requested: $($script:snoozeMinutes)m + buffer: ${bufferMinutes}m)"
             $snoozeResult = New-MotivationTask -FolderPath $config.explorer_path -TriggerTime $snoozeTime -Force
             if (-not $snoozeResult.Success) {
-                Write-DLog "Snooze task creation failed: $($snoozeResult.Error)" "ERROR"
 
                 [void][System.Windows.MessageBox]::Show(
                     "Could not snooze the task.`n`n$($snoozeResult.Error)",
                     "Snooze Failed", "OK", "Error")
                 return
             }
-            Write-DLog "Snooze task created for $snoozeTime"
             $window.Close()
         }
         catch {
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
-            Write-DLog "Snooze error: $_" "ERROR"
             $window.Close()
         }
     })
@@ -2809,7 +2639,6 @@ function Show-PopupWindow {
     # Dismiss for Today
     $dismissBtn.Add_Click({
         try {
-            Write-DLog "Dismiss for Today clicked"
             if (-not $script:pathMissing) { $timer.Stop() }
             $script:openExplorer = $false
             if ($config.explorer_path) {
@@ -2817,10 +2646,7 @@ function Show-PopupWindow {
                     $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
                 }
                 foreach ($t in $pending) {
-                    $removed = Remove-MotivationTask -TaskId $t.task_id
-                    if (-not $removed) {
-                        Write-DLog "Failed to remove task $($t.task_id) during dismiss" "WARN"
-                    }
+                    Remove-MotivationTask -TaskId $t.task_id | Out-Null
                 }
             }
             $window.Close()
@@ -2829,7 +2655,6 @@ function Show-PopupWindow {
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
-            Write-DLog "Dismiss error: $_" "ERROR"
             $window.Close()
         }
     })
@@ -2837,7 +2662,6 @@ function Show-PopupWindow {
     # Open Folder button
     $letsGoBtn.Add_Click({
         try {
-            Write-DLog "Open Folder clicked"
             if (-not $script:pathMissing) { $timer.Stop() }
             $script:openExplorer = $true
             $window.Close()
@@ -2846,20 +2670,17 @@ function Show-PopupWindow {
             if (-not $script:pathMissing -and $null -ne $timer -and $timer.IsEnabled) {
                 $timer.Stop()
             }
-            Write-DLog "LetsGo error: $_" "ERROR"
         }
     })
 
     # Path missing - Dismiss
     $pathDismissBtn.Add_Click({
-        Write-DLog "Path-missing Dismiss clicked"
         $script:openExplorer = $false
         $window.Close()
     })
 
     # Path missing - Re-pick folder
     $rePickBtn.Add_Click({
-        Write-DLog "Re-pick clicked"
         $dialog = $null
         try {
             $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
@@ -2867,7 +2688,6 @@ function Show-PopupWindow {
             $dialog.ShowNewFolderButton = $false
             if ($dialog.ShowDialog() -eq "OK") {
                 $newPath = $dialog.SelectedPath
-                Write-DLog "Re-pick: $newPath"
                 try {
                     $c = Get-PopupConfig
                     $popupParams = @{
@@ -2883,7 +2703,6 @@ function Show-PopupWindow {
                     $window.Close()
                 }
                 catch {
-                    Write-DLog "Config update failed: $_" "ERROR"
                     [void][System.Windows.MessageBox]::Show(
                         "Could not save the new folder path.`n`n$($_.Exception.Message)",
                         "Save Failed", "OK", "Error")
@@ -2913,25 +2732,22 @@ function Show-PopupWindow {
                 } catch {}
             }
         }
-        catch { Write-DLog "Popup timer cleanup error: $_" "WARN" }
+        catch {}
     })
 
     # Show popup
-    Write-DLog "Calling ShowDialog()"
     try {
 
         [void]$window.ShowDialog()
-        Write-DLog "ShowDialog returned. openExplorer=$($script:openExplorer)"
     }
-    catch { Write-DLog "ShowDialog threw: $_" "ERROR" }
+    catch {}
     finally {
         # Close WPF window to release resources
         if ($window) {
             try {
                 $window.Close()
-                Write-DLog "PopupWindow closed"
             }
-            catch { Write-DLog "Window close error: $_" "WARN" }
+            catch {}
         }
 
         # Reset state variables to prevent leakage between popup instances
@@ -2940,16 +2756,15 @@ function Show-PopupWindow {
         $script:newExplorerPath = ""
         $script:remaining = 20
         $script:snoozeCount = 0
-        $script:firstTick = $true
         $script:windowClosed = $false
 
         if ($mutexOwned -and $mutex) {
-            try { $mutex.ReleaseMutex(); Write-DLog "Mutex released" }
-            catch { Write-DLog "Mutex release error: $_" "WARN" }
+            try { $mutex.ReleaseMutex() }
+            catch {}
         }
         if ($null -ne $mutex) {
             try { $mutex.Dispose() }
-            catch { Write-DLog "Mutex dispose error: $_" "WARN" }
+            catch {}
         }
     }
 
@@ -2957,24 +2772,17 @@ function Show-PopupWindow {
     # This must happen for ALL outcomes (Open, Countdown, Snooze, Dismiss, PathMissing).
     # Cannot rely on DeleteExpiredTaskAfter alone — it only fires when the scheduled
     # trigger expires naturally; manually-run tasks are never considered "expired".
-    if ($config.task_id -and $config.task_id -ne "") {
-        Write-DLog "Removing originating task: $($config.task_id)"
-        $removed = Remove-MotivationTask -TaskId $config.task_id
-        if (-not $removed) {
-            Write-DLog "Failed to remove task: $($config.task_id)" "WARN"
-        }
+    if ($config.task_id) {
+        Remove-MotivationTask -TaskId $config.task_id | Out-Null
     }
 
     # Post-close: open Explorer (REQ-009)
     $effectivePath = if ($script:newExplorerPath) { $script:newExplorerPath } else { $config.explorer_path }
-    if ($script:openExplorer -and $effectivePath -and $effectivePath -ne "") {
-        Write-DLog "Launching Explorer: $effectivePath"
+    if ($script:openExplorer -and $effectivePath) {
         try {
             Start-Process -FilePath "explorer.exe" -ArgumentList "`"$effectivePath`"" -ErrorAction Stop
-            Write-DLog "Explorer launched"
         }
         catch {
-            Write-DLog "Explorer launch failed: $_" "ERROR"
             [void][System.Windows.MessageBox]::Show(
                 "Could not open the folder:`n$effectivePath`n`n$($_.Exception.Message)",
                 "Error Opening Folder", "OK", "Error")
@@ -2987,8 +2795,6 @@ function Show-PopupWindow {
                elseif ($script:snoozeCount -gt 0) { "Snoozed" }
                else { "Dismissed" }
     Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
-
-    Write-DLog "====== POPUP COMPLETE: $outcome ======"
 }
 
 # ============================================================
@@ -3147,10 +2953,6 @@ function Get-RandomMessage {
 # (-NoRun switch skips this block; used when dot-sourcing in tests)
 # ============================================================
 if (-not $NoRun) {
-    # Use if-else for .NET Framework 4.x compatibility (ps2exe target)
-    $platformName = if ($script:IsWindowsPlatform) { 'Windows' } else { 'Linux' }
-    Write-DLog "====== STARTED Mode=$Mode PID=$PID PSVer=$($PSVersionTable.PSVersion) Platform=$platformName ======"
-
     # Load Windows assemblies (WPF, WinForms) - required for UI modes
     if ($script:IsWindowsPlatform) {
         Initialize-WindowsAssemblies
@@ -3172,14 +2974,12 @@ if (-not $NoRun) {
             Show-PopupWindow
         }
         "/setfolder" {
-            Write-DLog "setfolder: FolderPath='$FolderPath'"
             if ($FolderPath -and (Test-Path $FolderPath -PathType Container)) {
                 $cfg         = Get-Config
                 $triggerHour = if ($cfg -and $null -ne $cfg.default_trigger_hour) { [int]$cfg.default_trigger_hour } else { $script:ConfigDefaults.default_trigger_hour }
                 $triggerTime = (Get-Date).Date.AddDays(1).AddHours($triggerHour)
                 $msg         = Get-RandomMessage
                 $result      = New-MotivationTask -FolderPath $FolderPath -TriggerTime $triggerTime
-                Write-DLog "setfolder: New-MotivationTask result Success=$($result.Success) IsDuplicate=$($result.IsDuplicate) Error='$($result.Error)'"
                 if ($result.Success) {
                     Set-PopupConfig -Glyph $msg.Glyph -Title $msg.Title -Body $msg.Body -ExplorerPath $FolderPath -TaskId $result.TaskId
                     $folderLeaf = Split-Path -Leaf $FolderPath; if (-not $folderLeaf -or $folderLeaf.Length -eq 0) { $folderLeaf = "Unknown Folder" }
@@ -3193,17 +2993,11 @@ if (-not $NoRun) {
                     Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$($result.Error)" -Title "Schedule Failed"
                 }
             }
-            else {
-                Write-DLog "setfolder: invalid or missing FolderPath '$FolderPath'" "WARN"
-            }
         }
         default {
             # REQ-010: Ensure context menu is registered every time the exe launches.
             # This self-heals if the user manually deleted the registry key.
-            $regResult = Register-ContextMenu -ExePath $script:ExePath
-            if (-not $regResult.Success) {
-                Write-DLog "Context menu registration failed: $($regResult.Reason)" "WARN"
-            }
+            Register-ContextMenu -ExePath $script:ExePath | Out-Null
             Show-MainWindow
         }
     }
