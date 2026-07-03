@@ -1,0 +1,63 @@
+DIAGNOSIS: Duplicate Detection Test Failures
+=============================================
+
+SYMPTOM:
+--------
+Tests expect IsDuplicate=$true, but get $false
+
+TEST SCENARIO:
+--------------
+1. First call: New-MotivationTask -FolderPath C:\Projects\TestFolder1 -TriggerTime $t
+2. Second call: New-MotivationTask -FolderPath C:\Projects\TestFolder1 -TriggerTime $t (same folder, same date)
+3. Expected: IsDuplicate=$true
+4. Actual: IsDuplicate=$false
+
+CODE FLOW ANALYSIS:
+-------------------
+
+FIRST CALL:
+-----------
+1. Line 628: Sync-TaskStatuses runs -> tasks.json is empty, nothing happens
+2. Line 701: Generate taskId (e.g., "abc123")
+3. Line 702: taskName = "DailyMotivation_abc123"
+4. Line 789: Register-ScheduledTask mock called
+   -> Mock line 63: $script:MockedTasks["DailyMotivation_abc123"] = [PSCustomObject]@{...}
+5. Line 809: newTask.task_name = "DailyMotivation_abc123"
+6. Line 819: Save-TasksJson -> writes to disk with task_name="DailyMotivation_abc123"
+
+SECOND CALL:
+------------
+1. Line 628: Sync-TaskStatuses runs
+   a. Line 844: $tasks = @(Get-TasksJson) -> reads from disk, finds first task
+   b. Line 850: First task has status="PENDING"
+   c. Line 853: Get-ScheduledTask -TaskName "DailyMotivation_abc123" -ErrorAction Stop
+   d. Mock line 89: if ($script:MockedTasks.ContainsKey("DailyMotivation_abc123"))
+
+   **QUESTION: Does this return $true or $false?**
+
+   - IF $true: Mock returns the task object, Sync-TaskStatuses continues, no status change
+   - IF $false: Mock throws exception, line 855 catches it, marks task as "DELETED"
+
+   e. IF task was marked DELETED:
+      - Line 921: Save-TasksJson writes updated status back to disk
+
+2. Line 633: Get-MotivationTasks reads from disk
+3. Line 638: Filter for status="PENDING"
+   - IF first task has status="DELETED", it's filtered out
+   - No duplicate detected!
+
+ROOT CAUSE HYPOTHESIS:
+----------------------
+The mock is throwing an exception when looking up the first task, which means
+$script:MockedTasks.ContainsKey("DailyMotivation_abc123") is returning $false.
+
+This could happen if:
+1. The hashtable key doesn't match (unlikely - same variable used)
+2. The hashtable was cleared/reset between register and lookup (unlikely - same test)
+3. There's a scope issue with $script:MockedTasks
+4. The taskName variable is different than expected
+
+NEXT STEP:
+----------
+Add debug logging to the mock to see what's actually in $script:MockedTasks
+when the lookup happens.

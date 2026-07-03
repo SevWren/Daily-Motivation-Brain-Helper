@@ -225,13 +225,12 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         # Setup for integration tests with stateful mock tracking
         $script:IntegrationMockedTasks = @{}
 
-        Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $args[0] } }
-        Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(3)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
-        Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
-        Mock New-ScheduledTaskPrincipal { return [PSCustomObject]@{} }
+        # Only mock the Task Scheduler registry/persistence cmdlets, not the object creation cmdlets.
+        # New-ScheduledTaskAction, New-ScheduledTaskTrigger, New-ScheduledTaskSettingsSet, and
+        # New-ScheduledTaskPrincipal are native Windows cmdlets that work correctly - don't mock them.
         Mock Register-ScheduledTask {
             param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-            # Track registered task
+            # Track registered task with Triggers property so Sync-TaskStatuses can read it
             $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
                 TaskName = $TaskName
                 Triggers = @($Trigger)

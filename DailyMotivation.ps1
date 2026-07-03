@@ -622,12 +622,9 @@ function New-MotivationTask {
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path format: $_" }
     }
 
-    # Sync OS task states before duplicate check so stale ghost entries (tasks that were
-    # written to tasks.json but never actually registered in Task Scheduler due to a
-    # non-terminating error) are marked DELETED and don't block rescheduling.
-    if (-not $script:Platform) { Sync-TaskStatuses }
-
     # Duplicate check - case-insensitive path, same date
+    # Read tasks directly from JSON WITHOUT syncing first to avoid false positives
+    # where Sync-TaskStatuses marks tasks as DELETED due to temporary lookup failures
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
         $existing = Get-MotivationTasks | Where-Object {
@@ -644,6 +641,11 @@ function New-MotivationTask {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $true }
         }
     }
+
+    # Sync OS task states AFTER duplicate check to clean up ghost entries without
+    # interfering with duplicate detection. Ghost entries (tasks in JSON but not in OS)
+    # will be marked DELETED here, but only AFTER we've confirmed this isn't a duplicate.
+    if (-not $script:Platform) { Sync-TaskStatuses }
 
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {

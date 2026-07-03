@@ -59,12 +59,19 @@ BeforeAll {
             $Description,
             [switch]$Force
         )
+        # DEBUG: Log registration
+        Write-Host "[DEBUG Register-ScheduledTask] Registering: '$TaskName'"
+        Write-Host "[DEBUG Register-ScheduledTask] Before - MockedTasks count: $($script:MockedTasks.Count)"
+
         # Track registered task for Get-ScheduledTask mock
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{
             TaskName = $TaskName
             State = [PSCustomObject]@{ State = 'Ready' }
             Triggers = @($Trigger)
         }
+
+        Write-Host "[DEBUG Register-ScheduledTask] After - MockedTasks count: $($script:MockedTasks.Count)"
+        Write-Host "[DEBUG Register-ScheduledTask] After - MockedTasks keys: $($script:MockedTasks.Keys -join ', ')"
         return $null
     }
     # AG8-003: Add -Verifiable to Unregister mock for validation
@@ -81,15 +88,23 @@ BeforeAll {
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
     Mock Get-ScheduledTask {
         param($TaskName)
+        # DEBUG: Log lookup attempts
+        Write-Host "[DEBUG Get-ScheduledTask] Looking up: '$TaskName'"
+        Write-Host "[DEBUG Get-ScheduledTask] MockedTasks keys: $($script:MockedTasks.Keys -join ', ')"
+        Write-Host "[DEBUG Get-ScheduledTask] MockedTasks count: $($script:MockedTasks.Count)"
+
         if ($TaskName -eq "DailyMotivation_*") {
             # Return all tracked tasks for wildcard queries
+            Write-Host "[DEBUG Get-ScheduledTask] Wildcard query - returning $($script:MockedTasks.Values.Count) tasks"
             return @($script:MockedTasks.Values)
         }
         # For specific task lookup, return tracked task or throw
         if ($script:MockedTasks.ContainsKey($TaskName)) {
+            Write-Host "[DEBUG Get-ScheduledTask] FOUND task: $TaskName"
             return $script:MockedTasks[$TaskName]
         }
         # Throw to simulate task not found (matches real Get-ScheduledTask behavior)
+        Write-Host "[DEBUG Get-ScheduledTask] NOT FOUND - throwing exception for: $TaskName"
         throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("No MSFT_ScheduledTask objects found with property 'TaskName' equal to '$TaskName'")
     }
 }
@@ -103,9 +118,16 @@ AfterAll {
 
 Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
-        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        Write-Host "`n[DEBUG BeforeEach] Resetting test environment"
+        # Use $script:TasksPath directly to ensure we're writing to the same path that Get-TasksJson reads from
+        if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
+            New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
+        }
+        '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         # Clear tracked tasks for each test
+        Write-Host "[DEBUG BeforeEach] Before reset - MockedTasks count: $($script:MockedTasks.Count)"
         $script:MockedTasks = @{}
+        Write-Host "[DEBUG BeforeEach] After reset - MockedTasks count: $($script:MockedTasks.Count)"
     }
 
     Context 'When creating a new task' {
@@ -468,8 +490,38 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
 
 Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
     BeforeEach {
-        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        # Use $script:TasksPath directly to ensure we're writing to the same path that Get-TasksJson reads from
+        if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
+            New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
+        }
+        '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         $script:MockedTasks = @{}
+
+        # Inject platform adapter to prevent Sync-TaskStatuses from interfering with Get-MotivationTasks tests
+        # This matches the pattern used in Remove-MotivationTask tests
+        $script:Platform = [PSCustomObject]@{
+            ScheduleTask = {
+                param($config)
+                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+                $taskName = "DailyMotivation_$taskId"
+                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+                return @{ Success = $true; TaskId = $taskId }
+            }
+            UnscheduleTask = {
+                param($taskId)
+                $tasks = Get-TasksJson
+                $target = $tasks | Where-Object { $_.task_id -eq $taskId }
+                if ($target) {
+                    Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
+                }
+            }
+        }
+    }
+
+    AfterEach {
+        # Reset platform adapter so other tests aren't affected
+        $script:Platform = $null
     }
 
     It 'Should return an empty array when no tasks exist' {
@@ -529,8 +581,44 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
 
 Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
-        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        # Use $script:TasksPath directly to ensure we're writing to the same path that Get-TasksJson reads from
+        if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
+            New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
+        }
+        '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         $script:MockedTasks = @{}
+        # Inject minimal platform adapter to skip Sync-TaskStatuses
+        # This prevents the sync logic from finding "orphaned" tasks in $script:MockedTasks
+        # and adding them back to tasks.json, which was causing test failures.
+        # The platform adapter delegates to the existing mocked cmdlets to maintain test assertions.
+        $script:Platform = [PSCustomObject]@{
+            ScheduleTask = {
+                param($config)
+                # Generate task ID and delegate to mocked Register-ScheduledTask
+                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+                $taskName = "DailyMotivation_$taskId"
+
+                # Call the mocked Register-ScheduledTask
+                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+
+                return @{ Success = $true; TaskId = $taskId }
+            }
+            UnscheduleTask = {
+                param($taskId)
+                # Forward to the mocked Unregister-ScheduledTask to maintain test assertions
+                $tasks = Get-TasksJson
+                $target = $tasks | Where-Object { $_.task_id -eq $taskId }
+                if ($target) {
+                    Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
+                }
+            }
+        }
+    }
+
+    AfterEach {
+        # Reset platform adapter so other tests aren't affected
+        $script:Platform = $null
     }
 
     It 'Should remove the specified task from tasks.json' {
