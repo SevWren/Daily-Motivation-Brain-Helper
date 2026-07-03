@@ -45,6 +45,9 @@ BeforeAll {
     # Real Task Scheduler cmdlets return CimInstance objects, which cannot be easily mocked.
     # By mocking Register-ScheduledTask directly, we bypass parameter type validation and
     # focus on testing the business logic (JSON persistence, duplicate detection, etc.)
+    # Track registered tasks in script scope for stateful mocking
+    $script:MockedTasks = @{}
+
     # AG8-001: Add -Verifiable to enable mock call verification
     Mock Register-ScheduledTask -Verifiable {
         param(
@@ -56,21 +59,38 @@ BeforeAll {
             $Description,
             [switch]$Force
         )
-        # Just succeed - we're testing business logic, not Windows API
+        # Track registered task for Get-ScheduledTask mock
+        $script:MockedTasks[$TaskName] = [PSCustomObject]@{
+            TaskName = $TaskName
+            State = [PSCustomObject]@{ State = 'Ready' }
+            Triggers = @($Trigger)
+        }
         return $null
     }
     # AG8-003: Add -Verifiable to Unregister mock for validation
-    Mock Unregister-ScheduledTask -Verifiable { }
+    Mock Unregister-ScheduledTask -Verifiable {
+        param($TaskName, $Confirm)
+        # Remove from tracked tasks
+        if ($script:MockedTasks.ContainsKey($TaskName)) {
+            $script:MockedTasks.Remove($TaskName)
+        }
+    }
     # Mock Get-ScheduledTask - handle both specific task lookups and wildcard queries
-    # - For specific task names: return $null (task not found, allows collision retry)
-    # - For wildcard "DailyMotivation_*": return empty array (no orphaned tasks)
+    # - For specific task names: return tracked task or throw if not found
+    # - For wildcard "DailyMotivation_*": return all tracked tasks
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
     Mock Get-ScheduledTask {
         param($TaskName)
         if ($TaskName -eq "DailyMotivation_*") {
-            return @()  # Empty array for wildcard queries (Sync-TaskStatuses Direction 2)
+            # Return all tracked tasks for wildcard queries
+            return @($script:MockedTasks.Values)
         }
-        return $null  # Task not found for specific lookups
+        # For specific task lookup, return tracked task or throw
+        if ($script:MockedTasks.ContainsKey($TaskName)) {
+            return $script:MockedTasks[$TaskName]
+        }
+        # Throw to simulate task not found (matches real Get-ScheduledTask behavior)
+        throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("No MSFT_ScheduledTask objects found with property 'TaskName' equal to '$TaskName'")
     }
 }
 
@@ -84,6 +104,8 @@ AfterAll {
 Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        # Clear tracked tasks for each test
+        $script:MockedTasks = @{}
     }
 
     Context 'When creating a new task' {

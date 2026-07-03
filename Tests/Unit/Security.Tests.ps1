@@ -27,18 +27,30 @@ BeforeAll {
     # Override ExePath for task creation
     $script:ExePath = "C:\Test\DailyMotivation.exe"
 
+    # Track registered tasks for stateful mocking
+    $script:SecurityMockedTasks = @{}
+
     # Mock Windows Task Scheduler cmdlets
     Mock Register-ScheduledTask -Verifiable {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+        $script:SecurityMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
     }
-    Mock Unregister-ScheduledTask -Verifiable { }
+    Mock Unregister-ScheduledTask -Verifiable {
+        param($TaskName, $Confirm)
+        if ($script:SecurityMockedTasks.ContainsKey($TaskName)) {
+            $script:SecurityMockedTasks.Remove($TaskName)
+        }
+    }
     Mock Get-ScheduledTask {
         param($TaskName)
         if ($TaskName -eq "DailyMotivation_*") {
-            return @()
+            return @($script:SecurityMockedTasks.Values)
         }
-        return $null
+        if ($script:SecurityMockedTasks.ContainsKey($TaskName)) {
+            return $script:SecurityMockedTasks[$TaskName]
+        }
+        throw "Task not found: $TaskName"
     }
 }
 

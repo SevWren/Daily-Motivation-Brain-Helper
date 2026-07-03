@@ -23,8 +23,30 @@ BeforeAll {
 
     $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    Mock Register-ScheduledTask { return $null }
-    Mock Unregister-ScheduledTask { }
+    # Track registered tasks for stateful mocking
+    $script:SyncMockedTasks = @{}
+
+    Mock Register-ScheduledTask {
+        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
+        $script:SyncMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
+        return $null
+    }
+    Mock Unregister-ScheduledTask {
+        param($TaskName, $Confirm)
+        if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
+            $script:SyncMockedTasks.Remove($TaskName)
+        }
+    }
+    Mock Get-ScheduledTask {
+        param($TaskName)
+        if ($TaskName -eq "DailyMotivation_*") {
+            return @($script:SyncMockedTasks.Values)
+        }
+        if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
+            return $script:SyncMockedTasks[$TaskName]
+        }
+        throw "Task not found: $TaskName"
+    }
 }
 
 AfterAll {

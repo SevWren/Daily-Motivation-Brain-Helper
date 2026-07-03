@@ -596,7 +596,7 @@ function New-MotivationTask {
     The task action calls this same exe with /popup argument (-STA baked in by build).
     #>
     param(
-        [Parameter(Mandatory)][string]$FolderPath,
+        [AllowEmptyString()][Parameter(Mandatory)][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )
@@ -1277,8 +1277,8 @@ function Register-ContextMenu {
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
 
         [void](New-Item -Path $cmdKey -Force)
-        # Escape only embedded double-quotes; backslashes remain as literal path separators
-        $escapedPath = $ExePath -replace '"', '\"'
+        # Escape embedded double-quotes using PowerShell backtick escape
+        $escapedPath = $ExePath -replace '"', '`"'
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value ('"' + $escapedPath + '" /setfolder "%1"')
 
         if (-not (Test-Path $verbKey)) {

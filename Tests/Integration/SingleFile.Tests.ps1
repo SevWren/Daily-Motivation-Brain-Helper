@@ -166,23 +166,36 @@ Describe 'Mode switching and config persistence (AG8-026)' {
 
     It 'Should verify tasks.json persists across mode switches' -Skip:(-not $IsWindows) {
         # Simulate main mode creating a task
+        $script:IntegrationMockedTasks = @{}
+
         Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $args[0] } }
         Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
         Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
         Mock New-ScheduledTaskPrincipal { return [PSCustomObject]@{} }
         Mock Register-ScheduledTask {
             param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-            return [PSCustomObject]@{ TaskName = $TaskName }
+            # Track registered task
+            $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
+                TaskName = $TaskName
+                Triggers = @($Trigger)
+            }
+            return $null
         }
         Mock Get-ScheduledTask {
             param($TaskName, $ErrorAction)
-            if ($TaskName -like "DailyMotivation_*" -and -not $TaskName.Contains('_*')) {
-                return [PSCustomObject]@{
-                    TaskName = $TaskName
-                    Triggers = @([PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss') })
-                }
+            if ($TaskName -eq "DailyMotivation_*") {
+                return @($script:IntegrationMockedTasks.Values)
             }
-            return @()
+            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
+                return $script:IntegrationMockedTasks[$TaskName]
+            }
+            throw "Task not found: $TaskName"
+        }
+        Mock Unregister-ScheduledTask {
+            param($TaskName, $Confirm)
+            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
+                $script:IntegrationMockedTasks.Remove($TaskName)
+            }
         }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
@@ -205,25 +218,37 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     # Windows-only: Requires Task Scheduler cmdlets
 
     BeforeEach {
-        # Setup for integration tests
+        # Setup for integration tests with stateful mock tracking
+        $script:IntegrationMockedTasks = @{}
+
         Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $args[0] } }
         Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(3)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
         Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
         Mock New-ScheduledTaskPrincipal { return [PSCustomObject]@{} }
         Mock Register-ScheduledTask {
             param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-            return [PSCustomObject]@{ TaskName = $TaskName }
+            # Track registered task
+            $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
+                TaskName = $TaskName
+                Triggers = @($Trigger)
+            }
+            return $null
         }
-        Mock Unregister-ScheduledTask { }
+        Mock Unregister-ScheduledTask {
+            param($TaskName, $Confirm)
+            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
+                $script:IntegrationMockedTasks.Remove($TaskName)
+            }
+        }
         Mock Get-ScheduledTask {
             param($TaskName, $ErrorAction)
-            if ($TaskName -like "DailyMotivation_*" -and -not $TaskName.Contains('_*')) {
-                return [PSCustomObject]@{
-                    TaskName = $TaskName
-                    Triggers = @([PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(3)).ToString('yyyy-MM-ddTHH:mm:ss') })
-                }
+            if ($TaskName -eq "DailyMotivation_*") {
+                return @($script:IntegrationMockedTasks.Values)
             }
-            return @()
+            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
+                return $script:IntegrationMockedTasks[$TaskName]
+            }
+            throw "Task not found: $TaskName"
         }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
