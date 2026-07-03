@@ -286,7 +286,8 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     }
 
     It 'Should handle duplicate detection across task operations' {
-        $triggerTime = (Get-Date).Date.AddHours(14)
+        # Use relative time to ensure it's always in the future
+        $triggerTime = (Get-Date).AddHours(2)
 
         # Create first task
         $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime

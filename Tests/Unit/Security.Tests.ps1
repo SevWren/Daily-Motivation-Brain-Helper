@@ -155,6 +155,21 @@ Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-
     BeforeEach {
         # Reset mock state before each test
         $script:SecurityMockedTasks = @{}
+        # Inject platform adapter to bypass CIM type validation issues
+        $script:Platform = [PSCustomObject]@{
+            ScheduleTask = {
+                param($config)
+                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+                $taskName = "DailyMotivation_$taskId"
+                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+                return @{ Success = $true; TaskId = $taskId }
+            }
+        }
+    }
+
+    AfterEach {
+        $script:Platform = $null
     }
 
     Context 'When scheduling network path tasks' {

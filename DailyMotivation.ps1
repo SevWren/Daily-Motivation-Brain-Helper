@@ -650,11 +650,12 @@ function New-MotivationTask {
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
         # Platform adapter handles task scheduling
-        $taskResult = $script:Platform.ScheduleTask(@{
+        # Use call operator (&) because ScheduleTask is a scriptblock property, not a method
+        $taskResult = & $script:Platform.ScheduleTask @{
             FolderPath = $FolderPath
             TriggerTime = $TriggerTime
             ExePath = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
-        })
+        }
 
         if (-not $taskResult.Success) {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Platform adapter failed" }
@@ -950,7 +951,8 @@ function Remove-MotivationTask {
 
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
-        $script:Platform.UnscheduleTask($TaskId)
+        # Use call operator (&) because UnscheduleTask is a scriptblock property, not a method
+        & $script:Platform.UnscheduleTask $TaskId
     }
     else {
         # Windows-specific Task Scheduler logic

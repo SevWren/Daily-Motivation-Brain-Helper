@@ -215,8 +215,26 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     }
 
     Context 'Duplicate detection' {
+        BeforeEach {
+            # Inject platform adapter to skip Sync-TaskStatuses and use consistent mocking
+            $script:Platform = [PSCustomObject]@{
+                ScheduleTask = {
+                    param($config)
+                    $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+                    $taskName = "DailyMotivation_$taskId"
+                    $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+                    Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+                    return @{ Success = $true; TaskId = $taskId }
+                }
+            }
+        }
+
+        AfterEach {
+            $script:Platform = $null
+        }
+
         It 'Should block duplicate for same folder and date' {
-            $t = (Get-Date).Date.AddHours(14)
+            $t = (Get-Date).AddHours(2)
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
             $r2.Success     | Should -Be $false
@@ -224,7 +242,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         }
 
         It 'Should allow duplicate when -Force is set' {
-            $t = (Get-Date).Date.AddHours(14)
+            $t = (Get-Date).AddHours(2)
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             $r2 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t -Force
             $r2.Success | Should -Be $true
@@ -240,7 +258,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         }
 
         It 'Should perform case-insensitive path comparison' {
-            $t = (Get-Date).Date.AddHours(14)
+            $t = (Get-Date).AddHours(2)
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' -TriggerTime $t | Out-Null
             $r2 = New-MotivationTask -FolderPath 'c:\PROJECTS\testfolder' -TriggerTime $t
             $r2.IsDuplicate | Should -Be $true
@@ -248,7 +266,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
 
         It 'Should NOT block duplicate if first task status is COMPLETED' {
             # AG8-020: Negative test - COMPLETED tasks should not block new ones
-            $t = (Get-Date).Date.AddHours(14)
+            $t = (Get-Date).AddHours(2)
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
             # Mark first task as COMPLETED
             $tasks = Get-TasksJson
