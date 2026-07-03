@@ -5,9 +5,17 @@
 .DESCRIPTION
     Tests for AG10-001 through AG10-022 security bugs
     Uses Test-Driven Development - RED, GREEN, REFACTOR
+.NOTES
+    Windows-only tests: Requires Windows Task Scheduler cmdlets
 #>
 
 BeforeAll {
+    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
+    if (-not $IsWindows) {
+        Write-Host "Skipping Security.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
+        return
+    }
+
     $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
     . (Join-Path $script:ProjectRoot "DailyMotivation.ps1") -NoRun
 
@@ -42,7 +50,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'AG10-001: Unquoted Service Path / Code Injection' {
+Describe 'AG10-001: Unquoted Service Path / Code Injection' -Skip:(-not $IsWindows) {
     Context 'When registering context menu with paths containing special characters' {
         It 'Should escape double quotes in ExePath' {
             # RED: Test fails because current code doesn't escape quotes
@@ -78,7 +86,7 @@ Describe 'AG10-001: Unquoted Service Path / Code Injection' {
     }
 }
 
-Describe 'AG10-002: Sensitive Folder Paths in Plaintext Config' {
+Describe 'AG10-002: Sensitive Folder Paths in Plaintext Config' -Skip:(-not $IsWindows) {
     Context 'When saving popup configuration' {
         It 'Should not store full paths in plaintext' {
             # RED: Test fails because popup_config.json stores raw paths
@@ -97,7 +105,7 @@ Describe 'AG10-002: Sensitive Folder Paths in Plaintext Config' {
     }
 }
 
-Describe 'AG10-003: No Path Validation Before Registry/Task Storage' {
+Describe 'AG10-003: No Path Validation Before Registry/Task Storage' -Skip:(-not $IsWindows) {
     Context 'When creating tasks with malicious paths' {
         It 'Should reject path traversal sequences' {
             # RED: Test fails because no path validation exists
@@ -123,7 +131,7 @@ Describe 'AG10-003: No Path Validation Before Registry/Task Storage' {
     }
 }
 
-Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' {
+Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-not $IsWindows) {
     Context 'When scheduling network path tasks' {
         It 'Should NOT use Highest RunLevel for network paths' {
             # RED: CRITICAL - Test fails because network paths get RunLevel=Highest
@@ -158,7 +166,7 @@ Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' {
     }
 }
 
-Describe 'AG10-005: Debug Logging Infrastructure' {
+Describe 'AG10-005: Debug Logging Infrastructure' -Skip:(-not $IsWindows) {
     It 'Debug logging infrastructure has been intentionally removed (bloat sterilization)' {
         # Write-DLog and $script:DebugLog were removed as debug-only bloat.
         # Security concern is resolved by elimination: no debug log file is written at all.
@@ -166,7 +174,7 @@ Describe 'AG10-005: Debug Logging Infrastructure' {
     }
 }
 
-Describe 'AG10-006: Fallback AppData Directory Not Unique' {
+Describe 'AG10-006: Fallback AppData Directory Not Unique' -Skip:(-not $IsWindows) {
     Context 'When AppData creation fails' {
         It 'Should use unique fallback directory per process' {
             # RED: Test fails because fallback uses shared "DailyMotivationBrainHelper" name
@@ -187,7 +195,7 @@ Describe 'AG10-006: Fallback AppData Directory Not Unique' {
     }
 }
 
-Describe 'AG10-008: JSON Config No Integrity Protection' {
+Describe 'AG10-008: JSON Config No Integrity Protection' -Skip:(-not $IsWindows) {
     Context 'When loading configuration files' {
         It 'Should detect tampered config files' -Pending {
             # RED: Test fails because no HMAC or integrity check
@@ -198,7 +206,7 @@ Describe 'AG10-008: JSON Config No Integrity Protection' {
     }
 }
 
-Describe 'AG10-009: Registry Keys Without ACL Configuration' {
+Describe 'AG10-009: Registry Keys Without ACL Configuration' -Skip:(-not $IsWindows) {
     Context 'When registering context menu' {
         It 'Should validate ExePath before registration' {
             # RED: Test fails because no validation on ExePath
@@ -217,7 +225,7 @@ Describe 'AG10-009: Registry Keys Without ACL Configuration' {
     }
 }
 
-Describe 'AG10-010: Task Description Contains User Data (Log Leakage)' {
+Describe 'AG10-010: Task Description Contains User Data (Log Leakage)' -Skip:(-not $IsWindows) {
     Context 'When creating scheduled tasks' {
         It 'Should not embed full folder path in task description' {
             # RED: Test fails because description = "Daily Motivation Brain Helper - $FolderPath"
@@ -239,7 +247,7 @@ Describe 'AG10-010: Task Description Contains User Data (Log Leakage)' {
     }
 }
 
-Describe 'AG10-011: File Permissions Not Set on Config Files' {
+Describe 'AG10-011: File Permissions Not Set on Config Files' -Skip:(-not $IsWindows) {
     Context 'When creating config files' {
         It 'Should set restrictive permissions on config directory' -Skip:(-not $IsWindows) {
             # RED: Test fails because no ACL is explicitly set
@@ -258,7 +266,7 @@ Describe 'AG10-011: File Permissions Not Set on Config Files' {
     }
 }
 
-Describe 'AG10-012: Mutex Name Lacks User Isolation' {
+Describe 'AG10-012: Mutex Name Lacks User Isolation' -Skip:(-not $IsWindows) {
     Context 'When creating popup mutex' {
         It 'Should include username in mutex name' {
             # Verify the mutex name includes user and session context (AG10-012 fix).
@@ -281,7 +289,7 @@ Describe 'AG10-012: Mutex Name Lacks User Isolation' {
     }
 }
 
-Describe 'AG10-013: Error Messages Expose Paths Without Sanitization' {
+Describe 'AG10-013: Error Messages Expose Paths Without Sanitization' -Skip:(-not $IsWindows) {
     Context 'When displaying error dialogs' {
         It 'Should sanitize file paths in error messages' {
             # RED: Test fails because exceptions directly show in MessageBox
@@ -296,7 +304,7 @@ Describe 'AG10-013: Error Messages Expose Paths Without Sanitization' {
     }
 }
 
-Describe 'AG10-015: ExePath Not Validated for Task Scheduler' {
+Describe 'AG10-015: ExePath Not Validated for Task Scheduler' -Skip:(-not $IsWindows) {
     Context 'When determining exe path' {
         It 'Should reject paths in System32' {
             # RED: Test fails because no validation of exe location
@@ -315,7 +323,7 @@ Describe 'AG10-015: ExePath Not Validated for Task Scheduler' {
     }
 }
 
-Describe 'AG10-016: Sensitive Folder Paths in Log File' {
+Describe 'AG10-016: Sensitive Folder Paths in Log File' -Skip:(-not $IsWindows) {
     Context 'When writing outcome log' {
         It 'Should hash folder paths instead of storing plaintext' {
             # RED: Test fails because Write-OutcomeLog stores raw $FolderPath
@@ -335,7 +343,7 @@ Describe 'AG10-016: Sensitive Folder Paths in Log File' {
     }
 }
 
-Describe 'AG10-017: ConvertFrom-Json Without Schema Validation' {
+Describe 'AG10-017: ConvertFrom-Json Without Schema Validation' -Skip:(-not $IsWindows) {
     Context 'When loading config with unexpected fields' {
         It 'Should reject config files exceeding size limits' {
             # RED: Test fails because no file size check before parsing
@@ -359,7 +367,7 @@ Describe 'AG10-017: ConvertFrom-Json Without Schema Validation' {
     }
 }
 
-Describe 'AG10-021: Unquoted Paths in Start-Process' {
+Describe 'AG10-021: Unquoted Paths in Start-Process' -Skip:(-not $IsWindows) {
     Context 'When opening explorer with folder path' {
         It 'Should quote paths containing spaces' {
             # RED: Test fails because Start-Process gets unquoted $effectivePath
@@ -380,7 +388,7 @@ Describe 'AG10-021: Unquoted Paths in Start-Process' {
     }
 }
 
-Describe 'AG10-022: Task Creation Race Condition in Collision Retry' {
+Describe 'AG10-022: Task Creation Race Condition in Collision Retry' -Skip:(-not $IsWindows) {
     Context 'When task name collisions occur' {
         It 'Should handle retry exhaustion gracefully' {
             # RED: Test fails because retry loop can exhaust without fallback

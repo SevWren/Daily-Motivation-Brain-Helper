@@ -2,12 +2,19 @@
 <#
 .SYNOPSIS
     Unit tests for task scheduler functions in DailyMotivation.ps1.
-    Covers: New-MotivationTask, Get-MotivationTasks, Remove-MotivationTask.
-    Note: actual Register-ScheduledTask calls are mocked; these tests cover
-    the JSON-persistence and business-logic layers only.
+    Covers: New-MotivationTask, Get-MotivationTask s, Remove-MotivationTask.
+.NOTES
+    Windows-only tests: actual Register-ScheduledTask calls are mocked; these tests cover
+    the JSON-persistence and business-logic layers only but require Task Scheduler cmdlets.
 #>
 
 BeforeAll {
+    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
+    if (-not $IsWindows) {
+        Write-Host "Skipping TaskScheduler.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
+        return
+    }
+
     . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
     $script:OriginalAppData = $env:APPDATA
@@ -74,7 +81,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'New-MotivationTask' {
+Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
@@ -437,7 +444,7 @@ Describe 'New-MotivationTask' {
     }
 }
 
-Describe 'Get-MotivationTasks' {
+Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
@@ -497,7 +504,7 @@ Describe 'Get-MotivationTasks' {
     }
 }
 
-Describe 'Remove-MotivationTask' {
+Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
@@ -528,7 +535,7 @@ Describe 'Remove-MotivationTask' {
     }
 }
 
-Describe 'Task Scheduler Integration' {
+Describe 'Task Scheduler Integration' -Skip:(-not $IsWindows) {
     It 'Should create a Windows scheduled task' -Skip {
         # Skipped: requires administrative privileges and Windows Task Scheduler
     }

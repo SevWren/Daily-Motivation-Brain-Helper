@@ -126,17 +126,19 @@ Describe 'Register-ContextMenu' {
         }
     }
 
-    It 'Should skip registration and not write to registry when ExePath is a .ps1 file' {
+    It 'Should skip registration and not write to registry when ExePath is a .ps1 file' -Skip:(-not $IsWindows) {
         # Regression test: running the script directly (not the compiled exe) sets
         # $script:ExePath to a .ps1 path. If Register-ContextMenu wrote that to the
         # registry, right-clicking a folder would produce "This app can't run on your PC".
+        # Windows-only: Tests actual Registry behavior
         $ps1Path = 'C:\Test\DailyMotivation.ps1'
         Remove-Item $script:VerbKey -Recurse -Force -ErrorAction SilentlyContinue
         { Register-ContextMenu -ExePath $ps1Path } | Should -Not -Throw
         Test-Path $script:VerbKey | Should -Be $false
     }
 
-    It 'Should skip registration and not throw when ExePath is empty' {
+    It 'Should skip registration and not throw when ExePath is empty' -Skip:(-not $IsWindows) {
+        # Windows-only: Tests actual Registry behavior
         Remove-Item $script:VerbKey -Recurse -Force -ErrorAction SilentlyContinue
         { Register-ContextMenu -ExePath '' } | Should -Not -Throw
         Test-Path $script:VerbKey | Should -Be $false

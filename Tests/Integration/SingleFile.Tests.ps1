@@ -164,7 +164,7 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         $cfg2.task_warning_threshold | Should -Be 7
     }
 
-    It 'Should verify tasks.json persists across mode switches' {
+    It 'Should verify tasks.json persists across mode switches' -Skip:(-not $IsWindows) {
         # Simulate main mode creating a task
         Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $args[0] } }
         Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
@@ -200,8 +200,9 @@ Describe 'Mode switching and config persistence (AG8-026)' {
     }
 }
 
-Describe 'Integration scenario - Full lifecycle (AG8-007)' {
+Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindows) {
     # AG8-007: Expanded integration tests covering actual integration scenarios
+    # Windows-only: Requires Task Scheduler cmdlets
 
     BeforeEach {
         # Setup for integration tests

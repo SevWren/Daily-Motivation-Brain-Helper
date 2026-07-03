@@ -2,6 +2,8 @@
 <#
 .SYNOPSIS
     Unit tests for input validation bugs (AG2-001 through AG2-025)
+.NOTES
+    Windows-only tests: Requires Windows Task Scheduler cmdlets
 #>
 
 BeforeAll {
@@ -14,13 +16,15 @@ BeforeAll {
     # Override ExePath
     $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    # Mock Windows Task Scheduler cmdlets
-    Mock Register-ScheduledTask { return $null }
-    Mock Unregister-ScheduledTask { }
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") { return @() }
-        return $null
+    # Mock Windows Task Scheduler cmdlets only on Windows
+    if ($IsWindows) {
+        Mock Register-ScheduledTask { return $null }
+        Mock Unregister-ScheduledTask { }
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
+        }
     }
 }
 
@@ -31,7 +35,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'AG2-001: Missing null check on $FolderPath before length comparison' {
+Describe 'AG2-001: Missing null check on $FolderPath before length comparison' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
@@ -66,7 +70,7 @@ Describe 'AG2-001: Missing null check on $FolderPath before length comparison' {
     }
 }
 
-Describe 'AG2-004: Unvalidated array index access on $FolderPath' {
+Describe 'AG2-004: Unvalidated array index access on $FolderPath' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }

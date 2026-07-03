@@ -4,10 +4,17 @@
     Unit tests for Sync-TaskStatuses in DailyMotivation.ps1.
     AG8-019: Sync-TaskStatuses had zero test coverage; this file provides coverage for
     the critical reconciliation paths including orphan recovery and stale-task cleanup.
-    NOTE: Uses mocked Task Scheduler cmdlets (Windows-only cmdlets).
+.NOTES
+    Windows-only tests: Uses mocked Task Scheduler cmdlets (Windows-only cmdlets).
 #>
 
 BeforeAll {
+    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
+    if (-not $IsWindows) {
+        Write-Host "Skipping SyncTaskStatuses.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
+        return
+    }
+
     . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
     $script:OriginalAppData = $env:APPDATA
@@ -27,7 +34,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'Sync-TaskStatuses' {
+Describe 'Sync-TaskStatuses' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
