@@ -1149,7 +1149,7 @@ function Invoke-FolderScheduling {
         Hashtable with Success, TaskId, IsDuplicate, IsNetworkPath keys.
     #>
     param(
-        [Parameter(Mandatory)][string]$FolderPath,
+        [AllowEmptyString()][Parameter(Mandatory)][string]$FolderPath,
         [Parameter(Mandatory)][datetime]$TriggerTime,
         [switch]$Force
     )

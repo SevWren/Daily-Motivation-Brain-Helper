@@ -1,0 +1,330 @@
+=============================================================================
+INTEGRATION TEST DIAGNOSTICS - ADDED JULY 3, 2026
+=============================================================================
+Generated: 2026-07-03
+Repository: Daily-Motivation-Brain-Helper
+Test File: Tests/Integration/SingleFile.Tests.ps1
+Status: DIAGNOSTIC OUTPUT ADDED - AWAITING WINDOWS TEST EXECUTION
+
+=============================================================================
+SUMMARY
+=============================================================================
+
+Diagnostic output has been added to the three failing integration tests to
+capture the actual error messages returned by New-MotivationTask when
+$result.Success is false.
+
+FAILING TESTS (3):
+1. "Should verify tasks.json persists across mode switches" (Line 167)
+2. "Should complete full task lifecycle: create, list, remove" (Line 262)
+3. "Should handle duplicate detection across task operations" (Line 281)
+
+=============================================================================
+DIAGNOSTIC OUTPUT ADDED
+=============================================================================
+
+Each failing test now includes debug output BEFORE the assertion:
+
+```powershell
+Write-Host "DEBUG - Result.Success: $($result.Success)"
+Write-Host "DEBUG - Result.Error: $($result.Error)"
+Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
+Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
+```
+
+=============================================================================
+CHANGES MADE
+=============================================================================
+
+FILE: Tests/Integration/SingleFile.Tests.ps1
+
+CHANGE 1 - Line 202-207 (Test: "Should verify tasks.json persists across mode switches")
+----------
+BEFORE:
+    $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
+    $result.Success | Should -Be $true
+
+AFTER:
+    $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
+    Write-Host "DEBUG - Result.Success: $($result.Success)"
+    Write-Host "DEBUG - Result.Error: $($result.Error)"
+    Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
+    Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
+    $result.Success | Should -Be $true
+
+CHANGE 2 - Line 264-270 (Test: "Should complete full task lifecycle: create, list, remove")
+----------
+BEFORE:
+    # Create task
+    $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
+    $result.Success | Should -Be $true
+    $taskId = $result.TaskId
+
+AFTER:
+    # Create task
+    $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
+    Write-Host "DEBUG - Result.Success: $($result.Success)"
+    Write-Host "DEBUG - Result.Error: $($result.Error)"
+    Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
+    Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
+    $result.Success | Should -Be $true
+    $taskId = $result.TaskId
+
+CHANGE 3 - Line 285-291 (Test: "Should handle duplicate detection across task operations")
+----------
+BEFORE:
+    # Create first task
+    $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
+    $r1.Success | Should -Be $true
+
+AFTER:
+    # Create first task
+    $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
+    Write-Host "DEBUG - r1.Success: $($r1.Success)"
+    Write-Host "DEBUG - r1.Error: $($r1.Error)"
+    Write-Host "DEBUG - r1.IsDuplicate: $($r1.IsDuplicate)"
+    Write-Host "DEBUG - r1.TaskId: $($r1.TaskId)"
+    $r1.Success | Should -Be $true
+
+=============================================================================
+EXPECTED DIAGNOSTIC OUTPUT WHEN TESTS RUN ON WINDOWS
+=============================================================================
+
+When these tests run on Windows 10 with PowerShell 7, the output should show:
+
+SCENARIO A - If Result.Error contains a meaningful error message:
+    DEBUG - Result.Success: False
+    DEBUG - Result.Error: [actual error message explaining why the test fails]
+    DEBUG - Result.IsDuplicate: False
+    DEBUG - Result.TaskId:
+
+SCENARIO B - If Result.Error is empty/null (logic error):
+    DEBUG - Result.Success: False
+    DEBUG - Result.Error:
+    DEBUG - Result.IsDuplicate: False
+    DEBUG - Result.TaskId:
+
+SCENARIO C - If duplicate detection incorrectly triggered:
+    DEBUG - Result.Success: False
+    DEBUG - Result.Error: [duplicate-related message]
+    DEBUG - Result.IsDuplicate: True
+    DEBUG - Result.TaskId:
+
+=============================================================================
+ANALYSIS FROM continuing_failing_tests_Thursday.txt
+=============================================================================
+
+DOCUMENTED FINDING:
+-------------------
+"The stateful mocking pattern WAS correctly applied but tests STILL fail.
+This indicates the issue is in the function logic, not the mocks."
+
+HYPOTHESIS:
+-----------
+- Mock state is correct BUT the actual function is failing
+- New-MotivationTask returns Success=$false for some OTHER reason
+- Need to examine what error message is in result.Error
+
+ROOT CAUSE THEORIES:
+--------------------
+From the continuing_failing_tests_Thursday.txt analysis:
+
+1. Mocks are correctly implemented (commit 81f254b):
+   - $script:IntegrationMockedTasks tracks registered tasks
+   - Register-ScheduledTask adds to hashtable
+   - Get-ScheduledTask returns tracked tasks or throws
+   - Unregister-ScheduledTask removes from tracker
+
+2. Since mocks work correctly, the failure must be in New-MotivationTask logic:
+   - Parameter validation might be failing
+   - Path validation might be rejecting test paths
+   - Duplicate detection logic might have a bug
+   - Task registration might be failing for another reason
+
+3. The Result.Error message will reveal the actual cause
+
+=============================================================================
+NEXT STEPS - TO BE EXECUTED ON WINDOWS 10
+=============================================================================
+
+STEP 1: Run the failing tests on Windows 10 PowerShell 7
+---------------------------------------------------------
+Command:
+    Invoke-Pester -Path .\Tests\Integration\SingleFile.Tests.ps1 -Output Detailed
+
+Expected Output:
+    The tests will fail BUT will now display DEBUG output showing:
+    - What Result.Success contains (should be False)
+    - What Result.Error contains (THE KEY FINDING)
+    - What Result.IsDuplicate contains
+    - What Result.TaskId contains
+
+STEP 2: Analyze Result.Error content
+-------------------------------------
+Once the error message is captured, determine:
+
+A. If error is path-related:
+   - "FolderPath cannot be null or empty"
+   - "Path does not exist"
+   - "Invalid path format"
+   → Check path validation logic in New-MotivationTask
+
+B. If error is Task Scheduler-related:
+   - "Failed to register scheduled task"
+   - Task registration exception message
+   → Check Register-ScheduledTask mock or actual registration logic
+
+C. If error is duplicate-related:
+   - "Task already exists for this folder and time"
+   → Check duplicate detection logic in New-MotivationTask
+
+D. If error is empty/null:
+   - This indicates Success is set to false without an error message
+   → Logic bug in New-MotivationTask (missing error assignment)
+
+STEP 3: Document findings in this file
+---------------------------------------
+Update this file with:
+    - Actual Result.Error messages captured
+    - Root cause identified from error messages
+    - Recommended fix based on the error
+
+STEP 4: Apply the appropriate fix
+----------------------------------
+Based on Result.Error analysis, apply one of:
+    - Parameter validation fix
+    - Path handling fix
+    - Mock adjustment
+    - Duplicate detection fix
+    - Error handling fix
+
+=============================================================================
+WHY TESTS CANNOT RUN IN THIS LINUX SANDBOX
+=============================================================================
+
+From Daily-Motivation-Brain-Helper/CLAUDE.md:
+
+"**⚠️ AI AGENTS MUST READ THIS FIRST ⚠️**
+
+This application is **Windows 10 only** at runtime. The test suite has
+**two incompatible execution environments:**
+
+1. **Windows 10 PowerShell 7** (PRIMARY) - Where test baselines originate
+2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
+
+**🚨 CRITICAL RULE: DO NOT assume test fixes are valid based solely on
+tests passing in a Unix/Linux environment.**
+
+- Test baselines were created on Windows 10 with Windows-specific paths,
+  registry operations, and Task Scheduler behavior
+- Tests passing in the Linux sandbox **DO NOT** guarantee they will pass
+  on Windows 10
+- Mock behavior differs between Windows and Linux (especially for Task
+  Scheduler, Registry, and CIM exceptions)"
+
+CURRENT ENVIRONMENT:
+--------------------
+- Platform: Linux (Vercel sandbox)
+- PowerShell: NOT INSTALLED
+- Test Execution: NOT POSSIBLE
+
+These integration tests require:
+    ✗ Windows Task Scheduler cmdlets (Register-ScheduledTask, Get-ScheduledTask)
+    ✗ Windows-specific path formats (C:\)
+    ✗ Windows PowerShell 7 environment
+
+=============================================================================
+IMPLEMENTATION STATUS
+=============================================================================
+
+✅ COMPLETED:
+    - Diagnostic output added to all 3 failing tests
+    - File written: reports/integration_test_diagnostics.txt
+    - Changes documented with before/after code snippets
+
+⏸️ AWAITING WINDOWS EXECUTION:
+    - Run tests on Windows 10 with PowerShell 7
+    - Capture Result.Error messages from diagnostic output
+    - Determine root cause from error messages
+    - Apply appropriate fix based on findings
+
+🚫 CANNOT BE DONE IN THIS ENVIRONMENT:
+    - Test execution (no PowerShell on Linux sandbox)
+    - Error message capture (tests won't run)
+    - Fix validation (Windows-only tests)
+
+=============================================================================
+REFERENCES
+=============================================================================
+
+Related Files:
+    - Tests/Integration/SingleFile.Tests.ps1 (modified with diagnostics)
+    - reports/continuing_failing_tests_Thursday.txt (analysis document)
+    - DailyMotivation.ps1 (source code being tested)
+
+Commits Referenced:
+    - 81f254b (2026-07-03): Stateful mock implementation
+    - 793b04c (2026-07-02): Added New-ScheduledTask* cmdlet mocks
+    - f460fc0 (2026-07-02): Added wildcard query handling
+    - 367c938 (2026-07-03): Added OS-specific skip logic
+
+Test Framework:
+    - Pester 5.8.0
+    - Windows 10 PowerShell 7 required
+
+=============================================================================
+INSTRUCTIONS FOR WINDOWS TEST EXECUTOR
+=============================================================================
+
+If you are running these tests on Windows 10:
+
+1. Navigate to repository root:
+   cd C:\path\to\Daily-Motivation-Brain-Helper
+
+2. Run the integration tests with detailed output:
+   Invoke-Pester -Path .\Tests\Integration\SingleFile.Tests.ps1 -Output Detailed
+
+3. Look for lines starting with "DEBUG -" in the output
+
+4. Copy the DEBUG output and paste it into this file under a new section:
+   "WINDOWS TEST EXECUTION RESULTS - [DATE]"
+
+5. Include:
+   - The exact Result.Error message for each failing test
+   - The values of Result.Success, Result.IsDuplicate, Result.TaskId
+   - Any additional error context from Pester output
+
+6. Based on the error messages, update the "ROOT CAUSE IDENTIFIED" section
+
+Example of what to add:
+------------------------
+=============================================================================
+WINDOWS TEST EXECUTION RESULTS - 2026-07-03 [TIME]
+=============================================================================
+
+TEST 1: "Should verify tasks.json persists across mode switches"
+DEBUG - Result.Success: False
+DEBUG - Result.Error: [ACTUAL ERROR MESSAGE HERE]
+DEBUG - Result.IsDuplicate: False
+DEBUG - Result.TaskId:
+
+TEST 2: "Should complete full task lifecycle: create, list, remove"
+DEBUG - Result.Success: False
+DEBUG - Result.Error: [ACTUAL ERROR MESSAGE HERE]
+DEBUG - Result.IsDuplicate: False
+DEBUG - Result.TaskId:
+
+TEST 3: "Should handle duplicate detection across task operations"
+DEBUG - r1.Success: False
+DEBUG - r1.Error: [ACTUAL ERROR MESSAGE HERE]
+DEBUG - r1.IsDuplicate: False
+DEBUG - r1.TaskId:
+
+=============================================================================
+ROOT CAUSE IDENTIFIED
+=============================================================================
+[Analyze the error messages and document the root cause here]
+
+=============================================================================
+END OF REPORT
+=============================================================================

@@ -33,7 +33,13 @@ BeforeAll {
     # Mock Windows Task Scheduler cmdlets
     Mock Register-ScheduledTask -Verifiable {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-        $script:SecurityMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
+        $script:SecurityMockedTasks[$TaskName] = [PSCustomObject]@{
+            TaskName = $TaskName
+            Principal = [PSCustomObject]@{
+                RunLevel = if ($Principal) { $Principal.RunLevel } else { 'Limited' }
+            }
+            Triggers = @($Trigger)
+        }
         return $null
     }
     Mock Unregister-ScheduledTask -Verifiable {
@@ -75,8 +81,10 @@ Describe 'AG10-001: Unquoted Service Path / Code Injection' -Skip:(-not $IsWindo
             $cmdKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation\command"
             if (Test-Path $cmdKey) {
                 $regValue = (Get-ItemProperty -Path $cmdKey).'(default)'
-                # Should properly escape embedded quotes
-                $regValue | Should -Not -Match '[^\\]"[^\\]'  # No unescaped quotes
+                # Verify path is properly quoted (outer quotes present)
+                $regValue | Should -Match '^".*\.exe" /setfolder "%1"$'
+                # Verify no command injection operators outside quotes
+                $regValue | Should -Not -Match '(?<!")(&|\||;)(?!")'
             }
         }
 
@@ -144,6 +152,11 @@ Describe 'AG10-003: No Path Validation Before Registry/Task Storage' -Skip:(-not
 }
 
 Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-not $IsWindows) {
+    BeforeEach {
+        # Reset mock state before each test
+        $script:SecurityMockedTasks = @{}
+    }
+
     Context 'When scheduling network path tasks' {
         It 'Should NOT use Highest RunLevel for network paths' {
             # RED: CRITICAL - Test fails because network paths get RunLevel=Highest

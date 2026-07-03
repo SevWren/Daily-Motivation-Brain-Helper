@@ -200,6 +200,10 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
         $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
+        Write-Host "DEBUG - Result.Success: $($result.Success)"
+        Write-Host "DEBUG - Result.Error: $($result.Error)"
+        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
+        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
 
         # Verify task persists
@@ -262,6 +266,10 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     It 'Should complete full task lifecycle: create, list, remove' {
         # Create task
         $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
+        Write-Host "DEBUG - Result.Success: $($result.Success)"
+        Write-Host "DEBUG - Result.Error: $($result.Error)"
+        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
+        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
         $taskId = $result.TaskId
 
@@ -283,6 +291,10 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
 
         # Create first task
         $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
+        Write-Host "DEBUG - r1.Success: $($r1.Success)"
+        Write-Host "DEBUG - r1.Error: $($r1.Error)"
+        Write-Host "DEBUG - r1.IsDuplicate: $($r1.IsDuplicate)"
+        Write-Host "DEBUG - r1.TaskId: $($r1.TaskId)"
         $r1.Success | Should -Be $true
 
         # Attempt duplicate

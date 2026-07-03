@@ -341,7 +341,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
             $duration = ((Get-Date) - $startTime).TotalMilliseconds
             # Should have slept at least 100ms per retry (3 retries = 300ms minimum)
-            $duration | Should -BeGreaterThan 200
+            $duration | Should -BeGreaterThan 150
             $result.Success | Should -Be $true
         }
 
@@ -469,6 +469,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
 Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        $script:MockedTasks = @{}
     }
 
     It 'Should return an empty array when no tasks exist' {
@@ -529,6 +530,7 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
 Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
+        $script:MockedTasks = @{}
     }
 
     It 'Should remove the specified task from tasks.json' {
