@@ -27,6 +27,7 @@ Output/
 # Temporary files
 *.tmp
 ~$*
+handoff.md
 docs/archive/
 docs/artifacts/
 test_output.txt
@@ -41,6 +42,6 @@ tree.txt
 debug/
 maton_ai_prompt.txt
 architecture-report*forensic bug Investigations_prompt.txt
-
 architecture-report.html
 forensic bug Investigations_prompt.txt
+*.bak
