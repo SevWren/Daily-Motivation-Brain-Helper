@@ -22,3 +22,7 @@ Do **not** file public issues for vulnerabilities. See [SECURITY.md](SECURITY.md
 ## Scope
 
 This is a small open-source Windows utility. Support is best-effort from maintainers and community contributors. There is no commercial SLA.
+
+---
+
+_Last updated: 2026-07-23_

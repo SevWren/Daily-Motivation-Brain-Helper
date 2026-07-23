@@ -402,3 +402,7 @@ _Avoid_: Test script, Run script
 - **"FolderPath in PopupConfig"** — The JSON key for the folder path in
   `popup_config.json` is `explorer_path`, not `folder_path` or `FolderPath`.
   Reading `$config.FolderPath` or `$config.folder_path` returns `$null`.
+
+---
+
+_Last updated: 2026-07-23_

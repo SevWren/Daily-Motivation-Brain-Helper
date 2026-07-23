@@ -77,3 +77,7 @@ See [docs/testing/strategy.md](docs/testing/strategy.md).
 ## License
 
 By contributing, you agree that your contributions are licensed under the same MIT License as the project.
+
+---
+
+_Last updated: 2026-07-23_

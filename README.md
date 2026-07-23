@@ -113,6 +113,17 @@ Tests dot-source the script with `-NoRun` — no compiled exe required.
 
 ---
 
+## Documentation
+
+| Audience | Location |
+|----------|----------|
+| **Users** | [manual/](manual/README.md) — getting started, guides, troubleshooting, reference |
+| **Developers / contributors** | [docs/](docs/README.md) — architecture, development, testing, security, reference |
+| **Security reports** | [SECURITY.md](SECURITY.md) |
+| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE)

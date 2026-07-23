@@ -45,3 +45,7 @@ Out of scope examples:
 ## Security design notes
 
 See [docs/security/overview.md](docs/security/overview.md) for the threat model and controls (AppData ACLs, path validation, outcome-log path hashing, context-menu exe guards, popup mutex isolation).
+
+---
+
+_Last updated: 2026-07-23_
