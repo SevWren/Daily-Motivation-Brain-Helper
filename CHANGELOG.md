@@ -10,14 +10,26 @@ numbers are published (current build metadata: `2.0.0.0` via `build.ps1` / ps2ex
 
 ### Added
 
-- Full documentation set: `docs/`, `manual/`, `SECURITY.md`, `CONTRIBUTING.md`, community GitHub templates
+- `manual/` user documentation tree: getting-started, guides, troubleshooting, reference
+- `docs/archive/` and `docs/reports/` indexes linking historical agent reports and diagnostics
+- `docs/reference/functions.md` public function inventory for all 32 script functions
+- `docs/plans/`, `docs/reviews/`, `docs/ideas/` stub directories completing the `docs/` tree
+- `AGENTS.md` minimal agent orientation redirecting to `CLAUDE.md`
+- Documentation section in `README.md` linking `docs/` and `manual/`
+
+## [2.0.0-docs] - 2026-07-22
+
+### Added
+
+- Full governance documentation: `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SUPPORT.md`
+- Developer docs tree: `docs/architecture/`, `docs/development/`, `docs/testing/`, `docs/security/`, `docs/reference/`
+- Architecture decision records: `adr-001-single-file-exe.md`, `adr-002-popup-handoff.md`, `adr-003-platform-adapter.md`
+- Architecture overview with Mermaid mode-flow, handoff-sequence, task-lifecycle, and popup-outcome diagrams
+- GitHub community files: issue templates (bug, feature), PR template, `CODEOWNERS`, `dependabot.yml`
+- `.editorconfig` and `.gitattributes`
 - Domain glossary refresh in `CONTEXT.md` (Open Folder label, hashed outcome log, full task statuses, mutex naming)
 
-### Changed
-
-- Documentation structure aligned to developer (`docs/`) and user (`manual/`) roots
-
-## [2.0.0] - 2026-06 / 2026-07
+## [2.0.0] - 2026-07
 
 Project restart on PowerShell 7 with single-file architecture.
 
@@ -55,5 +67,6 @@ Project restart on PowerShell 7 with single-file architecture.
 Earlier multi-file / pre-restart iterations lived outside the current single-file layout.
 Historical agent completion reports are preserved under [docs/archive/](docs/archive/README.md).
 
-[Unreleased]: https://github.com/SevWren/Daily-Motivation-Brain-Helper/compare/HEAD
-[2.0.0]: https://github.com/SevWren/Daily-Motivation-Brain-Helper
+[Unreleased]: https://github.com/SevWren/Daily-Motivation-Brain-Helper/compare/v2.0.0...HEAD
+[2.0.0-docs]: https://github.com/SevWren/Daily-Motivation-Brain-Helper/compare/v2.0.0...v2.0.0-docs
+[2.0.0]: https://github.com/SevWren/Daily-Motivation-Brain-Helper/releases/tag/v2.0.0

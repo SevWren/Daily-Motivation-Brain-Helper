@@ -6,7 +6,7 @@
 
 This application targets **Windows 10/11** at runtime (WPF, Task Scheduler, registry, Explorer). The test suite has **two incompatible execution environments:**
 
-1. **Windows 10 PowerShell 7** (PRIMARY) - Where test baselines originate
+1. **Windows 10/11 PowerShell 7** (PRIMARY) - Where test baselines originate
 2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
 
 ### Test Validation Rules for AI Agents
@@ -22,7 +22,7 @@ This application targets **Windows 10/11** at runtime (WPF, Task Scheduler, regi
 
 Before declaring any test fix "successful":
 
-1. ✅ **MUST** verify tests pass on **Windows 10 PowerShell 7** (the target platform)
+1. ✅ **MUST** verify tests pass on **Windows 10/11 PowerShell 7** (the target platform)
 2. ✅ **MUST** review Windows-specific test log output (not Linux sandbox output)
 3. ✅ **MUST** understand the difference between:
    - Platform tests (HeadlessPlatform injection) - run on Linux
@@ -32,7 +32,7 @@ Before declaring any test fix "successful":
 
 ### Windows-Specific Test Dependencies
 
-These tests **REQUIRE** Windows 10 to validate correctly:
+These tests **REQUIRE** Windows 10/11 to validate correctly:
 
 - `TaskScheduler.Tests.ps1` - Mocks Windows Task Scheduler cmdlets (`Register-ScheduledTask`, `Get-ScheduledTask`)
 - `ContextMenu.Tests.ps1` - Uses Windows registry (`HKCU:\` provider)
@@ -47,7 +47,7 @@ These tests CAN run on Linux with HeadlessPlatform:
 - `PlatformAdapter.Tests.ps1`
 - `FolderScheduling.Tests.ps1`
 
-**Bottom Line:** If you're working in a Linux sandbox, your test results **do not represent Windows 10 behavior**. Always request Windows test logs before declaring fixes complete.
+**Bottom Line:** If you're working in a Linux sandbox, your test results **do not represent Windows 10/11 behavior**. Always request Windows test logs before declaring fixes complete.
 
 ---
 
@@ -115,7 +115,9 @@ Tests dot-source the script with `-NoRun` — no exe required to run tests.
 
 ### Linux/Unix Test Environment Setup
 
-When running tests on Linux/Unix (including CI environments), PowerShell 7 must be installed. The following automated setup is required:
+> **Scope: Platform-abstraction tests only.** This covers `*.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, and `FolderScheduling.Tests.ps1`. It does **not** substitute for Windows 10/11 PowerShell 7 validation of Task Scheduler, registry, and CIM-dependent tests. See the critical warning above and [ADR-003](docs/architecture/adr-003-platform-adapter.md).
+
+When running the platform-abstraction subset on Linux/Unix, PowerShell 7 must be installed. The following setup covers that path only:
 
 ```bash
 # Detect OS and install PowerShell 7 if on Linux/Unix
@@ -141,7 +143,7 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 ```
 
-**Note:** The test suite is designed to run on Linux through platform abstraction. The app itself remains Windows 10 only (WPF, Task Scheduler, registry, Explorer context menu all require Windows).
+**Note:** The platform-abstraction test subset runs on Linux. The full test suite and the app itself require Windows 10/11 (WPF, Task Scheduler, registry, Explorer context menu all require Windows).
 
 ## Key Design Constraints
 

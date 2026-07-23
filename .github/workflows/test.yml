@@ -11,7 +11,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: windows-latest
-    timeout-minutes: 30  # AG16-017: Prevent hanging workflows
+    timeout-minutes: 30  # Timeout prevents hung runners from blocking the queue
 
     steps:
       - name: Checkout code
@@ -21,7 +21,7 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          # AG16-005: Pin exact Pester version to prevent breaking changes
+          # Pinned version prevents unexpected breakage from PSGallery minor updates
           Install-Module -Name Pester -RequiredVersion 5.6.1 -Force -SkipPublisherCheck
 
       - name: Show environment
@@ -70,7 +70,7 @@ jobs:
   analyze:
     name: Static Analysis
     runs-on: windows-latest
-    timeout-minutes: 10  # AG16-017: Prevent hanging workflows
+    timeout-minutes: 10  # Timeout prevents hung runners from blocking the queue
 
     steps:
       - name: Checkout code
@@ -80,13 +80,13 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          # AG16-006: Pin PSScriptAnalyzer version to prevent unexpected rule changes
+          # Pinned version prevents unexpected rule changes from PSGallery updates
           Install-Module -Name PSScriptAnalyzer -RequiredVersion 1.22.0 -Force
 
       - name: Run PSScriptAnalyzer
         shell: powershell
         run: |
-          # AG16-009: Fail workflow if PSScriptAnalyzer finds violations
+          # Fail fast on any analyzer violation — do not suppress warnings
           $results = Invoke-ScriptAnalyzer -Path DailyMotivation.ps1 `
             -Settings .PSScriptAnalyzerSettings.psd1 `
             -Severity Warning,Error
@@ -123,9 +123,9 @@ jobs:
   build:
     name: Build EXE
     runs-on: windows-latest
-    # AG16-010: Require both test AND analyze jobs before build
+    # Build only when tests and static analysis both pass
     needs: [test, analyze]
-    timeout-minutes: 15  # AG16-017: Prevent hanging workflows
+    timeout-minutes: 15  # Timeout prevents hung runners from blocking the queue
 
     steps:
       - name: Checkout code
@@ -135,9 +135,9 @@ jobs:
         shell: powershell
         run: |
           Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-          # AG16-007: Pin ps2exe version to prevent build failures
+          # Pinned version prevents build failures from ps2exe API changes
           Install-Module -Name ps2exe -RequiredVersion 1.0.14 -Force
-          # AG16-022: Validate ps2exe installation
+          # Verify module install succeeded before attempting build
           if (-not (Get-Module -Name ps2exe -ListAvailable)) {
             throw "ps2exe installation failed"
           }
@@ -147,7 +147,7 @@ jobs:
         run: |
           .\build.ps1
 
-      # AG16-011: Smoke test to validate exe before artifact upload
+      # Validate exe size before upload — corrupted builds are silently small
       - name: Validate executable (smoke test)
         shell: powershell
         run: |
