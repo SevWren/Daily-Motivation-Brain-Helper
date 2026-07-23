@@ -28,7 +28,6 @@ Output/
 *.tmp
 ~$*
 handoff.md
-docs/archive/
 docs/artifacts/
 test_output.txt
 docs/Reports/COMMIT-4ba633a-AUDIT-MASTER-REPORT.md
