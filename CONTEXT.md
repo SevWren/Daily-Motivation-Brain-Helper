@@ -118,8 +118,12 @@ Creating a MotivationTask despite a Duplicate being detected. Enabled by passing
 _Avoid_: Override, Bypass duplicate check
 
 **Status**:
-The lifecycle state of a MotivationTask. Values: `PENDING` (created, not yet
-triggered) and `DELETED` (OS Task was removed or not found at refresh time).
+The lifecycle state of a MotivationTask. Canonical values in
+`$script:ValidTaskStatuses`: `PENDING` (created, not yet triggered), `DELETED`
+(OS Task was removed or not found at refresh time), `COMPLETED` (terminal success
+annotation), and `FAILED` (terminal failure annotation). Values outside this set
+are normalized to `UNKNOWN` when tasks are loaded. Duplicate detection only
+considers `PENDING` tasks.
 _Avoid_: State, Phase, Flag
 
 **Network Path**:
@@ -134,7 +138,7 @@ _Avoid_: Remote path, UNC path (UNC is a sub-type, not a synonym)
 
 **Popup**:
 The notification window shown in popup mode. Contains a Message, the FolderName,
-a Countdown timer, and three action buttons: Let's Go, Snooze, Dismiss.
+a Countdown timer, and three action buttons: Open Folder, Snooze, Dismiss.
 _Avoid_: Notification, Alert, Toast, Window (too generic)
 
 **Message**:
@@ -149,13 +153,15 @@ _Avoid_: Icon, Badge, Emoji, Symbol
 
 **Countdown**:
 A 20-second auto-open timer shown in the Popup. When it reaches zero, the App
-behaves as if the user clicked Let's Go.
+behaves as if the user clicked Open Folder.
 _Avoid_: Auto-open timer, Timer, Clock
 
-**Let's Go**:
-The primary Popup action. Opens Explorer at the FolderPath, writes `Opened` to
-the Outcome Log, and closes the Popup.
-_Avoid_: Open, Confirm, Go button, Launch
+**Open Folder** (primary Popup action):
+The primary Popup action. UI label is `Open Folder →` on button `LetsGoBtn`.
+Opens Explorer at the FolderPath, writes `Opened` to the Outcome Log, and closes
+the Popup. Historical domain name "Let's Go" refers to the same action — prefer
+**Open Folder** in new writing to match the UI.
+_Avoid_: Let's Go (legacy term), Confirm, Go button, Launch
 
 **Snooze**:
 Defers the Popup by N minutes (5, 15, 30, or 60). Increments the SnoozeCount.
@@ -195,8 +201,10 @@ _Avoid_: Folder not found, Missing folder, Invalid path
 **PopupConfig**:
 The JSON file (`popup_config.json`) written by main mode or setfolder mode and
 read exclusively by popup mode. It is the sole data channel between modes.
-Stores: Glyph, Title, Body, ExplorerPath (JSON key: `explorer_path`),
-FolderName (JSON key: `folder_name`), TaskId (JSON key: `task_id`).
+Primary keys: `glyph`, `title`, `body`, `explorer_path` (folder path),
+`folder_name`, `task_id`. `Set-PopupConfig` also writes compatibility aliases
+`folder_path` (same as `explorer_path`) and `message_glyph` / `message_title` /
+`message_body` (same as glyph/title/body). Prefer `explorer_path` when reading.
 _Avoid_: Popup settings, Shared state, Config (ambiguous — see AppConfig)
 
 **Handoff**:
@@ -215,8 +223,11 @@ here. Resolved at call time by `Initialize-AppData` to support test redirects.
 _Avoid_: App folder, Data directory, Config directory
 
 **Outcome Log**:
-The file `popup_log.txt` in AppData Dir. Pipe-delimited records: timestamp,
-TaskId, FolderName, FolderPath, Outcome, SnoozeCount. Append-only.
+The file `popup_log.txt` in AppData Dir. Pipe-delimited records:
+`[timestamp] | TaskId | FolderName | HASH:{sha256} | Outcome | SnoozeCount`.
+The folder path is **not** stored in plaintext — only a SHA-256 hex digest
+prefixed with `HASH:` (or `HASH:NO_PATH` when empty). Append-only, with rotation
+when the file exceeds 1MB (archives older than 30 days are deleted).
 _Avoid_: Log file, History, Activity log
 
 ---
@@ -231,8 +242,12 @@ setfolder mode. Registered on every successful Schedule via `Register-ContextMen
 _Avoid_: Right-click option, Shell extension, Registry entry
 
 **Mutex**:
-`Global\DailyMotivationBrainHelperPopup` — a named Windows mutex that ensures
-only one Popup is visible at a time.
+Two named Windows mutexes are used:
+- **Popup mutex** — `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`
+  ensures only one Popup is visible per user session (user/session isolation
+  prevents cross-user DoS). Exposed at runtime as `$script:PopupMutexName`.
+- **Config lock** — `Global\DailyMotivationPopupConfigLock` serializes writes to
+  `popup_config.json` in `Set-PopupConfig`.
 _Avoid_: Lock, Guard, Semaphore
 
 **Undo**:
@@ -340,13 +355,13 @@ _Avoid_: Test script, Run script
 > **Domain expert:** "It's a **Duplicate** — blocked by default. The UI shows a confirmation dialog. If the user says yes, we **Force Schedule**, which creates a second **MotivationTask** with a different **TaskId** for the same folder and date."
 
 > **Dev:** "When the popup fires and the folder is gone, what state are we in?"
-> **Domain expert:** "**Path Missing**. The Popup shows the path-missing panel instead of the normal **Message** + **Let's Go** flow. If the user closes without re-picking, the **Outcome** written to the log is `PathMissing`."
+> **Domain expert:** "**Path Missing**. The Popup shows the path-missing panel instead of the normal **Message** + **Open Folder** flow. If the user closes without re-picking, the **Outcome** written to the log is `PathMissing`."
 
 > **Dev:** "How does the popup know which folder to open if main mode already closed?"
 > **Domain expert:** "That's the **Handoff**. main mode (or setfolder mode) writes the **PopupConfig** at **Schedule** time. popup mode reads it at **TriggerTime**. The two modes never run concurrently — the **Handoff** is the only bridge."
 
-> **Dev:** "Should I delete the MotivationTask when the user clicks Let's Go?"
-> **Domain expert:** "No. **Let's Go** writes `Opened` to the **Outcome Log** and closes the **Popup**. The **MotivationTask** record stays in `tasks.json` — it's history. The **OS Task** in Task Scheduler is a one-shot trigger; it's gone after firing."
+> **Dev:** "Should I delete the MotivationTask when the user clicks Open Folder?"
+> **Domain expert:** "No. **Open Folder** writes `Opened` to the **Outcome Log** and closes the **Popup**. The **MotivationTask** record stays in `tasks.json` — it's history. The **OS Task** in Task Scheduler is a one-shot trigger; it's gone after firing."
 
 > **Dev:** "How do I wire up the right-click to set a folder?"
 > **Domain expert:** "Register the **Context Menu Verb**. That calls the **App** in **setfolder mode** with the folder path. setfolder mode creates a new **MotivationTask** for tomorrow at the default trigger hour, writes the **PopupConfig**, shows a confirmation MessageBox, then exits."

@@ -1,0 +1,10 @@
+# Default owner for the repository
+* @SevWren
+
+# Core application and build
+/DailyMotivation.ps1 @SevWren
+/build.ps1 @SevWren
+/Invoke-Tests.ps1 @SevWren
+
+# CI
+/.github/ @SevWren

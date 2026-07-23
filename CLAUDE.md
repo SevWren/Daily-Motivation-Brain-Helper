@@ -4,7 +4,7 @@
 
 **⚠️ AI AGENTS MUST READ THIS FIRST ⚠️**
 
-This application is **Windows 10 only** at runtime. The test suite has **two incompatible execution environments:**
+This application targets **Windows 10/11** at runtime (WPF, Task Scheduler, registry, Explorer). The test suite has **two incompatible execution environments:**
 
 1. **Windows 10 PowerShell 7** (PRIMARY) - Where test baselines originate
 2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
@@ -74,16 +74,18 @@ The compiled exe is fully self-contained. No `src/`, no companion files, no setu
 | Section | Contents |
 |---------|----------|
 | 1 | `param($Mode, $FolderPath, [switch]$NoRun)` |
-| 2 | Assembly loading (WPF + WinForms); exits only if `-not $NoRun` on failure |
-| 3 | Config functions: `Initialize-AppData`, `Get-Config`, `Save-Config`, `Get/Set-PopupConfig`, `Write-OutcomeLog`, `Show-ErrorDialog` |
-| 4 | Task Scheduler: `Get/Save-TasksJson`, `New-MotivationTask`, `Get-MotivationTasks`, `Remove-MotivationTask` |
+| 2 | Platform detection, assembly loading (`Initialize-WindowsAssemblies`) |
+| 2.5 | Platform abstraction (`$script:Platform` / HeadlessPlatform for tests) |
+| 3 | Config: `Initialize-AppData`, `Get/Save-Config`, `Get/Set-PopupConfig`, `Write-OutcomeLog`, `Get-SafeErrorMessage`, `Show-ErrorDialog`, `Show-InfoDialog` |
+| 4 | Tasks: `Get/Save-TasksJson`, `New-MotivationTask`, `Sync-TaskStatuses`, `Get/Remove-MotivationTask` |
+| 4.5–5 | UI helpers + scheduling: `Invoke-FolderScheduling`, undo timers, history UI |
 | 5 | Context menu: `Register-ContextMenu`, `Unregister-ContextMenu` (HKCU, no admin) |
-| 6 | Main window XAML (`[xml]$MainXaml`) |
-| 7 | `function Show-MainWindow { }` |
-| 8 | Popup window XAML (`[xml]$PopupXaml`) |
-| 9 | `function Show-PopupWindow { }` |
-| 10 | `$Messages = @(...)` + `function Get-RandomMessage { }` |
+| 6–7 | Main window XAML + `Show-MainWindow` |
+| 8–9 | Popup XAML + `Show-PopupWindow` (per-user/session popup mutex) |
+| 10 | Text helpers + `$Messages` + `Get-RandomMessage` |
 | 11 | Entry point: `if (-not $NoRun) { Initialize-AppData; switch($Mode) { ... } }` |
+
+Full function list and config schemas: [docs/reference/](docs/reference/README.md). Domain language: [CONTEXT.md](CONTEXT.md).
 
 ## Config Files (all in `%APPDATA%\DailyMotivationBrainHelper\`)
 
@@ -147,11 +149,12 @@ fi
 - **Compiled exe target**: .NET Framework 4.x (ps2exe limitation - WPF/Task Scheduler require .NET Framework)
 - **Source code compatibility**: Must work when compiled to .NET Framework 4.x (avoid PowerShell 7-only features in runtime code paths)
 - STA thread model required for WPF (`-STA` baked in by ps2exe)
-- Named mutex `Global\DailyMotivationBrainHelperPopup` enforces single popup
+- Popup mutex `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}` enforces one popup per user session; config writes use `Global\DailyMotivationPopupConfigLock`
 - Task Scheduler action calls `$script:ExePath /popup` (captured at runtime via `$MyInvocation.MyCommand.Path`)
 - Tests override `$script:ExePath` before calling `New-MotivationTask`
-- FIX-001: `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time (enables test redirects)
-- FIX-003: `Get-TasksJson` wraps result in `@()` for consistent array handling
+- `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time (enables test redirects)
+- `Get-TasksJson` wraps result in `@()` for consistent array handling; valid statuses: PENDING, DELETED, COMPLETED, FAILED
+- Outcome log stores SHA-256 path hashes, not plaintext paths
 
 ## Code Quality Rules
 
@@ -161,6 +164,17 @@ fi
 ### Comment Hygiene
 Remove bloat comments that reference bug IDs (e.g., `# AG19-003:`, `# AG7-004:`). Keep only comments that explain **why** code exists or **what** non-obvious behavior is expected. Bug tracking belongs in commit history and bug reports, not inline comments.
 
-## Requirements Reference
+## Documentation map
 
-See `DailyMotivationBrainHelper_TechnicalReflection_2026-06-12_v2_1_CORRECTED.md` (kept outside repo) for the full requirements, NFRs, success criteria, and phased roadmap.
+| Doc | Purpose |
+|-----|---------|
+| [README.md](README.md) | Product overview |
+| [CONTEXT.md](CONTEXT.md) | Domain language (authoritative terminology) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [docs/](docs/README.md) | Developer documentation |
+| [manual/](manual/README.md) | End-user documentation |
+| [SECURITY.md](SECURITY.md) | Vulnerability reporting |
+
+External requirements / NFR source of truth (if present outside the repo):
+`DailyMotivationBrainHelper_TechnicalReflection_2026-06-12_v2_1_CORRECTED.md`.
+In-repo architecture notes live under [docs/architecture/](docs/architecture/README.md).

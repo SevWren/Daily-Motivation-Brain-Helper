@@ -1,0 +1,18 @@
+# Normalize text files
+* text=auto eol=lf
+
+# PowerShell sources
+*.ps1 text eol=lf
+*.psm1 text eol=lf
+*.psd1 text eol=lf
+
+# Keep Windows scripts usable when checked out on Windows
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Binary
+*.exe binary
+*.dll binary
+*.png binary
+*.jpg binary
+*.zip binary
