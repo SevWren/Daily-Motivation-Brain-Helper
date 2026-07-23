@@ -112,6 +112,48 @@ Describe 'Initialize-AppData' {
             $cfg.default_trigger_hour | Should -Be 9
         }
     }
+
+    Context 'When AppData directory creation fails (TEMP fallback)' {
+        BeforeEach {
+            $script:OriginalAppDataForFallback = $env:APPDATA
+            # Point APPDATA at a path under an existing read-only system dir that can never be created
+            $env:APPDATA = Join-Path $env:SystemRoot 'System32\drivers\etc\ImpossibleSubdir'
+            # Ensure TempDir is set (dot-sourced with -NoRun doesn't execute Section 11 initializer)
+            if (-not $script:TempDir) {
+                $script:TempDir = [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+            }
+        }
+
+        AfterEach {
+            $env:APPDATA = $script:OriginalAppDataForFallback
+            $fallback = Join-Path $script:TempDir 'DailyMotivationBrainHelper'
+            if (Test-Path $fallback) {
+                Remove-Item -Path $fallback -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        It 'Should set AppDataDir to a path under TempDir when APPDATA creation fails' -Skip:(-not $IsWindows) {
+            Initialize-AppData
+            $expectedBase = Join-Path $script:TempDir 'DailyMotivationBrainHelper'
+            $script:AppDataDir | Should -Be $expectedBase
+        }
+
+        It 'Should set all path vars under the fallback dir when APPDATA creation fails' -Skip:(-not $IsWindows) {
+            Initialize-AppData
+            $expectedBase = Join-Path $script:TempDir 'DailyMotivationBrainHelper'
+            $script:ConfigPath   | Should -BeLike "$expectedBase*"
+            $script:PopupCfgPath | Should -BeLike "$expectedBase*"
+            $script:TasksPath    | Should -BeLike "$expectedBase*"
+            $script:LogPath      | Should -BeLike "$expectedBase*"
+        }
+
+        It 'Should create config files under the fallback dir when APPDATA creation fails' -Skip:(-not $IsWindows) {
+            Initialize-AppData
+            Test-Path $script:ConfigPath   | Should -Be $true
+            Test-Path $script:PopupCfgPath | Should -Be $true
+            Test-Path $script:TasksPath    | Should -Be $true
+        }
+    }
 }
 
 Describe 'Get-Config and Save-Config' {

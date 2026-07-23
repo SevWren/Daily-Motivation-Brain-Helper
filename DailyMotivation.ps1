@@ -2446,11 +2446,13 @@ function Show-PopupWindow {
         $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
         $window = [Windows.Markup.XamlReader]::Load($reader)
         if ($null -eq $window) {
+            Write-Warning "Show-PopupWindow: XamlReader returned null — popup window could not be created."
             if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
             return
         }
     }
     catch {
+        Write-Warning "Show-PopupWindow: Failed to load popup XAML — $_"
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
@@ -3007,7 +3009,14 @@ if (-not $NoRun) {
         $script:ExePath = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     }
 
-    Initialize-AppData
+    try {
+        Initialize-AppData
+    }
+    catch {
+        Show-ErrorDialog -Message "Failed to initialize application data: $($_.Exception.Message)" `
+                         -Title "Startup Error"
+        exit 1
+    }
 
     switch ($Mode) {
         "/popup" {
