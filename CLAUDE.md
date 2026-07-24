@@ -51,6 +51,241 @@ These tests CAN run on Linux with HeadlessPlatform:
 
 ---
 
+## MANDATE: Schedule Failed / "Access is denied" Bug — Correct and Incorrect Fix Patterns
+
+> **This section is binding on all agents and contributors.**
+> The "Schedule Failed / Access is denied" dialog has been attempted to be fixed 13+ times across
+> 6 waves of development (2026-06-25 → 2026-07-23) and has recurred every time. The patterns below
+> are grounded in the full commit and issue history of this repository.
+> **Any agent or contributor ignoring this section risks re-introducing the bug.**
+
+### The Bug
+
+```
+Schedule Failed
+
+Could not schedule '[PATH]'
+
+Access is denied.
+```
+
+This dialog appears in `setfolder` mode (Explorer context-menu verb) and `main` mode (Schedule Reminder button).
+The folder is accessible to the user. The failure originates inside `Register-ScheduledTask`, not filesystem ACL
+validation. A secondary symptom — `Window.Dispose()` error after closing the app — is caused by calling
+`.Dispose()` on a WPF `System.Windows.Window`, which does not implement `IDisposable`.
+
+---
+
+### WRONG APPROACHES — Do Not Repeat These
+
+These approaches have all been tried. Each one either did not fix the bug or introduced a new regression.
+
+#### WRONG 1: Declaring the fix verified based on Linux CI / mocked tests alone
+
+All Pester tests run on Linux. `Register-ScheduledTask`, `New-ScheduledTaskPrincipal`, and `Get-ScheduledTask`
+are fully mocked — the real Windows Task Scheduler COM object is **never invoked** in any CI test.
+Tests passing in the Linux sandbox say nothing about whether `Register-ScheduledTask` will succeed on
+Windows 10. Issue #10 was closed on 2026-07-23 based on code review; the bug was still present the next day.
+
+**Rule:** Do not close or declare resolved any bug involving `Register-ScheduledTask`, task principal
+configuration, or context-menu invocation without a live test on a real Windows 10/11 machine.
+
+#### WRONG 2: Calling `.Dispose()` on a WPF `System.Windows.Window`
+
+`System.Windows.Window` does not implement `System.IDisposable`. Calling `.Dispose()` on it throws:
+```
+Method invocation failed because [System.Windows.Window] does not contain a method named 'Dispose'.
+```
+This was HOTFIXed in commit `26b7679c` (2026-07-01) for `Show-MainWindow`, then independently
+re-introduced in commit `8f4d736d` (2026-06-30) for `Show-PopupWindow`.
+
+**Rule:** Never call `.Dispose()` on `System.Windows.Window`. Use `.Close()` instead.
+For `DispatcherTimer`, `Mutex`, and `FolderBrowserDialog` — verify the object implements `IDisposable`
+before calling `.Dispose()`. `DriveInfo` is a value type and is not `IDisposable`.
+
+#### WRONG 3: Removing `$script:*` variables during cleanup without checking all call sites
+
+Commit `adbd395f` (2026-07-02) removed `$script:ConfigDefaults` as part of a forensic bloat-removal
+pass. That object is the fallback used in 3 places when config reads fail. Without it, scheduling
+attempts hit a null-reference path that propagated through the Windows API chain and surfaced as
+"Access is denied". This was fixed same-day in commit `97d3a650`, but only after the regression shipped.
+
+**Rule:** Before removing any `$script:*` module-level variable, grep the entire file for every
+reference. A variable with zero obvious callers in the happy path may still be a required fallback.
+
+#### WRONG 4: Sanitizing all error messages to `[PATH]` without preserving the operation name
+
+Commit `370d9228` (2026-07-01) replaced all folder paths in error messages with `[PATH]` for security.
+This makes the user-visible dialog ambiguous — "Access is denied" can come from folder validation,
+`Register-ScheduledTask`, a wrong exe path in the task action, or the Task Scheduler service being
+stopped. With `[PATH]` replacing the path, the dialog gives no indication of which operation failed.
+
+**Rule:** Error messages must always include the name of the failing operation. The path may be
+sanitized to `[PATH]`, but the error must identify what failed (e.g., "OS task registration failed").
+Always propagate the Windows error code alongside the sanitized message where possible.
+
+#### WRONG 5: Using a narrow `catch` pattern that misses real Windows Task Scheduler error strings
+
+The catch block for `Register-ScheduledTask` must not match only `'Access Denied|not have permission'`.
+Real Windows Task Scheduler errors that pattern misses:
+
+| Windows condition | Typical error string | Matched by current pattern? |
+|-------------------|---------------------|-----------------------------|
+| Standard access denied | "Access is denied." | Yes |
+| Elevation required | "The requested operation requires elevation." | No |
+| S4U logon failure | "A specified logon session does not exist." | No |
+| Service unavailable | "The Task Scheduler service is not available." | No |
+| File not found (bad exe path) | "The system cannot find the file specified." | No |
+
+**Rule:** The catch block must cover the full range of Windows Task Scheduler failure modes,
+or catch all terminating exceptions and inspect `$_.Exception.HResult` for known codes.
+
+#### WRONG 6: Changing task principal configuration without a live Windows test
+
+The `LogonType` was changed `Interactive → S4U` in commit `57df3f6c` (2026-06-30) and `RunLevel`
+was changed `Highest → Limited` in commit `98a5d300` (2026-06-30). `S4U` can fail on Windows 10
+with "Deny log on as a batch job" Group Policy or on Windows 10 Home. Neither change was validated
+on a real Windows 10 machine before shipping.
+
+**Rule:** Any change to `New-ScheduledTaskPrincipal` parameters (`UserId`, `LogonType`, `RunLevel`)
+requires a live Windows 10/11 manual test or a `-Skip:(-not $IsWindows)` integration test that
+exercises the real `Register-ScheduledTask` cmdlet with no mocking.
+
+---
+
+### CORRECT APPROACH — Follow This Pattern
+
+#### CORRECT 1: Task principal configuration (current — do not change without live testing)
+
+```powershell
+New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+```
+
+- `RunLevel Limited` (not `Highest`) is correct — `Highest` requires UAC elevation and causes
+  "Access is denied" for standard users.
+- `S4U` is the intended logon type for per-user tasks that run without an active session.
+- Do not change either of these values without a live Windows 10 test confirming the alternative works.
+
+#### CORRECT 2: ExePath resolution for ps2exe compiled executables
+
+ps2exe may leave `$MyInvocation.MyCommand.Path` empty at runtime. The correct resolution order is:
+
+```powershell
+$script:ExePath = if ($MyInvocation.MyCommand.Path -and $MyInvocation.MyCommand.Path -ne '') {
+    $MyInvocation.MyCommand.Path
+} else {
+    [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+}
+```
+
+Always guard `Register-ContextMenu` to reject `.ps1` paths — the context-menu verb must point to
+the compiled `.exe`, not the source script. This guard is in place; do not remove it.
+
+#### CORRECT 3: WPF window and resource cleanup
+
+```powershell
+# CORRECT: close the window
+$window.Close()
+
+# CORRECT: dispose only objects that implement IDisposable
+if ($timer  -is [System.IDisposable]) { $timer.Stop(); $timer.Dispose() }
+if ($mutex  -is [System.IDisposable]) { $mutex.Dispose() }
+if ($dialog -is [System.IDisposable]) { $dialog.Dispose() }
+
+# WRONG — do not do either of these:
+# $window.Dispose()     <- System.Windows.Window has no Dispose() method
+# $driveInfo.Dispose()  <- DriveInfo is not IDisposable
+```
+
+Use `$obj -is [System.IDisposable]` before calling `.Dispose()` on any object whose IDisposable
+status is not statically certain from the .NET type documentation.
+
+#### CORRECT 4: Error handling around Register-ScheduledTask
+
+```powershell
+try {
+    $registeredTask = Register-ScheduledTask @taskParams -ErrorAction Stop
+    if (-not (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue)) {
+        throw "Task registration reported success but task was not found afterward."
+    }
+} catch {
+    $hresult = $_.Exception.HResult
+    $rawMsg  = $_.Exception.Message
+    $userMsg = switch -Regex ($rawMsg) {
+        'Access.Denied|0x80070005'         { "OS task registration was denied. Ensure Task Scheduler is enabled for your account." }
+        'elevation|requires elevation'      { "Scheduling requires administrator elevation for this operation." }
+        'logon session|0x8007052e'         { "Logon configuration error contacting Task Scheduler." }
+        'not available|0x80041315'         { "Windows Task Scheduler service is not running. Enable it in Services and try again." }
+        'cannot find the file|0x80070002'  { "Executable path not found. Rebuild the application and try again." }
+        default                            { "OS task registration failed (0x{0:X8})." -f $hresult }
+    }
+    # Never surface a Register-ScheduledTask failure as "Invalid Folder"
+    Show-ErrorDialog -Title "Schedule Failed" -Message "Could not schedule reminder for [PATH].`n`n$userMsg"
+    return $false
+}
+```
+
+A `Register-ScheduledTask` failure must never be shown as "Invalid Folder". Folder validation and
+OS task registration are separate operations; surface them separately.
+
+#### CORRECT 5: The Windows integration test that must exist before any scheduling fix is closed
+
+```powershell
+Describe 'New-MotivationTask - real Task Scheduler integration' {
+    It 'registers and removes a task for an accessible folder without Access Denied' `
+       -Skip:(-not $IsWindows) {
+        $testPath = Join-Path $env:TEMP 'dmh-integration-test'
+        New-Item -ItemType Directory -Path $testPath -Force | Out-Null
+        try {
+            $result = New-MotivationTask -FolderPath $testPath `
+                                         -TriggerTime (Get-Date).AddHours(2)
+            $result.Success | Should -Be $true
+            $task = Get-ScheduledTask -TaskName $result.TaskName -ErrorAction SilentlyContinue
+            $task | Should -Not -BeNullOrEmpty
+            Remove-MotivationTask -TaskId $result.TaskId
+        } finally {
+            Remove-Item $testPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+```
+
+This test is currently absent. It must exist and pass on Windows before any future change to the
+scheduling principal configuration is declared resolved.
+
+---
+
+### MANDATE STATEMENT
+
+**This mandate is binding on all AI agents, automated systems, and human contributors.**
+
+1. **No scheduling or permissions bug may be declared resolved without live Windows 10/11 validation.**
+   Linux CI passing is necessary but not sufficient for closure. Issue #10 was closed without live
+   Windows validation; the bug was still present the following day.
+
+2. **`Register-ScheduledTask` must always be wrapped in `try/catch` with `-ErrorAction Stop`.**
+   The catch block must distinguish access-denied, elevation-required, service-unavailable, and
+   logon-failure cases, and surface each with a user-visible message naming the failing operation —
+   not the folder path.
+
+3. **Never call `.Dispose()` on `System.Windows.Window`.** Use `.Close()`. For all other objects,
+   check `$obj -is [System.IDisposable]` before calling `.Dispose()`. `DriveInfo` is not IDisposable.
+
+4. **No `$script:*` module-level variable may be removed during cleanup without a grep of all
+   references in the file.** Silent removal of fallback objects (e.g., `$script:ConfigDefaults`)
+   directly causes "Access is denied" regressions by introducing null-reference paths that propagate
+   into Windows API error strings.
+
+5. **Task principal parameters (`LogonType`, `RunLevel`) are frozen at `S4U / Limited` until a live
+   Windows integration test confirms any proposed alternative works.** Do not change these values
+   based solely on documentation or Linux-side reasoning.
+
+6. **Error messages must name the failing operation.** Path sanitization (`[PATH]`) is correct for
+   privacy but must not replace the operation name or Windows error code. A "Schedule Failed" dialog
+   must be distinguishable from an "Invalid Folder" dialog at a glance.
+
+---
+
 ## Architecture
 
 **One file, one exe.**
