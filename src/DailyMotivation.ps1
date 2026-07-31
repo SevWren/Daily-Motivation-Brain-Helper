@@ -124,21 +124,69 @@ $uiStrings = @{
         CountdownPrefix = "Auto-opening in "
         CountdownSuffix = "s"
         DismissForToday = "Dismiss for Today"
+        OpenFolder = "Open Folder >"
+        Dismiss = "Dismiss"
+        FolderMissingTitle = "Folder Not Found"
+        FolderMissingBody = "The folder you scheduled was moved or deleted."
+        SnoozePrefix = "Snooze"
+        SnoozeNow = "Snooze 5m"
+        Snooze5 = " 5 minutes (default)"
+        Snooze15 = " 15 minutes"
+        Snooze30 = " 30 minutes"
+        Snooze60 = " 1 hour"
+        PathLookingFor = "Was looking for:"
+        RePick = "Choose new folder"
     }
     ru = @{
         CountdownPrefix = "Автооткрытие через "
         CountdownSuffix = "с"
         DismissForToday = "Отклонить на сегодня"
+        OpenFolder = "Открыть папку >"
+        Dismiss = "Закрыть"
+        FolderMissingTitle = "Папка не найдена"
+        FolderMissingBody = "Папка, которую вы запланировали, была перемещена или удалена."
+        SnoozePrefix = "Отложить"
+        SnoozeNow = "Отложить на 5 м"
+        Snooze5 = " 5 минут (по умолчанию)"
+        Snooze15 = " 15 минут"
+        Snooze30 = " 30 минут"
+        Snooze60 = " 1 час"
+        PathLookingFor = "Искали:"
+        RePick = "Выбрать новую папку"
     }
     es = @{
         CountdownPrefix = "Apertura automática en "
         CountdownSuffix = "s"
         DismissForToday = "Descartar por hoy"
+        OpenFolder = "Abrir carpeta >"
+        Dismiss = "Cerrar"
+        FolderMissingTitle = "Carpeta no encontrada"
+        FolderMissingBody = "La carpeta que programaste se ha movido o eliminado."
+        SnoozePrefix = "Posponer"
+        SnoozeNow = "Posponer 5m"
+        Snooze5 = " 5 minutos (predeterminado)"
+        Snooze15 = " 15 minutos"
+        Snooze30 = " 30 minutos"
+        Snooze60 = " 1 hora"
+        PathLookingFor = "Buscando:"
+        RePick = "Elegir nueva carpeta"
     }
     zh = @{
         CountdownPrefix = "自动倒计时 "
         CountdownSuffix = "秒"
         DismissForToday = "今天不再显示"
+        OpenFolder = "打开文件夹 >"
+        Dismiss = "关闭"
+        FolderMissingTitle = "找不到文件夹"
+        FolderMissingBody = "你计划的文件夹已被移位或删除。"
+        SnoozePrefix = "稍后提醒"
+        SnoozeNow = "稍后提醒 5 分钟"
+        Snooze5 = " 5 分钟 (默认)"
+        Snooze15 = " 15 分钟"
+        Snooze30 = " 30 分钟"
+        Snooze60 = " 1 小时"
+        PathLookingFor = "查找:"
+        RePick = "选择新文件夹"
     }
 }
 if (-not $uiStrings.ContainsKey($uiLanguage)) {
@@ -203,15 +251,15 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22">
-                    <TextBlock x:Name="CountdownPrefixText" Text="Auto-opening in " FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountdownPrefixText" Text="" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
                                Foreground="#00BCD4" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="CountdownSuffixText" Text="s" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountdownSuffixText" Text="" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <!-- B-11: Dismiss for Today -->
-                    <Button x:Name="DismissBtn" Content="Dismiss for Today"
+                    <Button x:Name="DismissBtn" Content=""
                             Width="130" Height="36" Foreground="#3E3E58" FontSize="11"
                             Background="#14141F" BorderBrush="#2A2A42" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,8,0">
@@ -228,7 +276,7 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                     </Button>
                     <!-- B-10: Snooze split-button -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
-                        <Button x:Name="SnoozeBtn" Content="Snooze 5m" Height="36"
+                    <Button x:Name="SnoozeBtn" Content="" Height="36"
                                 Foreground="#555570" FontSize="12" FontWeight="SemiBold"
                                 Background="#1C1C2C" BorderBrush="#2A2A42"
                                 BorderThickness="1,1,0,1" Cursor="Hand" Padding="10,0">
@@ -259,16 +307,16 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                             </Button.Template>
                             <Button.ContextMenu>
                                 <ContextMenu Background="#1C1C2C" BorderBrush="#2A2A42">
-                                    <MenuItem x:Name="Snooze5"  Header=" 5 minutes (default)" Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze15" Header=" 15 minutes"           Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze30" Header=" 30 minutes"           Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze60" Header=" 1 hour"               Foreground="#E8E8F4" FontSize="12"/>
+                                    <MenuItem x:Name="Snooze5"  Header="" Foreground="#E8E8F4" FontSize="12"/>
+                                    <MenuItem x:Name="Snooze15" Header=""           Foreground="#E8E8F4" FontSize="12"/>
+                                    <MenuItem x:Name="Snooze30" Header=""           Foreground="#E8E8F4" FontSize="12"/>
+                                    <MenuItem x:Name="Snooze60" Header=""               Foreground="#E8E8F4" FontSize="12"/>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
                     </StackPanel>
                     <!-- Open Folder -->
-                    <Button x:Name="LetsGoBtn" Content="Open Folder >" Width="130" Height="36"
+                    <Button x:Name="LetsGoBtn" Content="" Width="130" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
@@ -287,16 +335,16 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="[!]" FontSize="26" Foreground="#F4A261"
                                VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock Text="Folder Not Found" FontSize="19" FontWeight="Bold"
+                    <TextBlock x:Name="PathMissingTitleText" Text="" FontSize="19" FontWeight="Bold"
                                Foreground="#E8E8F4" VerticalAlignment="Center"/>
                 </StackPanel>
-                <TextBlock Text="The folder you scheduled was moved or deleted."
+                <TextBlock x:Name="PathMissingBodyText" Text=""
                            FontSize="14" Foreground="#8888A8" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#4A4A6A"
                            TextWrapping="Wrap" Margin="0,0,0,22"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="PathDismissBtn" Content="Dismiss" Width="100" Height="36"
+                    <Button x:Name="PathDismissBtn" Content="" Width="100" Height="36"
                             Foreground="#555570" FontSize="12"
                             Background="#1C1C2C" BorderBrush="#2A2A42" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,10,0">
@@ -311,7 +359,7 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="RePickBtn" Content="Choose New Location" Width="160" Height="36"
+                    <Button x:Name="RePickBtn" Content="" Width="160" Height="36"
                             Foreground="#0D1117" FontSize="12" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
@@ -369,7 +417,11 @@ $rePickBtn = Find "RePickBtn"
 if ($script:pathMissing) {
     $normalPanel.Visibility = "Collapsed"
     $pathMissingPanel.Visibility = "Visible"
-    $missingPathLabel.Text = "Was looking for: $($config.explorer_path)"
+    $pathMissingTitleText.Text = $ui.FolderMissingTitle
+    $pathMissingBodyText.Text = $ui.FolderMissingBody
+    $pathDismissBtn.Content = $ui.Dismiss
+    $rePickBtn.Content = $ui.RePick
+    $missingPathLabel.Text = "$($ui.PathLookingFor) $($config.explorer_path)"
 }
 else {
     $glyphText.Text = $config.glyph
@@ -391,6 +443,12 @@ else {
     $countdownSuffixText.Text = $ui.CountdownSuffix
 }
 $dismissBtn.Content = $ui.DismissForToday
+$letsGoBtn.Content = $ui.OpenFolder
+$snoozeBtn.Content = $ui.SnoozeNow
+$snooze5.Header = $ui.Snooze5
+$snooze15.Header = $ui.Snooze15
+$snooze30.Header = $ui.Snooze30
+$snooze60.Header = $ui.Snooze60
 
 # --- State ---
 $script:openExplorer = $true
@@ -444,7 +502,7 @@ function Set-SnoozeDuration {
     param([int]$Minutes)
     $script:snoozeMinutes = $Minutes
     $label = if ($Minutes -lt 60) { "${Minutes}m" } else { "1h" }
-    $snoozeBtn.Content = "Snooze $label"
+    $snoozeBtn.Content = "$($ui.SnoozePrefix) $label"
     Write-DLog "Snooze duration: $Minutes min"
 }
 $snooze5.Add_Click({ Set-SnoozeDuration 5 })
