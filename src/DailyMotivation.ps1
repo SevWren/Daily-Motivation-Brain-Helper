@@ -116,6 +116,36 @@ else {
     Write-DLog "Config file not found - using defaults" "WARN"
 }
 
+# --- Step 3b: UI strings / localization ---
+$uiCulture = (Get-Culture).Name.ToLowerInvariant()
+$uiLanguage = ($uiCulture -split '-')[0]
+$uiStrings = @{
+    en = @{
+        CountdownPrefix = "Auto-opening in "
+        CountdownSuffix = "s"
+        DismissForToday = "Dismiss for Today"
+    }
+    ru = @{
+        CountdownPrefix = "Автооткрытие через "
+        CountdownSuffix = "с"
+        DismissForToday = "Отклонить на сегодня"
+    }
+    es = @{
+        CountdownPrefix = "Apertura automática en "
+        CountdownSuffix = "s"
+        DismissForToday = "Descartar por hoy"
+    }
+    zh = @{
+        CountdownPrefix = "自动倒计时 "
+        CountdownSuffix = "秒"
+        DismissForToday = "今天不再显示"
+    }
+}
+if (-not $uiStrings.ContainsKey($uiLanguage)) {
+    $uiLanguage = "en"
+}
+$ui = $uiStrings[$uiLanguage]
+
 # =============================================================================
 # TASK-007 / B-05: Path validation
 # GAP-003b: Treat null/empty explorer_path as "never configured" - exit cleanly
@@ -173,10 +203,10 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22">
-                    <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountdownPrefixText" Text="Auto-opening in " FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
                                Foreground="#00BCD4" VerticalAlignment="Center"/>
-                    <TextBlock Text="s" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountdownSuffixText" Text="s" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
@@ -320,7 +350,9 @@ $glyphText = Find "GlyphText"
 $titleText = Find "TitleText"
 $bodyText = Find "BodyText"
 $folderNameText = Find "FolderNameText"
+$countdownPrefixText = Find "CountdownPrefixText"
 $countdownText = Find "CountdownText"
+$countdownSuffixText = Find "CountdownSuffixText"
 $letsGoBtn = Find "LetsGoBtn"
 $snoozeBtn = Find "SnoozeBtn"
 $snoozeDropBtn = Find "SnoozeDropBtn"
@@ -355,7 +387,10 @@ else {
         $folderNameText.Text = "Opening: $displayName"
         $folderNameText.Visibility = "Visible"
     }
+    $countdownPrefixText.Text = $ui.CountdownPrefix
+    $countdownSuffixText.Text = $ui.CountdownSuffix
 }
+$dismissBtn.Content = $ui.DismissForToday
 
 # --- State ---
 $script:openExplorer = $true
