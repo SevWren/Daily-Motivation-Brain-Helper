@@ -10,7 +10,7 @@
 # Launch via LaunchMotivation.bat (which passes -STA and -ExecutionPolicy Bypass)
 # Config:    %APPDATA%\DailyMotivationBrainHelper\popup_config.json
 # Debug log: %TEMP%\DailyMotivation_debug.log
-# NOTE: ASCII-only -- no smart quotes or em dashes (PowerShell 5.1 / Windows-1252 safety)
+# NOTE: UTF-8 safe string literals are used for UI localization.
 # =============================================================================
 
 #Requires -Version 5.1
@@ -116,6 +116,98 @@ else {
     Write-DLog "Config file not found - using defaults" "WARN"
 }
 
+# --- Step 3b: localized text helper ---
+$culture = [System.Globalization.CultureInfo]::CurrentUICulture
+$exactCulture = $culture.Name.ToLowerInvariant()
+$baseCulture = $culture.TwoLetterISOLanguageName.ToLowerInvariant()
+$uiText = @{
+    "en" = @{
+        AutoOpeningIn = "Auto-opening in "
+        Seconds = "s"
+        DismissForToday = "Dismiss for Today"
+        OpenFolder = "Open Folder >"
+        FolderNotFound = "Folder Not Found"
+        FolderMovedOrDeleted = "The folder you scheduled was moved or deleted."
+        WasLookingFor = "Was looking for: {0}"
+        Dismiss = "Dismiss"
+        ChooseNewLocation = "Choose New Location"
+        OpeningPrefix = "Opening: {0}"
+        RePickPrompt = "Choose the new location for this folder"
+        SaveFailedTitle = "Save Failed"
+        SaveFailedMessage = "Could not save the new folder path. Your change was not stored.`n`n{0}"
+    }
+    "zh-cn" = @{
+        AutoOpeningIn = "自动开始倒计时"
+        Seconds = "秒"
+        DismissForToday = "今日免打扰"
+        OpenFolder = "打开文件夹 >"
+        FolderNotFound = "未找到文件夹"
+        FolderMovedOrDeleted = "你设置的文件夹已被移动或删除。"
+        WasLookingFor = "正在查找：{0}"
+        Dismiss = "取消"
+        ChooseNewLocation = "选择新位置"
+        OpeningPrefix = "正在打开：{0}"
+        RePickPrompt = "为此文件夹选择新位置"
+        SaveFailedTitle = "保存失败"
+        SaveFailedMessage = "无法保存新的文件夹路径。你的更改未保存。`n`n{0}"
+    }
+    "ja-jp" = @{
+        AutoOpeningIn = "自動カウント開始 "
+        Seconds = "秒"
+        DismissForToday = "今日中は無効"
+        OpenFolder = "フォルダを開く >"
+        FolderNotFound = "フォルダが見つかりません"
+        FolderMovedOrDeleted = "予約したフォルダが移動または削除されています。"
+        WasLookingFor = "検索先: {0}"
+        Dismiss = "閉じる"
+        ChooseNewLocation = "新しい場所を選択"
+        OpeningPrefix = "開く: {0}"
+        RePickPrompt = "このフォルダの新しい場所を選択してください"
+        SaveFailedTitle = "保存失敗"
+        SaveFailedMessage = "新しいフォルダパスを保存できませんでした。変更は保存されませんでした。`n`n{0}"
+    }
+    "ko-kr" = @{
+        AutoOpeningIn = "자동 열기까지 "
+        Seconds = "초"
+        DismissForToday = "오늘만 숨기기"
+        OpenFolder = "폴더 열기 >"
+        FolderNotFound = "폴더를 찾을 수 없습니다"
+        FolderMovedOrDeleted = "예약한 폴더가 이동되었거나 삭제되었습니다."
+        WasLookingFor = "찾는 위치: {0}"
+        Dismiss = "닫기"
+        ChooseNewLocation = "새 위치 선택"
+        OpeningPrefix = "열기: {0}"
+        RePickPrompt = "이 폴더의 새 위치를 선택하세요"
+        SaveFailedTitle = "저장 실패"
+        SaveFailedMessage = "새 폴더 경로를 저장하지 못했습니다. 변경 사항은 저장되지 않았습니다.`n`n{0}"
+    }
+    "ru-ru" = @{
+        AutoOpeningIn = "Автооткрытие через "
+        Seconds = " сек"
+        DismissForToday = "Отклонить на сегодня"
+        OpenFolder = "Открыть папку >"
+        FolderNotFound = "Папка не найдена"
+        FolderMovedOrDeleted = "Папка, запланированная вами, перемещена или удалена."
+        WasLookingFor = "Искомый путь: {0}"
+        Dismiss = "Отменить"
+        ChooseNewLocation = "Выбрать новое место"
+        OpeningPrefix = "Открываем: {0}"
+        RePickPrompt = "Выберите новое место для этой папки"
+        SaveFailedTitle = "Ошибка сохранения"
+        SaveFailedMessage = "Не удалось сохранить новый путь папки. Изменения не сохранены.`n`n{0}"
+    }
+}
+
+if ($uiText.ContainsKey($exactCulture)) {
+    $ui = $uiText[$exactCulture]
+}
+elseif ($uiText.ContainsKey($baseCulture)) {
+    $ui = $uiText[$baseCulture]
+}
+else {
+    $ui = $uiText["en"]
+}
+
 # =============================================================================
 # TASK-007 / B-05: Path validation
 # GAP-003b: Treat null/empty explorer_path as "never configured" - exit cleanly
@@ -173,15 +265,15 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                            TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22">
-                    <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="AutoOpeningPrefixText" Text="" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                     <TextBlock x:Name="CountdownText" Text="20" FontSize="12" FontWeight="Bold"
                                Foreground="#00BCD4" VerticalAlignment="Center"/>
-                    <TextBlock Text="s" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="CountdownSuffixText" Text="" FontSize="12" Foreground="#3E3E58" VerticalAlignment="Center"/>
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <!-- B-11: Dismiss for Today -->
-                    <Button x:Name="DismissBtn" Content="Dismiss for Today"
+                    <Button x:Name="DismissBtn" Content=""
                             Width="130" Height="36" Foreground="#3E3E58" FontSize="11"
                             Background="#14141F" BorderBrush="#2A2A42" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,8,0">
@@ -238,7 +330,7 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                         </Button>
                     </StackPanel>
                     <!-- Open Folder -->
-                    <Button x:Name="LetsGoBtn" Content="Open Folder >" Width="130" Height="36"
+                    <Button x:Name="LetsGoBtn" Content="" Width="130" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
@@ -257,16 +349,16 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
                     <TextBlock Text="[!]" FontSize="26" Foreground="#F4A261"
                                VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <TextBlock Text="Folder Not Found" FontSize="19" FontWeight="Bold"
+                    <TextBlock x:Name="PathMissingTitleText" Text="" FontSize="19" FontWeight="Bold"
                                Foreground="#E8E8F4" VerticalAlignment="Center"/>
                 </StackPanel>
-                <TextBlock Text="The folder you scheduled was moved or deleted."
-                           FontSize="14" Foreground="#8888A8" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <TextBlock x:Name="PathMissingBodyText" Text=""
+                            FontSize="14" Foreground="#8888A8" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <TextBlock x:Name="MissingPathLabel" FontSize="12" Foreground="#4A4A6A"
                            TextWrapping="Wrap" Margin="0,0,0,22"/>
                 <Border Background="#1F1F30" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="PathDismissBtn" Content="Dismiss" Width="100" Height="36"
+                    <Button x:Name="PathDismissBtn" Content="" Width="100" Height="36"
                             Foreground="#555570" FontSize="12"
                             Background="#1C1C2C" BorderBrush="#2A2A42" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,10,0">
@@ -281,7 +373,7 @@ if (-not (Test-Path $config.explorer_path -PathType Container)) {
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="RePickBtn" Content="Choose New Location" Width="160" Height="36"
+                    <Button x:Name="RePickBtn" Content="" Width="160" Height="36"
                             Foreground="#0D1117" FontSize="12" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
@@ -320,6 +412,8 @@ $glyphText = Find "GlyphText"
 $titleText = Find "TitleText"
 $bodyText = Find "BodyText"
 $folderNameText = Find "FolderNameText"
+$autoOpeningPrefixText = Find "AutoOpeningPrefixText"
+$countdownSuffixText = Find "CountdownSuffixText"
 $countdownText = Find "CountdownText"
 $letsGoBtn = Find "LetsGoBtn"
 $snoozeBtn = Find "SnoozeBtn"
@@ -329,6 +423,8 @@ $snooze15 = Find "Snooze15"
 $snooze30 = Find "Snooze30"
 $snooze60 = Find "Snooze60"
 $dismissBtn = Find "DismissBtn"
+$pathMissingTitleText = Find "PathMissingTitleText"
+$pathMissingBodyText = Find "PathMissingBodyText"
 $missingPathLabel = Find "MissingPathLabel"
 $pathDismissBtn = Find "PathDismissBtn"
 $rePickBtn = Find "RePickBtn"
@@ -337,9 +433,17 @@ $rePickBtn = Find "RePickBtn"
 if ($script:pathMissing) {
     $normalPanel.Visibility = "Collapsed"
     $pathMissingPanel.Visibility = "Visible"
-    $missingPathLabel.Text = "Was looking for: $($config.explorer_path)"
+    $pathMissingTitleText.Text = $ui.FolderNotFound
+    $pathMissingBodyText.Text = $ui.FolderMovedOrDeleted
+    $missingPathLabel.Text = ($ui.WasLookingFor -f $config.explorer_path)
+    $pathDismissBtn.Content = $ui.Dismiss
+    $rePickBtn.Content = $ui.ChooseNewLocation
 }
 else {
+    $autoOpeningPrefixText.Text = $ui.AutoOpeningIn
+    $countdownSuffixText.Text = $ui.Seconds
+    $dismissBtn.Content = $ui.DismissForToday
+    $letsGoBtn.Content = $ui.OpenFolder
     $glyphText.Text = $config.glyph
     $titleText.Text = $config.title
     $bodyText.Text = $config.body
@@ -352,7 +456,7 @@ else {
         else {
             $config.folder_name
         }
-        $folderNameText.Text = "Opening: $displayName"
+        $folderNameText.Text = ($ui.OpeningPrefix -f $displayName)
         $folderNameText.Visibility = "Visible"
     }
 }
@@ -481,7 +585,7 @@ $pathDismissBtn.Add_Click({
 $rePickBtn.Add_Click({
         Write-DLog "Re-pick clicked"
         $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-        $dialog.Description = "Choose the new location for this folder"
+        $dialog.Description = $ui.RePickPrompt
         $dialog.ShowNewFolderButton = $false
         if ($dialog.ShowDialog() -eq "OK") {
             $newPath = $dialog.SelectedPath
@@ -499,8 +603,7 @@ $rePickBtn.Add_Click({
             catch {
                 Write-DLog "Config update failed: $_" "ERROR"
                 [System.Windows.MessageBox]::Show(
-                    "Could not save the new folder path. Your change was not stored.`n`n$($_.Exception.Message)",
-                    "Save Failed", "OK", "Error")
+                    ($ui.SaveFailedMessage -f $_.Exception.Message), $ui.SaveFailedTitle, "OK", "Error")
                 # Do NOT close the popup -- let the user retry
             }
         }
