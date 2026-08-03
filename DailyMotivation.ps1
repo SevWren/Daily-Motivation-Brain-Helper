@@ -658,11 +658,6 @@ function New-MotivationTask {
         }
     }
 
-    # Sync OS task states AFTER duplicate check to clean up ghost entries without
-    # interfering with duplicate detection. Ghost entries (tasks in JSON but not in OS)
-    # will be marked DELETED here, but only AFTER we've confirmed this isn't a duplicate.
-    if (-not $script:Platform) { Sync-TaskStatuses }
-
     # Compute sanitized description (SHA-256 hash of path) — used in both Platform and Windows paths.
     $descHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
         [Text.Encoding]::UTF8.GetBytes($FolderPath)) | ForEach-Object { $_.ToString("X2") }
