@@ -1,41 +1,41 @@
 # Daily Motivation Brain Helper
 
-> Schedule tomorrow's working folder in 2 clicks.  
+> Schedule your working folder for tomorrow in 2 clicks.
 > At 2 PM, a motivational popup opens it for you.  
 > No code. No config files. No manual steps.
 
 ---
 
 > [!WARNING]
-> **This branch (`main`) is pending replacement via force push.**
+> **This branch (`main`) will be replaced by a force push once the migration is complete.**
 > The [`project-restart-pwsh7`](../../tree/project-restart-pwsh7) branch is under active development and will be **force-pushed to replace `main`** once the PowerShell 7 migration is complete. After that point, this PowerShell 5.1 version will no longer be maintained. If you need to preserve the PS5.1 build, download a release archive before the switchover.
 
 ## Project status
 
 **Current development is taking place on the `project-restart-pwsh7` branch.**
 
-The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7**. The migration's primary goal is to enable a cross-platform development workflow so contributors can develop, run tests, and iterate from cloud-based Linux environments (for example, Claude Code) as well as locally on Windows 10/11 while keeping a single shared codebase.
+The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7**. The migration's primary goal is to enable a cross-platform development workflow with a single shared codebase. This allows contributors to develop, run tests, and iterate from cloud-based Linux environments (for example, Claude Code) as well as locally on Windows 10/11.
 
 Important notes:
 
-- PowerShell 7 permits development and test runs on non‑Windows systems and cloud IDEs running Linux; contributors can code and run the repository's tooling from those environments.
-- Windows 10/11 remains the primary runtime target for end users; runtime support outside Windows is currently minimal and intended for development/testing scenarios unless we decide to expand runtime support in the future.
-- For the latest features and active development, use `project-restart-pwsh7`. The `main` branch contains the stable Windows PowerShell 5.1 implementation and is the recommended release for end users running the application on Windows.
+- PowerShell 7 allows development and test runs on non-Windows systems and cloud IDEs running Linux.
+- Windows 10/11 remains the primary runtime target for end users; runtime support outside Windows is currently minimal and intended for development and testing scenarios only.
+- For the latest features and active development, use `project-restart-pwsh7`. The `main` branch is the current stable release for Windows PowerShell 5.1 users, but note that it will be superseded once the PowerShell 7 migration is complete (see warning above).
 
 ## Branches
 
-- `main` — Stable, user-targeted release (Windows PowerShell 5.1).
+- `main` — Stable end-user release (Windows PowerShell 5.1).
 - `project-restart-pwsh7` — Active development branch targeting PowerShell 7 (recommended for contributors who want cloud-based Linux development and the latest changes).
 
 ---
 
 ## How It Works
 
-1. **Open the app** -- `MainApp.ps1`
+1. **Open the app** — `MainApp.ps1`
 2. **Select your folder** (picker dialog or drag-and-drop)
-3. **Click Schedule** -- done
+3. **Click Schedule** — done
 
-At 2 PM the next day (or today, if before 2 PM), a popup appears with a motivational message.
+If you schedule before 2 PM, the popup appears that same day at 2 PM; otherwise, it appears the following day at 2 PM.
 Click **Open Folder** and Windows Explorer opens your folder automatically.
 
 ---
@@ -75,13 +75,12 @@ Daily-Motivation-Brain-Helper/
 +-- .PSScriptAnalyzerSettings.psd1  # Code quality configuration
 +-- PesterConfiguration.psd1      # Test suite configuration
 +-- TESTING.md                    # Testing guide
-+-- docs/reports/                 # Historical session reports and audit artifacts
++-- docs/                         # All planning and specification documents
+|   +-- README.md                 # Document index
+|   +-- reports/                  # Historical session reports and audit artifacts
 |
 +-- .github/workflows/
 |   +-- test.yml                  # CI/CD pipeline (automated tests)
-|
-+-- docs/                         # All planning and specification documents
-    +-- README.md                 # Document index
 ```
 
 ---
@@ -98,8 +97,8 @@ Daily-Motivation-Brain-Helper/
 ### Steps
 
 1. Extract to a folder, e.g. `C:\DailyMotivation\`
-2. Right-click `UpdateScheduledTask.ps1` -- Run with PowerShell (as Administrator)  
-   This copies modules to `%APPDATA%` and initializes config files.
+2. Right-click `UpdateScheduledTask.ps1` — Run with PowerShell (as Administrator)
+   Running this script copies modules to `%APPDATA%` and initializes the config files.
 3. Run the app:
 
 ```powershell
@@ -107,14 +106,14 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainAp
 ```
 
 4. (Optional) Install Explorer right-click integration:  
-   Right-click `src\ShellExtension\Register-ShellExtension.ps1` -- Run as Administrator
+   Right-click `src\ShellExtension\Register-ShellExtension.ps1` — Run as Administrator
 
 ---
 
 ## Features
 
 - Folder Picker + Drag-Drop
-- Schedule Today or Tomorrow (option shown when before 2 PM)
+- Schedule Today or Tomorrow (today option available before 2 PM only)
 - Remember Last Folder
 - Recent Folders List
 - Undo Schedule (30-second grace)
@@ -165,8 +164,8 @@ See [TESTING.md](TESTING.md) and [Tests/README.md](Tests/README.md) for details.
 
 ## Development
 
-- Development environment: PowerShell 7 is the recommended environment for contributors. It enables development on cloud-based Linux environments (for example, Claude Code) and local development on Windows 10/11.
-- Example: in a Linux/cloud container with PowerShell 7 installed you can run tests with `pwsh -File ./Invoke-Tests.ps1`.
+- PowerShell 7 is the recommended environment for contributors. It enables development on cloud-based Linux environments (for example, Claude Code) and local development on Windows 10/11.
+- Example: in a Linux or cloud-based container with PowerShell 7 installed, you can run tests with `pwsh -File ./Invoke-Tests.ps1`.
 
 ---
 
@@ -184,12 +183,12 @@ When submitting pull requests, state which branch your change targets (`main` or
 
 ## Support and feedback
 
-Open an issue for bugs, feature requests, or questions. For development-related discussions, referencing the branch (`main` or `project-restart-pwsh7`) in your issue helps route feedback.
+Open an issue for bugs, feature requests, or questions. For development-related discussions, mentioning the relevant branch (`main` or `project-restart-pwsh7`) in your issue helps maintainers triage it correctly.
 
 ---
 
 ## License
 
-MIT -- see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)
 
 _Last updated: 2026-08-03_
