@@ -6,6 +6,10 @@
 
 ---
 
+> [!WARNING]
+> **This branch (`main`) is pending replacement via force push.**
+> The [`project-restart-pwsh7`](../../tree/project-restart-pwsh7) branch is under active development and will be **force-pushed to replace `main`** once the PowerShell 7 migration is complete. After that point, this PowerShell 5.1 version will no longer be maintained. If you need to preserve the PS5.1 build, download a release archive before the switchover.
+
 ## Project status
 
 **Current development is taking place on the `project-restart-pwsh7` branch.**
