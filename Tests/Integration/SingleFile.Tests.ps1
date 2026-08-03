@@ -168,15 +168,13 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         # Simulate main mode creating a task
         $script:IntegrationMockedTasks = @{}
 
-        Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $args[0] } }
-        Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
-        Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
-        # New-ScheduledTaskPrincipal is a native Windows cmdlet that returns a real CimInstance.
-        # -RemoveParameterValidation strips ValidateXxx attributes but NOT type constraints, so passing
-        # a PSCustomObject as Principal still fails with argument-transformation errors. Let the real
-        # cmdlet run so Principal is always a proper CimInstance.
-        Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings' {
-            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
+        # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return
+        # real CimInstances. -RemoveParameterValidation only strips ValidateXxx attributes, NOT type
+        # constraints — passing PSCustomObjects still fails with argument-transformation errors.
+        # Follow the AG8-007 pattern: let the real helper cmdlets run, only mock Register-ScheduledTask
+        # to prevent actual Task Scheduler writes.
+        Mock Register-ScheduledTask {
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force)
             # Track registered task
             $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
                 TaskName = $TaskName

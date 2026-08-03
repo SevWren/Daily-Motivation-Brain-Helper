@@ -30,29 +30,24 @@ BeforeAll {
     $script:ExePath = $null
 
     $script:CapturedActions = @()
+    # Capture the Execute/Argument args for assertion, then delegate to the real cmdlet so that
+    # Register-ScheduledTask receives a genuine CimInstance (not a PSCustomObject).
+    # -RemoveParameterValidation only strips ValidateXxx attributes, NOT type constraints, so
+    # passing a PSCustomObject as Action still fails with argument-transformation errors.
+    # Module-qualified call (ScheduledTasks\New-ScheduledTaskAction) bypasses the Pester mock
+    # proxy and invokes the real implementation.
     Mock New-ScheduledTaskAction {
         param($Execute, $Argument)
         $script:CapturedActions += [PSCustomObject]@{ Execute = $Execute; Argument = $Argument }
-        return [PSCustomObject]@{ Execute = $Execute; Argument = $Argument }
+        ScheduledTasks\New-ScheduledTaskAction -Execute $Execute -Argument $Argument
     }
 
-    Mock New-ScheduledTaskTrigger {
-        return [PSCustomObject]@{
-            StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss')
-            EndBoundary   = ''
-        }
-    }
-    Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
-    # New-ScheduledTaskPrincipal is a native Windows cmdlet that returns a real CimInstance.
-    # -RemoveParameterValidation strips ValidateXxx attributes but NOT type constraints, so passing
-    # a PSCustomObject as Principal still fails with argument-transformation errors. Let the real
-    # cmdlet run so Principal is always a proper CimInstance.
+    # New-ScheduledTaskTrigger/Settings/Principal are native Windows cmdlets that return real
+    # CimInstances. Let them run for real so Register-ScheduledTask receives proper types.
 
     $script:MockedTasks = @{}
-    # -RemoveParameterValidation bypasses CimInstance[] type enforcement on Action/Trigger/Settings
-    # so PSCustomObject values from mocked New-ScheduledTask* cmdlets are accepted.
-    Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings' {
-        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force, $ErrorAction)
+    Mock Register-ScheduledTask {
+        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
     }
