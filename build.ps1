@@ -26,6 +26,11 @@ Write-Host "Building $OutputFile ..."
 
 # AG16-018: Support ShouldProcess for -WhatIf
 if ($PSCmdlet.ShouldProcess($OutputFile, "Build executable")) {
+    # Reset $LASTEXITCODE before Invoke-ps2exe: it is a PowerShell function, not a native exe,
+    # so $LASTEXITCODE is NOT updated by the call itself — only by any child process ps2exe spawns
+    # internally. Without this, $LASTEXITCODE may be $null (never set), and $null -ne 0 is $true,
+    # falsely triggering the failure check below.
+    $global:LASTEXITCODE = 0
     Invoke-ps2exe `
         -inputFile  $InputFile `
         -outputFile $OutputFile `
