@@ -15,6 +15,7 @@ The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7*
 Important notes:
 
 - Development tooling and active contributions are moving to PowerShell 7 to support non-Windows development environments.
+- PowerShell 7 enables development from cloud-based environments (for example, Claude Code or other cloud IDEs) running on Linux — developers can code, run tests, and contribute from those environments while targeting Windows for runtime.
 - Windows 10/11 remains the primary runtime target for end users; runtime support on non-Windows platforms is minimal and limited to development scenarios unless a clear need arises.
 - For the latest features and ongoing development, use the `project-restart-pwsh7` branch. The `main` branch continues to contain the stable Windows PowerShell 5.1 implementation and is the recommended release for users running the application on Windows.
 
