@@ -84,7 +84,7 @@ Describe '-NoRun: Dot-sourcing produces zero $Error entries' {
 Describe '-NoRun: Dot-sourcing does not write any files to AppData' {
 
     It 'The isolated APPDATA directory should contain no files after dot-source' {
-        $filesWritten = Get-ChildItem -Path $script:IsolatedAppData -Recurse -File -ErrorAction SilentlyContinue
+        $filesWritten = @(Get-ChildItem -Path $script:IsolatedAppData -Recurse -File -ErrorAction SilentlyContinue)
         $filesWritten.Count | Should -Be 0
     }
 }

@@ -164,8 +164,13 @@ Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-
             param($config)
             $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
-            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+            # Directly insert into SecurityMockedTasks — ScriptMethods bypass Pester mock scope
+            # so calling Register-ScheduledTask here would invoke the real cmdlet.
+            $script:SecurityMockedTasks[$taskName] = [PSCustomObject]@{
+                TaskName  = $taskName
+                Principal = [PSCustomObject]@{ RunLevel = 'Limited' }
+                Triggers  = @()
+            }
             return @{ Success = $true; TaskId = $taskId }
         }
     }
@@ -407,7 +412,10 @@ Describe 'AG10-017: ConvertFrom-Json Without Schema Validation' -Skip:(-not $IsW
             # Should return defaults when config is invalid/too large.
             # Use PSObject.Properties to avoid PropertyNotFoundException under StrictMode.
             $config = Get-Config
-            $config.PSObject.Properties['garbage_data'].Value | Should -BeNullOrEmpty
+            $garbageProp = $config.PSObject.Properties['garbage_data']
+            if ($garbageProp) {
+                $garbageProp.Value | Should -BeNullOrEmpty
+            }
         }
     }
 }

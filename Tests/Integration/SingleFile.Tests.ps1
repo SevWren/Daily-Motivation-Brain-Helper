@@ -201,7 +201,7 @@ Describe 'Mode switching and config persistence (AG8-026)' {
 
         $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
         Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: $($result.Error)"
+        Write-Host "DEBUG - Result.Error: $($result.PSObject.Properties['Error']?.Value)"
         Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
         Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
@@ -266,7 +266,7 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         # Create task
         $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
         Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: $($result.Error)"
+        Write-Host "DEBUG - Result.Error: $($result.PSObject.Properties['Error']?.Value)"
         Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
         Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true

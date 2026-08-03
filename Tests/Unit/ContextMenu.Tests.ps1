@@ -116,7 +116,7 @@ Describe 'Register-ContextMenu' {
             $val2 | Should -BeExactly $val1
             # Verify no leftover subkeys
             $subkeys = Get-ChildItem -Path $script:VerbKey -ErrorAction SilentlyContinue
-            $subkeys.Count | Should -Be 1  # Only 'command' subkey
+            @($subkeys).Count | Should -Be 1  # Only 'command' subkey
         } else {
             # On non-Windows, verify behavior through mocks
             Register-ContextMenu -ExePath $script:TestExe

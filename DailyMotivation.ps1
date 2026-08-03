@@ -158,7 +158,12 @@ function Initialize-AppData {
         $script:AppDataDir = $script:Platform.GetAppDataPath()
     }
     elseif ($env:APPDATA) {
-        $script:AppDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+        # Guard: if APPDATA points to a file (test blocker pattern), go straight to TempDir fallback.
+        if ((Test-Path $env:APPDATA -PathType Leaf)) {
+            $script:AppDataDir = Join-Path $script:TempDir "DailyMotivationBrainHelper"
+        } else {
+            $script:AppDataDir = Join-Path $env:APPDATA "DailyMotivationBrainHelper"
+        }
     }
     else {
         $baseDir = if ($env:HOME) { $env:HOME } else { "~" }
@@ -658,6 +663,11 @@ function New-MotivationTask {
     # will be marked DELETED here, but only AFTER we've confirmed this isn't a duplicate.
     if (-not $script:Platform) { Sync-TaskStatuses }
 
+    # Compute sanitized description (SHA-256 hash of path) — used in both Platform and Windows paths.
+    $descHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
+        [Text.Encoding]::UTF8.GetBytes($FolderPath)) | ForEach-Object { $_.ToString("X2") }
+    $safeDescription = "Daily Motivation Brain Helper - Task $(($descHashParts -join '').Substring(0, 16))"
+
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
         # Platform adapter handles task scheduling
@@ -781,13 +791,6 @@ function New-MotivationTask {
         }
         $principal = New-ScheduledTaskPrincipal @principalParams
 
-        # Sanitize Description - use hash instead of raw path
-        $pathHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
-            [Text.Encoding]::UTF8.GetBytes($FolderPath)) |
-            ForEach-Object { $_.ToString("X2") }
-        $pathHash = $pathHashParts -join ''
-        $safeDescription = "Daily Motivation Brain Helper - Task $($pathHash.Substring(0, 16))"
-
         try {
             $registerParams = @{
                 TaskName    = $taskName
@@ -826,6 +829,7 @@ function New-MotivationTask {
         created_at     = (Get-Date -Format "o")
         status         = "PENDING"
         snooze_count   = 0
+        description    = $safeDescription
     }
     $tasks = $tasks + $newTask
     try {

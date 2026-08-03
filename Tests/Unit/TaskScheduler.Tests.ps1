@@ -224,8 +224,13 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
                 param($config)
                 $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
                 $taskName = "DailyMotivation_$taskId"
-                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+                # Directly insert into MockedTasks — ScriptMethods bypass Pester mock scope
+                # so calling Register-ScheduledTask here would invoke the real cmdlet.
+                $script:MockedTasks[$taskName] = [PSCustomObject]@{
+                    TaskName = $taskName
+                    State    = [PSCustomObject]@{ State = 'Ready' }
+                    Triggers = @()
+                }
                 return @{ Success = $true; TaskId = $taskId }
             }
         }
@@ -523,16 +528,19 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
             param($config)
             $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
-            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+            # Directly insert into MockedTasks — ScriptMethods bypass Pester mock scope.
+            $script:MockedTasks[$taskName] = [PSCustomObject]@{
+                TaskName = $taskName
+                State    = [PSCustomObject]@{ State = 'Ready' }
+                Triggers = @()
+            }
             return @{ Success = $true; TaskId = $taskId }
         }
         $script:Platform | Add-Member -MemberType ScriptMethod -Name 'UnscheduleTask' -Value {
             param($taskId)
-            $tasks = Get-TasksJson
-            $target = $tasks | Where-Object { $_.task_id -eq $taskId }
-            if ($target) {
-                Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
+            $taskName = "DailyMotivation_$taskId"
+            if ($script:MockedTasks.ContainsKey($taskName)) {
+                $script:MockedTasks.Remove($taskName)
             }
         }
     }
@@ -605,29 +613,13 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         $script:MockedTasks = @{}
-        # Inject minimal platform adapter to skip Sync-TaskStatuses.
-        # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
-        $script:Platform = [PSCustomObject]@{}
-        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
-            param($config)
-            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-            $taskName = "DailyMotivation_$taskId"
-            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
-            return @{ Success = $true; TaskId = $taskId }
-        }
-        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'UnscheduleTask' -Value {
-            param($taskId)
-            $tasks = Get-TasksJson
-            $target = $tasks | Where-Object { $_.task_id -eq $taskId }
-            if ($target) {
-                Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
-            }
-        }
+        # No Platform adapter here: use the real Windows path so that
+        # Unregister-ScheduledTask goes through the Pester mock (BeforeAll scope)
+        # and both task removal and -Invoke assertions work correctly.
+        $script:Platform = $null
     }
 
     AfterEach {
-        # Reset platform adapter so other tests aren't affected
         $script:Platform = $null
     }
 

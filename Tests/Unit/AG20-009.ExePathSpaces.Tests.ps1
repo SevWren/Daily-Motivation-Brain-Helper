@@ -39,6 +39,7 @@ BeforeAll {
     Mock New-ScheduledTaskTrigger {
         return [PSCustomObject]@{
             StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss')
+            EndBoundary   = ''
         }
     }
     Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
