@@ -155,24 +155,12 @@ Describe 'AG10-003: No Path Validation Before Registry/Task Storage' -Skip:(-not
 
 Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-not $IsWindows) {
     BeforeEach {
-        # Reset mock state before each test
+        # Reset mock state and tasks.json before each test
         $script:SecurityMockedTasks = @{}
-        # Inject platform adapter to bypass CIM type validation issues.
-        # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
-        $script:Platform = [PSCustomObject]@{}
-        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
-            param($config)
-            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-            $taskName = "DailyMotivation_$taskId"
-            # Directly insert into SecurityMockedTasks — ScriptMethods bypass Pester mock scope
-            # so calling Register-ScheduledTask here would invoke the real cmdlet.
-            $script:SecurityMockedTasks[$taskName] = [PSCustomObject]@{
-                TaskName  = $taskName
-                Principal = [PSCustomObject]@{ RunLevel = 'Limited' }
-                Triggers  = @()
-            }
-            return @{ Success = $true; TaskId = $taskId }
-        }
+        '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
+        # No Platform adapter: test through real Windows path so RunLevel is actually set
+        # by New-ScheduledTaskPrincipal and stored via Register-ScheduledTask mock.
+        $script:Platform = $null
     }
 
     AfterEach {

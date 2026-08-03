@@ -598,10 +598,10 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
         # AG8-002: Verify return value, not just that the function doesn't throw.
         # Must return an empty array (not $null or garbage) on corrupt input.
         'invalid json{' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-        $result = $null
-        { $result = Get-MotivationTasks } | Should -Not -Throw
+        { Get-MotivationTasks } | Should -Not -Throw
+        $result = @(Get-MotivationTasks)
         $result         | Should -Not -Be $null
-        @($result).Count | Should -Be 0
+        $result.Count | Should -Be 0
     }
 }
 

@@ -49,17 +49,20 @@ BeforeAll {
     }
 
     $script:MockedTasks = @{}
-    Mock Register-ScheduledTask {
+    # -RemoveParameterValidation bypasses CimInstance[] type enforcement on Action/Trigger/Settings/Principal
+    # so PSCustomObject values from mocked New-ScheduledTask* cmdlets are accepted.
+    Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings', 'Principal' {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force, $ErrorAction)
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
     }
     Mock Get-ScheduledTask {
         param($TaskName, $ErrorAction)
+        if ($TaskName -eq 'DailyMotivation_*') { return @($script:MockedTasks.Values) }
         if ($script:MockedTasks.ContainsKey($TaskName)) {
             return $script:MockedTasks[$TaskName]
         }
-        throw "Task not found: $TaskName"
+        return $null
     }
     Mock Unregister-ScheduledTask {}
 }

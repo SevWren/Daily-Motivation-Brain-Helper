@@ -172,7 +172,7 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         Mock New-ScheduledTaskTrigger { return [PSCustomObject]@{ StartBoundary = ((Get-Date).AddHours(2)).ToString('yyyy-MM-ddTHH:mm:ss'); EndBoundary = '' } }
         Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
         Mock New-ScheduledTaskPrincipal { return [PSCustomObject]@{} }
-        Mock Register-ScheduledTask {
+        Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings', 'Principal' {
             param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
             # Track registered task
             $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
@@ -273,7 +273,7 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         $taskId = $result.TaskId
 
         # List tasks
-        $tasks = Get-MotivationTasks
+        $tasks = @(Get-MotivationTasks)
         $tasks.Count | Should -Be 1
         $tasks[0].task_id | Should -Be $taskId
 
@@ -281,7 +281,7 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         Remove-MotivationTask -TaskId $taskId
 
         # Verify removed
-        $tasks = Get-MotivationTasks
+        $tasks = @(Get-MotivationTasks)
         $tasks.Count | Should -Be 0
     }
 
@@ -292,7 +292,6 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         # Create first task
         $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
         Write-Host "DEBUG - r1.Success: $($r1.Success)"
-        Write-Host "DEBUG - r1.Error: $($r1.Error)"
         Write-Host "DEBUG - r1.IsDuplicate: $($r1.IsDuplicate)"
         Write-Host "DEBUG - r1.TaskId: $($r1.TaskId)"
         $r1.Success | Should -Be $true
@@ -303,7 +302,7 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         $r2.IsDuplicate | Should -Be $true
 
         # Verify only one task exists
-        $tasks = Get-MotivationTasks
+        $tasks = @(Get-MotivationTasks)
         $tasks.Count | Should -Be 1
     }
 }

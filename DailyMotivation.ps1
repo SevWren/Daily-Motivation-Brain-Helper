@@ -900,6 +900,7 @@ function Sync-TaskStatuses {
     catch { $osTasks = @() }
 
     foreach ($osTask in $osTasks) {
+        if ($null -eq $osTask -or -not $osTask.TaskName) { continue }
         if ($knownNames -contains $osTask.TaskName) { continue }
 
         # Parse folder_path from Description: "Daily Motivation Brain Helper - {FolderPath}"
@@ -972,14 +973,19 @@ function Remove-MotivationTask {
         # Verify unregister succeeded and handle failures properly
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
-            # Verify task was actually removed
-            $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction SilentlyContinue
-            if ($stillExists) {
-                throw "Task still exists after unregister attempt"
-            }
         }
         catch {
             # Don't remove from tasks.json if unregister failed (maintain consistency)
+            return $false
+        }
+        # Verify task was actually removed — use its own try/catch because
+        # Get-ScheduledTask throws for not-found tasks (which is the success case).
+        $stillExists = $null
+        try {
+            $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction Stop
+        }
+        catch { $stillExists = $null }
+        if ($stillExists) {
             return $false
         }
     }

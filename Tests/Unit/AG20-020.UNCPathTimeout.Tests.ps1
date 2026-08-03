@@ -184,7 +184,15 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
 
         Mock Register-ScheduledTask { return $null }
         Mock Unregister-ScheduledTask { }
-        Mock Get-ScheduledTask { return $null }
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            # Return empty for wildcard (prevents Sync-TaskStatuses phantom recovery).
+            # Return null for specific task (no collision, no "still exists" after unregister).
+            if ($TaskName -eq 'DailyMotivation_*') { return @() }
+            return $null
+        }
+        # Ensure no Platform adapter from other test files bleeds into this scope
+        $script:Platform = $null
     }
 
     AfterAll {
