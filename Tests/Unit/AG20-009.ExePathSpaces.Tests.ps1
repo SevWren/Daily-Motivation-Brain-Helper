@@ -43,15 +43,15 @@ BeforeAll {
         }
     }
     Mock New-ScheduledTaskSettingsSet { return [PSCustomObject]@{} }
-    Mock New-ScheduledTaskPrincipal {
-        param($UserId, $LogonType, $RunLevel)
-        return [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
-    }
+    # New-ScheduledTaskPrincipal is a native Windows cmdlet that returns a real CimInstance.
+    # -RemoveParameterValidation strips ValidateXxx attributes but NOT type constraints, so passing
+    # a PSCustomObject as Principal still fails with argument-transformation errors. Let the real
+    # cmdlet run so Principal is always a proper CimInstance.
 
     $script:MockedTasks = @{}
-    # -RemoveParameterValidation bypasses CimInstance[] type enforcement on Action/Trigger/Settings/Principal
+    # -RemoveParameterValidation bypasses CimInstance[] type enforcement on Action/Trigger/Settings
     # so PSCustomObject values from mocked New-ScheduledTask* cmdlets are accepted.
-    Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings', 'Principal' {
+    Mock Register-ScheduledTask -RemoveParameterValidation 'Action', 'Trigger', 'Settings' {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force, $ErrorAction)
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
