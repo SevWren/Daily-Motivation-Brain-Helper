@@ -24,6 +24,9 @@ BeforeAll {
 
     # Dot-source without executing the entry point.
     . $script:ScriptPath -NoRun
+
+    # Capture error count IMMEDIATELY after dot-source, before any other BeforeAll blocks run.
+    $script:ErrorCountAfterDotSource = $Error.Count
 }
 
 AfterAll {
@@ -38,19 +41,24 @@ AfterAll {
 # ---------------------------------------------------------------------------
 Describe '-NoRun: All functions defined in DailyMotivation.ps1 are reachable' {
 
-    # Dynamically build the expected function list from the script source.
-    # Only match lines that start at column 0 (^) to exclude nested helper functions.
-    $script:DiscoveredFunctions = Select-String `
-        -Pattern '^function\s+([A-Za-z][\w-]*)' `
-        -Path $script:ScriptPath |
-        ForEach-Object { $_.Matches.Groups[1].Value }
+    BeforeAll {
+        # Dynamically build the expected function list from the script source.
+        # Only match lines that start at column 0 (^) to exclude nested helper functions.
+        $script:DiscoveredFunctions = Select-String `
+            -Pattern '^function\s+([A-Za-z][\w-]*)' `
+            -Path $script:ScriptPath |
+            ForEach-Object { $_.Matches.Groups[1].Value }
+    }
 
     It 'Script contains at least one function definition' {
         $script:DiscoveredFunctions.Count | Should -BeGreaterThan 0
     }
 
-    It "Function '<_>' is reachable via Get-Command after dot-source" -ForEach $script:DiscoveredFunctions {
-        (Get-Command -Name $_ -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
+    It 'All functions discovered in DailyMotivation.ps1 are reachable via Get-Command after dot-source' {
+        foreach ($fn in $script:DiscoveredFunctions) {
+            (Get-Command -Name $fn -ErrorAction SilentlyContinue) |
+                Should -Not -BeNullOrEmpty -Because "function '$fn' must be reachable after -NoRun dot-source"
+        }
     }
 }
 
@@ -60,8 +68,8 @@ Describe '-NoRun: All functions defined in DailyMotivation.ps1 are reachable' {
 Describe '-NoRun: Dot-sourcing produces zero $Error entries' {
 
     It 'Error stream should be empty after dot-source with -NoRun' {
-        # $Error was cleared in BeforeAll immediately before the dot-source.
-        $Error.Count | Should -Be 0
+        # Count captured in outer BeforeAll immediately after dot-source.
+        $script:ErrorCountAfterDotSource | Should -Be 0
     }
 }
 

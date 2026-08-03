@@ -17,6 +17,8 @@ AfterAll {
 
 Describe 'Get-Config old schema upgrade path' {
     BeforeEach {
+        # Clear platform adapter so Initialize-AppData uses $env:APPDATA, not HeadlessPlatform.
+        $script:Platform = $null
         $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_OldSchema_$(New-Guid)"
         Initialize-AppData
         # Clear cache so every test reads directly from disk
@@ -47,7 +49,8 @@ Describe 'Get-Config old schema upgrade path' {
         # The valid key that IS present must survive — only the missing key gets a default
         @{ default_trigger_hour = 9 } |
             ConvertTo-Json |
-            Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
+            Set-Content $script:ConfigPath -Encoding UTF8
+        $script:ConfigCache = $null; $script:ConfigCacheMTime = $null
 
         $cfg = Get-Config
 
@@ -68,7 +71,8 @@ Describe 'Get-Config old schema upgrade path' {
     It 'Preserves the present key task_warning_threshold = 3 when default_trigger_hour is missing' {
         @{ task_warning_threshold = 3 } |
             ConvertTo-Json |
-            Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
+            Set-Content $script:ConfigPath -Encoding UTF8
+        $script:ConfigCache = $null; $script:ConfigCacheMTime = $null
 
         $cfg = Get-Config
 

@@ -73,12 +73,13 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
                 throw [System.IO.IOException]::new("Network path unreachable")
             } -ParameterFilter { $Path -like '\\*' }
 
-            # The function must not propagate the exception to the caller
-            $result = $null
-            { $result = Invoke-FolderScheduling -FolderPath "\\server\share\folder" -TriggerTime (Get-Date).AddHours(1) } |
+            # The function must not propagate the exception to the caller.
+            # Use $script: scope so the result is accessible after the Should -Not -Throw scriptblock.
+            $script:UncThrowResult = $null
+            { $script:UncThrowResult = Invoke-FolderScheduling -FolderPath "\\server\share\folder" -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
 
-            $result | Should -Not -BeNullOrEmpty
+            $script:UncThrowResult | Should -Not -BeNullOrEmpty
         }
 
         It "returns a result object (not null) when Test-Path throws IOException for a UNC path" {
@@ -98,17 +99,17 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
                 throw [System.IO.IOException]::new("Network path unreachable")
             } -ParameterFilter { $Path -like '\\*' }
 
-            $result = $null
-            { $result = Invoke-FolderScheduling -FolderPath "\\nas\shared\docs" -TriggerTime (Get-Date).AddHours(1) } |
+            $script:UncGracefulResult = $null
+            { $script:UncGracefulResult = Invoke-FolderScheduling -FolderPath "\\nas\shared\docs" -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
 
             # Either the function succeeded despite the throw (UNC validation skip) or it
             # returned a structured failure. Either way the result must be a hashtable.
-            $result | Should -Not -BeNullOrEmpty
+            $script:UncGracefulResult | Should -Not -BeNullOrEmpty
 
-            if ($result.Success -eq $false) {
+            if ($script:UncGracefulResult.Success -eq $false) {
                 # If the implementation chose to surface the failure, an Error field is expected
-                $result.Error | Should -Not -BeNullOrEmpty
+                $script:UncGracefulResult.Error | Should -Not -BeNullOrEmpty
             }
         }
     }
@@ -134,17 +135,17 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
             # With HeadlessPlatform injected, Test-Path is skipped for both; confirm neither throws.
             Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
 
-            $uncResult   = $null
-            $localResult = $null
+            $script:UncConsistResult   = $null
+            $script:LocalConsistResult = $null
 
-            { $uncResult   = Invoke-FolderScheduling -FolderPath "\\server\share\missing" -TriggerTime (Get-Date).AddHours(1) } |
+            { $script:UncConsistResult   = Invoke-FolderScheduling -FolderPath "\\server\share\missing" -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
-            { $localResult = Invoke-FolderScheduling -FolderPath "/nonexistent/path/xyz"  -TriggerTime (Get-Date).AddHours(1) } |
+            { $script:LocalConsistResult = Invoke-FolderScheduling -FolderPath "/nonexistent/path/xyz"  -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
 
             # Both must return a result object — no silent nulls
-            $uncResult   | Should -Not -BeNullOrEmpty
-            $localResult | Should -Not -BeNullOrEmpty
+            $script:UncConsistResult   | Should -Not -BeNullOrEmpty
+            $script:LocalConsistResult | Should -Not -BeNullOrEmpty
         }
     }
 

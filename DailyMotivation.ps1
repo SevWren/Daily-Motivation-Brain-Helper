@@ -261,6 +261,17 @@ function Get-Config {
 
         $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
 
+        # Ensure both schema fields exist on the PSCustomObject before accessing them.
+        # ConvertFrom-Json omits keys that were absent in the file; accessing missing properties
+        # throws PropertyNotFoundException under StrictMode (e.g., inside Pester test runs).
+        # Add-Member is a no-op here for the happy path (property already exists).
+        if ($cfg.PSObject.Properties.Match('default_trigger_hour').Count -eq 0) {
+            $cfg | Add-Member -NotePropertyName 'default_trigger_hour' -NotePropertyValue $null
+        }
+        if ($cfg.PSObject.Properties.Match('task_warning_threshold').Count -eq 0) {
+            $cfg | Add-Member -NotePropertyName 'task_warning_threshold' -NotePropertyValue $null
+        }
+
         # Validate config properties to prevent downstream errors
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
@@ -650,12 +661,11 @@ function New-MotivationTask {
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
         # Platform adapter handles task scheduling
-        # Use call operator (&) because ScheduleTask is a scriptblock property, not a method
-        $taskResult = & $script:Platform.ScheduleTask @{
+        $taskResult = $script:Platform.ScheduleTask(@{
             FolderPath = $FolderPath
             TriggerTime = $TriggerTime
             ExePath = if ($script:ExePath) { $script:ExePath } else { "DailyMotivation.exe" }
-        }
+        })
 
         if (-not $taskResult.Success) {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Platform adapter failed" }
@@ -951,8 +961,7 @@ function Remove-MotivationTask {
 
     # Use platform adapter if available (for cross-platform testing)
     if ($script:Platform) {
-        # Use call operator (&) because UnscheduleTask is a scriptblock property, not a method
-        & $script:Platform.UnscheduleTask $TaskId
+        $script:Platform.UnscheduleTask($TaskId)
     }
     else {
         # Windows-specific Task Scheduler logic
