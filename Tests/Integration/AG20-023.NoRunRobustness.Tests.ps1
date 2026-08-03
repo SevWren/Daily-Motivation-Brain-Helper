@@ -9,10 +9,11 @@
       4. Does NOT invoke Register-ScheduledTask, Get-ScheduledTask, or registry cmdlets.
 #>
 
-BeforeAll {
-    $script:RepoRoot   = Join-Path $PSScriptRoot '..\..'
-    $script:ScriptPath = Join-Path $script:RepoRoot 'DailyMotivation.ps1'
+# Set at file scope so Pester's discovery phase can access these for -ForEach population.
+$script:RepoRoot   = Join-Path $PSScriptRoot '..\..'
+$script:ScriptPath = Join-Path $script:RepoRoot 'DailyMotivation.ps1'
 
+BeforeAll {
     # Redirect APPDATA to a clean temp dir so any accidental file I/O is isolated and detectable.
     $script:OriginalAppData = $env:APPDATA
     $script:IsolatedAppData = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_AG20023_$(New-Guid)"
