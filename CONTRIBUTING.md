@@ -76,44 +76,46 @@ See [docs/testing/strategy.md](docs/testing/strategy.md).
 
 ## AI-assisted development (Claude skills)
 
-This project uses Claude Code as an AI development agent. Custom instructions for that agent are stored in `CLAUDE/skills/`. A **skill** is a set of instructions that tells the agent what steps to follow when you type a command such as `/implement` in a chat session.
+This project uses Claude Code as an AI development agent. [CLAUDE.md](CLAUDE.md) is the project memory file that Claude Code automatically reads at the start of every session — it contains architecture notes, mandates, and persistent project context. Separately, this project defines a set of **custom slash commands** (called skills) stored in `CLAUDE/skills/`. Each skill is a Markdown file; invoking `/skill-name` in a Claude Code session executes the instructions in that file. (In this workflow, "issue" and "ticket" both refer to GitHub Issues.)
 
-The skills listed below are the ones actively used in day-to-day development. They define the exact workflow used in this repository: which commands to run, in what order, and what constraints apply. (In this workflow, "issue" and "ticket" both refer to GitHub Issues.)
+The skills listed below are the ones actively used in day-to-day development. They define the exact workflow used in this repository: which commands to run, in what order, and what constraints apply.
 
 You do not need to use these skills yourself, but understanding them tells you what to expect when reviewing AI-generated contributions and what standards an agent-generated PR must meet.
 
 ### Standard development workflow
 
-The skill names below (e.g., `/wayfinder`, `/implement`) are Claude agent commands defined in `CLAUDE/skills/`. Each is described in the Skill reference section further below.
+```mermaid
+flowchart TD
+    START(["New work arrives"]) --> SCOPE{"Scope clear?"}
 
-```
-New feature or bug report arrives
-  │
-  ├─ Is the scope clear?
-  │     No → /wayfinder  (chart a multi-session map on the issue tracker)
-  │     Yes → continue
-  │
-  ├─ Design unclear? → /grill-me  (structured interview to sharpen the design)
-  │
-  ├─ Write spec → /to-spec  (posts a GitHub issue with ready-for-agent label)
-  │     (optional — for small, clearly scoped tasks you may go directly to /implement)
-  │
-  ├─ Break spec into tickets → /to-tickets  (small, end-to-end slices of work)
-  │
-  ├─ Write agent briefs → /triage  (writes agent briefs on ready-for-agent issues)
-  │
-  ├─ Build → /implement
-  │     └─ internally drives /tdd  (write a failing test first, then make it pass)
-  │     └─ ends with /code-review  (standards axis + spec axis, parallel sub-agents)
-  │
-  ├─ Bug during work? → /diagnosing-bugs
-  │     └─ IMPORTANT: if the bug touches Task Scheduler code, read the MANDATE
-  │        section of CLAUDE.md first — that area has a documented history of fixes
-  │        that passed automated tests but still failed on a real Windows machine
-  │
-  ├─ Session getting long? → /handoff
-  │
-  └─ Periodic housekeeping → /repo-doc-audit  (ad hoc, not on a schedule)
+    SCOPE -- No --> WF["/wayfinder\nCreate investigation map on issue tracker"]
+    WF --> SCOPE
+
+    SCOPE -- Yes --> DESIGN{"Design unclear?"}
+
+    DESIGN -- Yes --> GM["/grill-me\nSharpen design via structured interview"]
+    GM --> DM["/domain-modeling\nRecord ADR in docs/adr/ · update CONTEXT.md"]
+    DM --> SPECQ
+
+    DESIGN -- No --> SPECQ{"Write spec?"}
+
+    SPECQ -- Yes --> TS["/to-spec\nPublish spec as GitHub issue"]
+    SPECQ -- "No — small task" --> IMP
+
+    TS --> TT["/to-tickets\nBreak spec into vertical-slice issues"]
+    TT --> TR["/triage\nWrite agent briefs on issues"]
+    TR --> IMP
+
+    IMP["/implement\nBuild · commit to branch"] --> TDD["/tdd\nWrite failing test · make it pass · repeat"]
+    TDD --> CR["/code-review\nStandards axis · Spec axis"]
+    CR --> DONE(["Work complete"])
+
+    IMP -.->|Bug found| DIAG["/diagnosing-bugs\nBuild feedback loop · test hypotheses\n⚠ Task Scheduler: read CLAUDE.md MANDATE"]
+    DIAG -.->|Resolved| IMP
+
+    IMP -.->|Session long| HO["/handoff\nCompact session for next agent"]
+
+    DONE -.->|Ad hoc| RA["/repo-doc-audit\nAudit docs/ tree"]
 ```
 
 ### Skill reference
