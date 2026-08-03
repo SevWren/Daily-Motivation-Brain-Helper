@@ -14,6 +14,10 @@ $script:RepoRoot   = Join-Path $PSScriptRoot '..\..'
 $script:ScriptPath = Join-Path $script:RepoRoot 'DailyMotivation.ps1'
 
 BeforeAll {
+    # Ensure path vars are set during the run phase as well as discovery phase.
+    $script:RepoRoot   = Join-Path $PSScriptRoot '..\..'
+    $script:ScriptPath = Join-Path $script:RepoRoot 'DailyMotivation.ps1'
+
     # Redirect APPDATA to a clean temp dir so any accidental file I/O is isolated and detectable.
     $script:OriginalAppData = $env:APPDATA
     $script:IsolatedAppData = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_AG20023_$(New-Guid)"
