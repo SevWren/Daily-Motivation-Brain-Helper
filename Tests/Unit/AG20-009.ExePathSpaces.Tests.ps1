@@ -29,25 +29,21 @@ BeforeAll {
     # so that BeforeEach can safely save/restore it under Set-StrictMode -Version Latest.
     $script:ExePath = $null
 
-    $script:CapturedActions = @()
-    # Capture the Execute/Argument args for assertion, then delegate to the real cmdlet so that
-    # Register-ScheduledTask receives a genuine CimInstance (not a PSCustomObject).
-    # -RemoveParameterValidation only strips ValidateXxx attributes, NOT type constraints, so
-    # passing a PSCustomObject as Action still fails with argument-transformation errors.
-    # Module-qualified call (ScheduledTasks\New-ScheduledTaskAction) bypasses the Pester mock
-    # proxy and invokes the real implementation.
-    Mock New-ScheduledTaskAction {
-        param($Execute, $Argument)
-        $script:CapturedActions += [PSCustomObject]@{ Execute = $Execute; Argument = $Argument }
-        ScheduledTasks\New-ScheduledTaskAction -Execute $Execute -Argument $Argument
-    }
-
-    # New-ScheduledTaskTrigger/Settings/Principal are native Windows cmdlets that return real
-    # CimInstances. Let them run for real so Register-ScheduledTask receives proper types.
-
+    # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return real
+    # CimInstances. Mocking any of them with PSCustomObjects and -RemoveParameterValidation fails
+    # because that flag strips ValidateXxx attributes only — NOT type constraints.
+    # Let all helper cmdlets run for real.
+    #
+    # Capture Execute/Arguments from Register-ScheduledTask instead: the real CIM action object
+    # has .Execute and .Arguments properties that reflect exactly what DailyMotivation.ps1 passed.
+    $script:CapturedRegistrations = @()
     $script:MockedTasks = @{}
     Mock Register-ScheduledTask {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+        $script:CapturedRegistrations += [PSCustomObject]@{
+            ActionExecute   = $Action.Execute
+            ActionArguments = $Action.Arguments
+        }
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
     }
@@ -74,9 +70,9 @@ AfterAll {
 Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $IsWindows) {
 
     BeforeEach {
-        # Reset captured actions and mocked task registry for each test.
-        $script:CapturedActions = @()
-        $script:MockedTasks     = @{}
+        # Reset captured registrations and mocked task registry for each test.
+        $script:CapturedRegistrations = @()
+        $script:MockedTasks           = @{}
 
         # Reset tasks.json to empty so duplicate-detection does not interfere.
         if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
@@ -96,29 +92,32 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
     Context 'New-ScheduledTaskAction -Execute argument' {
 
         It 'Should call New-ScheduledTaskAction exactly once when ExePath contains spaces' {
+            # Verified via Register-ScheduledTask capture: exactly one registration means
+            # New-ScheduledTaskAction was called exactly once.
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
 
-            Should -Invoke New-ScheduledTaskAction -Times 1 -Exactly
+            $script:CapturedRegistrations.Count | Should -Be 1 `
+                -Because 'New-MotivationTask should register exactly one task action'
         }
 
         It 'Should pass ExePath verbatim (no added quotes) as the -Execute parameter' {
             # Task Scheduler handles path-with-spaces quoting internally;
             # the caller must NOT wrap the path in extra double-quotes.
+            # Verified via the .Execute property of the real CIM action object.
             $expectedExePath = 'C:\Program Files\Daily Motivation\DailyMotivation.exe'
 
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
 
-            $script:CapturedActions.Count | Should -Be 1
-            $script:CapturedActions[0].Execute | Should -Be $expectedExePath
+            $script:CapturedRegistrations[0].ActionExecute | Should -Be $expectedExePath
         }
 
         It 'Should not wrap the ExePath in double-quote characters' {
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
 
-            $passedExecute = $script:CapturedActions[0].Execute
+            $passedExecute = $script:CapturedRegistrations[0].ActionExecute
             # The string must not start and end with a double-quote character.
             $passedExecute | Should -Not -Match '^".*"$' `
                 -Because 'New-ScheduledTaskAction -Execute must receive a bare path, not a shell-quoted string'
@@ -128,7 +127,8 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
 
-            $script:CapturedActions[0].Argument | Should -Be '/popup'
+            # .Arguments is the CIM property name corresponding to New-ScheduledTaskAction -Argument
+            $script:CapturedRegistrations[0].ActionArguments | Should -Be '/popup'
         }
     }
 
