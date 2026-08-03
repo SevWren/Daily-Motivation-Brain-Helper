@@ -149,7 +149,7 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
             @(Get-TasksJson).Count | Should -Be 1
         }
 
-        It 'Should set task_name to the DailyMotivation_<id> format' {
+        It 'Should set task_name to DailyMotivation_ followed by a 16-char hex id' {
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                -TriggerTime ((Get-Date).AddHours(2)) | Out-Null
 
