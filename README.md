@@ -6,6 +6,25 @@
 
 ---
 
+## Project status
+
+**Current development is taking place on the `project-restart-pwsh7` branch.**
+
+The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7**. The migration's primary goal is to enable a cross-platform development workflow so contributors can work from Linux and macOS environments while the codebase remains consistent.
+
+Important notes:
+
+- Development tooling and active contributions are moving to PowerShell 7 to support non-Windows development environments.
+- Windows 10/11 remains the primary runtime target for end users; runtime support on non-Windows platforms is minimal and limited to development scenarios unless a clear need arises.
+- For the latest features and ongoing development, use the `project-restart-pwsh7` branch. The `main` branch continues to contain the stable Windows PowerShell 5.1 implementation and is the recommended release for users running the application on Windows.
+
+## Branches
+
+- `main` — Stable, user-targeted codebase (Windows PowerShell 5.1).
+- `project-restart-pwsh7` — Active development branch targeting PowerShell 7 (recommended for contributors who want the latest features and the cross-platform development setup).
+
+---
+
 ## How It Works
 
 1. **Open the app** -- `MainApp.ps1`
@@ -43,11 +62,8 @@ Daily-Motivation-Brain-Helper/
 |
 +-- Tests/                        # Pester 5.x test suite (180+ tests)
 |   +-- Unit/
-|   |   +-- ConfigManager.Tests.ps1     # 100+ tests for ConfigManager module
-|   |   +-- TaskScheduler.Tests.ps1     # 80+ tests for TaskScheduler module
 |   +-- Integration/
-|   |   +-- Initialization.Tests.ps1    # Integration tests (Issues #2-#8)
-|   +-- Fixtures/                # Test data files
+|   +-- Fixtures/
 |   +-- README.md                # Test suite documentation
 |
 +-- .build.ps1                    # Invoke-Build automation (12 tasks)
@@ -55,22 +71,13 @@ Daily-Motivation-Brain-Helper/
 +-- .PSScriptAnalyzerSettings.psd1  # Code quality configuration
 +-- PesterConfiguration.psd1      # Test suite configuration
 +-- TESTING.md                    # Testing guide
-+-- docs/reports/                     # Historical session reports and audit artifacts
++-- docs/reports/                 # Historical session reports and audit artifacts
 |
 +-- .github/workflows/
 |   +-- test.yml                  # CI/CD pipeline (automated tests)
 |
 +-- docs/                         # All planning and specification documents
     +-- README.md                 # Document index
-    +-- SPRINT_PLAN.md            # 16-task sprint plan (4 sprints)
-    +-- FEATURE_BRAINSTORM.md     # 14 approved features + approval record
-    +-- DOC_IMPACT_ANALYSIS.md    # Impact analysis (17 docs, 132 changes)
-    +-- NEXT_STEPS.md             # Original 13-task backlog
-    +-- PRD.md                    # Product Requirements (FR-001 -- FR-025)
-    +-- USER_STORIES.md           # US-001 -- US-018
-    +-- ARCHITECTURE.md           # System design and module map
-    +-- UX_SPEC.md                # Wireframes and tooltip spec
-    +-- ... (23 more planning docs)
 ```
 
 ---
@@ -86,44 +93,31 @@ Daily-Motivation-Brain-Helper/
 
 ### Steps
 
-**1.** Extract to a folder, e.g. `C:\DailyMotivation\`
-
-**2.** Right-click `UpdateScheduledTask.ps1` -- Run with PowerShell (as Administrator)  
- This copies modules to `%APPDATA%` and initializes config files.
-
-**3.** Run the app:
+1. Extract to a folder, e.g. `C:\DailyMotivation\`
+2. Right-click `UpdateScheduledTask.ps1` -- Run with PowerShell (as Administrator)  
+   This copies modules to `%APPDATA%` and initializes config files.
+3. Run the app:
 
 ```powershell
 powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainApp.ps1"
 ```
 
-**4.** (Optional) Install Explorer right-click integration:  
- Right-click `src\ShellExtension\Register-ShellExtension.ps1` -- Run as Administrator
+4. (Optional) Install Explorer right-click integration:  
+   Right-click `src\ShellExtension\Register-ShellExtension.ps1` -- Run as Administrator
 
 ---
 
 ## Features
 
-| Feature                    | Description                                   |
-| -------------------------- | --------------------------------------------- |
-| Folder Picker + Drag-Drop  | Select via dialog or drag from Explorer       |
-| Schedule Today or Tomorrow | Option shown when before 2 PM                 |
-| Remember Last Folder       | One-click reschedule banner on next launch    |
-| Recent Folders List        | Top 5 previously scheduled folders            |
-| Undo Schedule              | 30-second grace period after scheduling       |
-| Duplicate Warning          | Warns before creating a duplicate task        |
-| Motivational Popup         | 10 default messages, random selection         |
-| Folder Name in Popup       | "Opening: FolderName" subtitle                |
-| Snooze Duration Choice     | 5 / 15 / 30 / 60 minute options               |
-| Dismiss for Today          | Cancel all re-triggers without opening folder |
-| Moved Folder Re-Pick       | Re-pick if folder was renamed/moved           |
-| First-Run Welcome Screen   | One-time onboarding overlay                   |
-| Tooltips on All Controls   | Plain-English hover text on every button      |
-| Task History Viewer        | In-app log of past outcomes                   |
-| Task Management            | View and delete scheduled tasks               |
-| Explorer Shell Extension   | Right-click any folder to schedule it         |
-| Named Mutex                | Prevents duplicate popups                     |
-| %APPDATA% Config           | User never edits any file                     |
+- Folder Picker + Drag-Drop
+- Schedule Today or Tomorrow (option shown when before 2 PM)
+- Remember Last Folder
+- Recent Folders List
+- Undo Schedule (30-second grace)
+- Duplicate Warning
+- Motivational Popup with random selection
+- Snooze and Dismiss options
+- Explorer Shell Extension (optional)
 
 ---
 
@@ -161,32 +155,30 @@ Invoke-Build QuickBuild
 Invoke-Build Release
 ```
 
-### Test Coverage
-
-- **ConfigManager.psm1**: ~90% coverage (100+ tests)
-- **TaskScheduler.psm1**: ~85% coverage (80+ tests)
-- **Integration**: End-to-end scenarios for initialization bugs
-
 See [TESTING.md](TESTING.md) and [Tests/README.md](Tests/README.md) for details.
 
 ---
 
-## Diagnostics
+## Contributing
 
-| File                                                  | Purpose                          |
-| ----------------------------------------------------- | -------------------------------- |
-| `%TEMP%\DailyMotivation_debug.log`                    | Popup script debug trace         |
-| `%APPDATA%\DailyMotivationBrainHelper\popup_log.txt`  | Outcome history (pipe-delimited) |
-| `%APPDATA%\DailyMotivationBrainHelper\launch_log.txt` | Launcher log                     |
+Contributions are welcome. To get started:
+
+1. Fork the repository and create a branch for your change.
+2. If your change is a runtime improvement or a Windows-specific fix, target `main`.
+3. If your change is part of the PowerShell 7 migration or cross-platform tooling, target `project-restart-pwsh7` and include migration notes.
+
+When submitting pull requests, state which branch your change targets (`main` or `project-restart-pwsh7`) and whether it requires PowerShell 5.1 or PowerShell 7 at runtime.
 
 ---
 
-## Documentation
+## Support and feedback
 
-See [`docs/README.md`](docs/README.md) for the full planning document index.
+Open an issue for bugs, feature requests, or questions. For development-related discussions, referencing the branch (`main` or `project-restart-pwsh7`) in your issue helps route feedback.
 
 ---
 
 ## License
 
 MIT -- see [LICENSE](LICENSE)
+
+_Last updated: 2026-08-03_
