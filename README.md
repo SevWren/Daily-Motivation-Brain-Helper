@@ -1,7 +1,7 @@
 # Daily Motivation Brain Helper
 
-> Schedule your working folder for tomorrow in 2 clicks.
-> At 2 PM, a motivational popup opens it for you.  
+> Schedule your working folder in 2 clicks.
+> At 2 PM, a motivational popup opens it for you.
 > No code. No config files. No manual steps.
 
 ---
@@ -97,8 +97,8 @@ Daily-Motivation-Brain-Helper/
 ### Steps
 
 1. Extract to a folder, e.g. `C:\DailyMotivation\`
-2. Right-click `UpdateScheduledTask.ps1` — Run with PowerShell (as Administrator)
-   Running this script copies modules to `%APPDATA%` and initializes the config files.
+2. Right-click `UpdateScheduledTask.ps1` — Run with PowerShell (as Administrator).
+   This copies modules to `%APPDATA%` and initializes the config files.
 3. Run the app:
 
 ```powershell
@@ -113,7 +113,7 @@ powershell.exe -STA -ExecutionPolicy Bypass -File "C:\DailyMotivation\src\MainAp
 ## Features
 
 - Folder Picker + Drag-Drop
-- Schedule Today or Tomorrow (today option available before 2 PM only)
+- Schedule Today or Tomorrow (scheduling for today requires doing so before 2 PM)
 - Remember Last Folder
 - Recent Folders List
 - Undo Schedule (30-second grace)
