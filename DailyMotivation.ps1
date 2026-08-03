@@ -795,9 +795,8 @@ function New-MotivationTask {
                 Principal   = $principal
                 Description = $safeDescription
                 Force       = $true
-                ErrorAction = 'Stop'
             }
-            Register-ScheduledTask @registerParams | Out-Null
+            Register-ScheduledTask @registerParams -ErrorAction Stop | Out-Null
         }
         catch {
             $errorMsg = $_.Exception.Message

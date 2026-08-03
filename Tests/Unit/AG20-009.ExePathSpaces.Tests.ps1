@@ -143,6 +143,7 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
             $result = New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                          -TriggerTime ((Get-Date).AddHours(2))
 
+            Write-Host "AG20-009 Ctx2: Success=$($result.Success) Error='$($result['Error'])' IsDuplicate=$($result.IsDuplicate) TaskId=$($result.TaskId)"
             $result.Success | Should -Be $true
         }
 
