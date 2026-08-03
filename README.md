@@ -10,19 +10,18 @@
 
 **Current development is taking place on the `project-restart-pwsh7` branch.**
 
-The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7**. The migration's primary goal is to enable a cross-platform development workflow so contributors can work from Linux and macOS environments while the codebase remains consistent.
+The project is being migrated from **Windows PowerShell 5.1** to **PowerShell 7**. The migration's primary goal is to enable a cross-platform development workflow so contributors can develop, run tests, and iterate from cloud-based Linux environments (for example, Claude Code) as well as locally on Windows 10/11 while keeping a single shared codebase.
 
 Important notes:
 
-- Development tooling and active contributions are moving to PowerShell 7 to support non-Windows development environments.
-- PowerShell 7 enables development from cloud-based environments (for example, Claude Code or other cloud IDEs) running on Linux — developers can code, run tests, and contribute from those environments while targeting Windows for runtime.
-- Windows 10/11 remains the primary runtime target for end users; runtime support on non-Windows platforms is minimal and limited to development scenarios unless a clear need arises.
-- For the latest features and ongoing development, use the `project-restart-pwsh7` branch. The `main` branch continues to contain the stable Windows PowerShell 5.1 implementation and is the recommended release for users running the application on Windows.
+- PowerShell 7 permits development and test runs on non‑Windows systems and cloud IDEs running Linux; contributors can code and run the repository's tooling from those environments.
+- Windows 10/11 remains the primary runtime target for end users; runtime support outside Windows is currently minimal and intended for development/testing scenarios unless we decide to expand runtime support in the future.
+- For the latest features and active development, use `project-restart-pwsh7`. The `main` branch contains the stable Windows PowerShell 5.1 implementation and is the recommended release for end users running the application on Windows.
 
 ## Branches
 
-- `main` — Stable, user-targeted codebase (Windows PowerShell 5.1).
-- `project-restart-pwsh7` — Active development branch targeting PowerShell 7 (recommended for contributors who want the latest features and the cross-platform development setup).
+- `main` — Stable, user-targeted release (Windows PowerShell 5.1).
+- `project-restart-pwsh7` — Active development branch targeting PowerShell 7 (recommended for contributors who want cloud-based Linux development and the latest changes).
 
 ---
 
@@ -157,6 +156,13 @@ Invoke-Build Release
 ```
 
 See [TESTING.md](TESTING.md) and [Tests/README.md](Tests/README.md) for details.
+
+---
+
+## Development
+
+- Development environment: PowerShell 7 is the recommended environment for contributors. It enables development on cloud-based Linux environments (for example, Claude Code) and local development on Windows 10/11.
+- Example: in a Linux/cloud container with PowerShell 7 installed you can run tests with `pwsh -File ./Invoke-Tests.ps1`.
 
 ---
 
