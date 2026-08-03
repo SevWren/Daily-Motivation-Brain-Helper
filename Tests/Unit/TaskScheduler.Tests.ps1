@@ -216,16 +216,17 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
 
     Context 'Duplicate detection' {
         BeforeEach {
-            # Inject platform adapter to skip Sync-TaskStatuses and use consistent mocking
-            $script:Platform = [PSCustomObject]@{
-                ScheduleTask = {
-                    param($config)
-                    $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-                    $taskName = "DailyMotivation_$taskId"
-                    $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-                    Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
-                    return @{ Success = $true; TaskId = $taskId }
-                }
+            # Inject platform adapter to skip Sync-TaskStatuses and use consistent mocking.
+            # ScriptMethod is required because DailyMotivation.ps1 calls $script:Platform.ScheduleTask(@{...})
+            # using method-invocation syntax, which does not work with NoteProperty scriptblocks.
+            $script:Platform = [PSCustomObject]@{}
+            $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
+                param($config)
+                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+                $taskName = "DailyMotivation_$taskId"
+                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+                return @{ Success = $true; TaskId = $taskId }
             }
         }
 
@@ -352,7 +353,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         # AG8-004: Test that the retry loop actually executes when the first task name collides.
         # The mock returns a fake task on the first call (simulating collision), then $null.
         It 'Should retry and generate a new task ID on task name collision' {
-            $callCount = 0
+            $script:callCount = 0
             Mock Get-ScheduledTask {
                 $script:callCount++
                 if ($script:callCount -eq 1) {
@@ -369,7 +370,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         # AG5-025: Collision retry loop should sleep between attempts to avoid CPU spinning
         It 'Should sleep between collision retry attempts (AG5-025)' {
             $startTime = Get-Date
-            $callCount = 0
+            $script:callCount = 0
             Mock Get-ScheduledTask {
                 $script:callCount++
                 # Simulate 3 collisions before success
@@ -515,24 +516,23 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         $script:MockedTasks = @{}
 
-        # Inject platform adapter to prevent Sync-TaskStatuses from interfering with Get-MotivationTasks tests
-        # This matches the pattern used in Remove-MotivationTask tests
-        $script:Platform = [PSCustomObject]@{
-            ScheduleTask = {
-                param($config)
-                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-                $taskName = "DailyMotivation_$taskId"
-                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
-                return @{ Success = $true; TaskId = $taskId }
-            }
-            UnscheduleTask = {
-                param($taskId)
-                $tasks = Get-TasksJson
-                $target = $tasks | Where-Object { $_.task_id -eq $taskId }
-                if ($target) {
-                    Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
-                }
+        # Inject platform adapter to prevent Sync-TaskStatuses from interfering with Get-MotivationTasks tests.
+        # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
+        $script:Platform = [PSCustomObject]@{}
+        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
+            param($config)
+            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+            $taskName = "DailyMotivation_$taskId"
+            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+            return @{ Success = $true; TaskId = $taskId }
+        }
+        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'UnscheduleTask' -Value {
+            param($taskId)
+            $tasks = Get-TasksJson
+            $target = $tasks | Where-Object { $_.task_id -eq $taskId }
+            if ($target) {
+                Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
             }
         }
     }
@@ -605,31 +605,23 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         $script:MockedTasks = @{}
-        # Inject minimal platform adapter to skip Sync-TaskStatuses
-        # This prevents the sync logic from finding "orphaned" tasks in $script:MockedTasks
-        # and adding them back to tasks.json, which was causing test failures.
-        # The platform adapter delegates to the existing mocked cmdlets to maintain test assertions.
-        $script:Platform = [PSCustomObject]@{
-            ScheduleTask = {
-                param($config)
-                # Generate task ID and delegate to mocked Register-ScheduledTask
-                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-                $taskName = "DailyMotivation_$taskId"
-
-                # Call the mocked Register-ScheduledTask
-                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
-
-                return @{ Success = $true; TaskId = $taskId }
-            }
-            UnscheduleTask = {
-                param($taskId)
-                # Forward to the mocked Unregister-ScheduledTask to maintain test assertions
-                $tasks = Get-TasksJson
-                $target = $tasks | Where-Object { $_.task_id -eq $taskId }
-                if ($target) {
-                    Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
-                }
+        # Inject minimal platform adapter to skip Sync-TaskStatuses.
+        # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
+        $script:Platform = [PSCustomObject]@{}
+        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
+            param($config)
+            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+            $taskName = "DailyMotivation_$taskId"
+            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+            return @{ Success = $true; TaskId = $taskId }
+        }
+        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'UnscheduleTask' -Value {
+            param($taskId)
+            $tasks = Get-TasksJson
+            $target = $tasks | Where-Object { $_.task_id -eq $taskId }
+            if ($target) {
+                Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false
             }
         }
     }

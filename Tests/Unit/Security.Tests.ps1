@@ -98,9 +98,11 @@ Describe 'AG10-001: Unquoted Service Path / Code Injection' -Skip:(-not $IsWindo
             # Description should not contain command injection characters
             $task = Get-MotivationTasks | Where-Object { $_.task_id -eq $result.TaskId }
             $task | Should -Not -BeNullOrEmpty
-            # Description should be sanitized (no &, |, <, > characters)
-            if ($task.description) {
-                $task.description | Should -Not -Match '[&|<>]'
+            # Description should be sanitized (no &, |, <, > characters).
+            # Use PSObject.Properties to avoid PropertyNotFoundException under StrictMode.
+            $descValue = $task.PSObject.Properties['description'].Value
+            if ($descValue) {
+                $descValue | Should -Not -Match '[&|<>]'
             }
         }
     }
@@ -155,16 +157,16 @@ Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-
     BeforeEach {
         # Reset mock state before each test
         $script:SecurityMockedTasks = @{}
-        # Inject platform adapter to bypass CIM type validation issues
-        $script:Platform = [PSCustomObject]@{
-            ScheduleTask = {
-                param($config)
-                $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-                $taskName = "DailyMotivation_$taskId"
-                $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
-                Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
-                return @{ Success = $true; TaskId = $taskId }
-            }
+        # Inject platform adapter to bypass CIM type validation issues.
+        # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
+        $script:Platform = [PSCustomObject]@{}
+        $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
+            param($config)
+            $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
+            $taskName = "DailyMotivation_$taskId"
+            $trigger = New-ScheduledTaskTrigger -Once -At $config.TriggerTime
+            Register-ScheduledTask -TaskName $taskName -Trigger $trigger -Action $null
+            return @{ Success = $true; TaskId = $taskId }
         }
     }
 
@@ -278,8 +280,10 @@ Describe 'AG10-010: Task Description Contains User Data (Log Leakage)' -Skip:(-n
                 $tasks = Get-MotivationTasks | Where-Object { $_.task_id -eq $result.TaskId }
                 # Description should not contain raw path
                 foreach ($task in $tasks) {
-                    if ($task.description) {
-                        $task.description | Should -Not -Match [regex]::Escape($sensitivePath)
+                    # Use PSObject.Properties to avoid PropertyNotFoundException under StrictMode.
+                    $descValue = $task.PSObject.Properties['description'].Value
+                    if ($descValue) {
+                        $descValue | Should -Not -Match [regex]::Escape($sensitivePath)
                     }
                 }
             }
@@ -400,9 +404,10 @@ Describe 'AG10-017: ConvertFrom-Json Without Schema Validation' -Skip:(-not $IsW
             # Get-Config should handle gracefully
             { Get-Config } | Should -Not -Throw
 
-            # Should return defaults when config is invalid/too large
+            # Should return defaults when config is invalid/too large.
+            # Use PSObject.Properties to avoid PropertyNotFoundException under StrictMode.
             $config = Get-Config
-            $config.garbage_data | Should -BeNullOrEmpty
+            $config.PSObject.Properties['garbage_data'].Value | Should -BeNullOrEmpty
         }
     }
 }

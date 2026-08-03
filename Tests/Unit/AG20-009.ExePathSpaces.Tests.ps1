@@ -24,6 +24,11 @@ BeforeAll {
     Initialize-AppData
 
     # Capture every call to New-ScheduledTaskAction so tests can inspect arguments.
+    # ExePath is only set inside `if (-not $NoRun)` in DailyMotivation.ps1,
+    # so it is never assigned when dot-sourcing with -NoRun. Initialize it to $null
+    # so that BeforeEach can safely save/restore it under Set-StrictMode -Version Latest.
+    $script:ExePath = $null
+
     $script:CapturedActions = @()
     Mock New-ScheduledTaskAction {
         param($Execute, $Argument)

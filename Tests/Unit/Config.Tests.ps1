@@ -116,16 +116,23 @@ Describe 'Initialize-AppData' {
     Context 'When AppData directory creation fails (TEMP fallback)' {
         BeforeEach {
             $script:OriginalAppDataForFallback = $env:APPDATA
-            # Point APPDATA at a path under an existing read-only system dir that can never be created
-            $env:APPDATA = Join-Path $env:SystemRoot 'System32\drivers\etc\ImpossibleSubdir'
-            # Ensure TempDir is set (dot-sourced with -NoRun doesn't execute Section 11 initializer)
+            # Create a FILE at a temp path so that New-Item -ItemType Directory under it always fails.
+            # A directory cannot be created under a file regardless of privileges — this is more
+            # reliable than using a system path (admin runners can write to System32).
+            $script:AppDataBlockerFile = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_blocker_$(New-Guid)"
+            New-Item -Path $script:AppDataBlockerFile -ItemType File -Force | Out-Null
+            $env:APPDATA = $script:AppDataBlockerFile
+            # Ensure TempDir is set (top-level assignment in DailyMotivation.ps1 runs at dot-source time)
             if (-not $script:TempDir) {
-                $script:TempDir = [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+                $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { '/tmp' }
             }
         }
 
         AfterEach {
             $env:APPDATA = $script:OriginalAppDataForFallback
+            if ($script:AppDataBlockerFile -and (Test-Path $script:AppDataBlockerFile)) {
+                Remove-Item -Path $script:AppDataBlockerFile -Force -ErrorAction SilentlyContinue
+            }
             $fallback = Join-Path $script:TempDir 'DailyMotivationBrainHelper'
             if (Test-Path $fallback) {
                 Remove-Item -Path $fallback -Recurse -Force -ErrorAction SilentlyContinue
