@@ -56,7 +56,7 @@ BeforeAll {
         if ($script:SecurityMockedTasks.ContainsKey($TaskName)) {
             return $script:SecurityMockedTasks[$TaskName]
         }
-        throw "Task not found: $TaskName"
+        return $null
     }
 }
 

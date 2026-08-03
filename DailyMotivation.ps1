@@ -943,11 +943,6 @@ function Get-MotivationTasks {
 function Remove-MotivationTask {
     param([Parameter(Mandatory)][string]$TaskId)
 
-    # Call Sync-TaskStatuses before removal to ensure task state is current
-    if (-not $script:Platform) {
-        Sync-TaskStatuses
-    }
-
     $tasks  = Get-TasksJson
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
     if (-not $target) { return $false }

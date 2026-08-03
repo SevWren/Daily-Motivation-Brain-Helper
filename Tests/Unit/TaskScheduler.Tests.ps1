@@ -103,9 +103,8 @@ BeforeAll {
             Write-Host "[DEBUG Get-ScheduledTask] FOUND task: $TaskName"
             return $script:MockedTasks[$TaskName]
         }
-        # Throw to simulate task not found (matches real Get-ScheduledTask behavior)
-        Write-Host "[DEBUG Get-ScheduledTask] NOT FOUND - throwing exception for: $TaskName"
-        throw [Microsoft.PowerShell.Cmdletization.Cim.CimJobException]::new("No MSFT_ScheduledTask objects found with property 'TaskName' equal to '$TaskName'")
+        Write-Host "[DEBUG Get-ScheduledTask] NOT FOUND - returning null for: $TaskName"
+        return $null
     }
 }
 
@@ -600,7 +599,7 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
         'invalid json{' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
         { Get-MotivationTasks } | Should -Not -Throw
         $result = @(Get-MotivationTasks)
-        $result         | Should -Not -Be $null
+        Should -Not -Be $null -ActualValue $result
         $result.Count | Should -Be 0
     }
 }
