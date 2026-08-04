@@ -442,6 +442,49 @@ is a key in that data source. Write out the description in plain prose instead.
 
 ---
 
+## MANDATE: GitHub Issue Closure Gate — Windows-Validated Tests
+
+> **This section is binding on all AI agents, automated systems, and human contributors.**
+> Issues #10, #158, #164, and #174 were all closed without Windows validation. In each case the
+> work appeared complete on Linux. Issues #158, #164, and #174 were reopened the same session after
+> the error was caught. This mandate exists to prevent that pattern from recurring.
+
+### The rule
+
+**Any GitHub issue whose resolution includes one or more tests guarded by `-Skip:(-not $IsWindows)`
+may not be closed until proof of a 100% successful validation run on a real Windows 10/11 machine
+is attached to the issue as a comment.**
+
+This applies regardless of issue category — test-coverage issues, bug fixes, refactors, and
+feature work are all subject to this gate if they introduce or modify Windows-only tests.
+
+### What counts as proof
+
+One of the following must be posted as a comment on the issue before it is closed:
+
+- Full `Invoke-Pester` or `.\Invoke-Tests.ps1` terminal output from a Windows 10/11 PowerShell 7
+  session showing the relevant tests passed with 0 failures
+- A CI run link where a Windows runner executed the affected tests and all passed
+- A screenshot of the terminal on Windows showing the passing test results
+
+### What does NOT count as proof
+
+- Linux CI passing — always insufficient for `-Skip:(-not $IsWindows)` tests
+- "The code looks correct" or "the logic is sound" — no substitute for a test run
+- A prior Windows run for a different commit or a different issue
+- Passing only the platform-abstraction subset (`*.Platform.Tests.ps1`) — these run on Linux by
+  design and do not exercise Windows Task Scheduler, registry, or CIM APIs
+
+### Violation response
+
+If an agent or contributor closes an issue without the required Windows validation evidence:
+
+1. Reopen the issue immediately.
+2. Add a comment stating the closure was premature and which Windows-only tests remain unvalidated.
+3. Do not re-close until proof is attached.
+
+---
+
 ## Architecture
 
 **One file, one exe.**

@@ -41,6 +41,7 @@ More detail: [docs/development/local-setup.md](docs/development/local-setup.md).
 2. Tests that pass only in a Linux sandbox are **not** sufficient validation for test suites that exercise Windows-specific features (Task Scheduler, the Windows registry, and CIM — the Windows hardware and OS information interface).
 3. Platform-abstraction tests (`*.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, `FolderScheduling.Tests.ps1`) may run on Linux using `HeadlessPlatform`, a test-only stub that replaces Windows-specific APIs. See [CLAUDE.md](CLAUDE.md) for details.
 4. Prefer `.\Invoke-Tests.ps1` over calling `Invoke-Pester` directly.
+5. **An issue may not be closed if its resolution includes Windows-only tests (guarded by `-Skip:(-not $IsWindows)`) that have not been validated on a real Windows 10/11 machine.** Proof of validation — terminal output, a CI run link, or a screenshot — must be attached to the issue as a comment before closure. Linux CI passing is not sufficient. See the **GitHub Issue Closure Gate** MANDATE in [CLAUDE.md](CLAUDE.md) for the full rule and violation response procedure.
 
 ```powershell
 .\Invoke-Tests.ps1                  # all tests + coverage (default)
