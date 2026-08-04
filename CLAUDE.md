@@ -286,6 +286,162 @@ scheduling principal configuration is declared resolved.
 
 ---
 
+## MANDATE: Pester 5 / CI Test Infrastructure — Correct and Incorrect Patterns
+
+> **This section is binding on all AI agents, automated systems, and human contributors.**
+> The patterns below were discovered across 10 consecutive CI failures on `project-restart-pwsh7`
+> (2026-08-03, issues #178 and #179). Each WRONG pattern was attempted and failed in CI before the
+> root cause was confirmed. The final resolution required 7 commits.
+> **Any agent ignoring this section risks reproducing the same iterative failure cycle.**
+
+---
+
+### WRONG APPROACHES — Do Not Repeat These
+
+#### WRONG 7: Including `ErrorAction` in a splatted hashtable passed to a mocked cmdlet
+
+When `ErrorAction` (or any PowerShell common parameter) is included in a `@splat` dict AND also
+specified directly on the call (e.g., `-ErrorAction Stop`), Pester's mock proxy binds the parameter
+twice — once from the splat and once from PowerShell's common parameter machinery. This emits a
+**non-terminating error with an empty message**. `-ErrorAction Stop` promotes it to a terminating
+`RuntimeException`. The caller catches it with `$_.Exception.Message = ""`, producing
+`Success=$false` with `Error=""` — indistinguishable from a genuine downstream failure without
+examining Pester internals.
+
+This was the root cause of 6 CI failures diagnosed as "Save-TasksJson failure with empty exception
+message." The hypothesis was wrong — `Save-TasksJson` was never reached. The failure happened at
+`Register-ScheduledTask` due to the double-bind.
+
+```powershell
+# WRONG — ErrorAction in splat dict + on call = double-bind
+$params = @{
+    TaskName  = $taskName
+    Action    = $action
+    ErrorAction = 'Stop'   # <-- DO NOT include common params in splat
+}
+Register-ScheduledTask @params -ErrorAction Stop
+```
+
+```powershell
+# CORRECT — ErrorAction on the call only, never in the splat
+$params = @{
+    TaskName = $taskName
+    Action   = $action
+}
+Register-ScheduledTask @params -ErrorAction Stop
+```
+
+**Rule:** Never include `ErrorAction`, `WarningAction`, `Verbose`, `Debug`, or any other PowerShell
+common parameter in a splatted hashtable. Specify them directly on the cmdlet call only.
+
+---
+
+#### WRONG 8: Mocking `New-ScheduledTask*` helper cmdlets with PSCustomObjects + `-RemoveParameterValidation`
+
+`-RemoveParameterValidation` strips `[Validate*]` attributes only. It does **not** strip parameter
+type constraints. `Register-ScheduledTask` has hard CIM type constraints on `Action`, `Trigger`,
+`Settings`, and `Principal` — each must be a `Microsoft.Management.Infrastructure.CimInstance`.
+Passing a `PSCustomObject` always fails with:
+
+```
+Cannot convert the "@{Execute=...}" value of type "System.Management.Automation.PSCustomObject"
+to type "Microsoft.Management.Infrastructure.CimInstance".
+```
+
+This was attempted in both `SingleFile.Tests.ps1` and `AG20-009.ExePathSpaces.Tests.ps1` with
+`-RemoveParameterValidation 'Action','Trigger','Settings','Principal'`. It failed every time.
+
+```powershell
+# WRONG — PSCustomObject never satisfies CimInstance type constraints
+Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $Execute } }
+Mock Register-ScheduledTask -RemoveParameterValidation 'Action','Trigger','Settings','Principal' { ... }
+```
+
+```powershell
+# CORRECT — let real Windows cmdlets produce genuine CimInstance objects
+# Do NOT mock New-ScheduledTaskAction, New-ScheduledTaskTrigger,
+# New-ScheduledTaskSettingsSet, or New-ScheduledTaskPrincipal.
+# Only mock the persistence layer.
+Mock Register-ScheduledTask { ... }   # captures the real CimInstance objects
+Mock Get-ScheduledTask { ... }
+Mock Unregister-ScheduledTask { ... }
+```
+
+**Rule:** Never mock `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`,
+`New-ScheduledTaskSettingsSet`, or `New-ScheduledTaskPrincipal`. Let them run as real Windows
+cmdlets. Only mock `Register-ScheduledTask`, `Get-ScheduledTask`, and `Unregister-ScheduledTask`.
+See the AG8-007 test in `SingleFile.Tests.ps1` for the canonical reference pattern.
+
+---
+
+#### WRONG 9: Using module-qualified calls to escape Pester mock interception
+
+When a Pester mock for `New-ScheduledTaskAction` is active, calling
+`ScheduledTasks\New-ScheduledTaskAction` (module-qualified) does **not** bypass the mock.
+Pester 5 intercepts module-qualified calls too. Attempting to delegate to the real implementation
+from inside a mock body via module qualification causes infinite recursion.
+
+```powershell
+# WRONG — module-qualified call is still intercepted; causes infinite recursion
+Mock New-ScheduledTaskAction {
+    $script:CapturedActions += ...
+    return ScheduledTasks\New-ScheduledTaskAction @PSBoundParameters  # <-- infinite loop
+}
+```
+
+**Rule:** There is no escape route from Pester mocking via module qualification. If you need the
+real cmdlet behavior, do not mock it at all. Capture what you need from the outputs of the
+persistence-layer mocks instead (e.g., inspect `$Action.Execute` inside the `Register-ScheduledTask`
+mock body — the real CimInstance has those properties).
+
+---
+
+#### WRONG 10: Using `<token>` syntax in Pester 5 test names
+
+Pester 5 treats `<key>` tokens in test names as `${key}` template variable expansions (used with
+`-ForEach`). Under `Set-StrictMode -Version Latest`, if no `$key` variable exists in scope, Pester
+throws `The variable '$key' cannot be retrieved because it has not been set` — not a test failure,
+but a block-level error that aborts the entire describe block.
+
+```powershell
+# WRONG — Pester 5 tries to expand <id> as a template variable
+It 'Should set task_name to DailyMotivation_<id> format' { ... }
+```
+
+```powershell
+# CORRECT — no angle brackets in test names unless using -ForEach data
+It 'Should set task_name to DailyMotivation_ followed by a 16-char hex id' { ... }
+```
+
+**Rule:** Never use `<word>` tokens in Pester test names unless you are using `-ForEach` and `$word`
+is a key in that data source. Write out the description in plain prose instead.
+
+---
+
+### MANDATE STATEMENT — Pester CI Rules
+
+**These rules are binding on all AI agents, automated systems, and human contributors.**
+
+7. **Never include PowerShell common parameters (`ErrorAction`, `WarningAction`, `Verbose`, `Debug`, etc.)
+   in a splatted hashtable passed to a mocked cmdlet.** Specify them directly on the call. The
+   double-bind produces a silent non-terminating error with empty message that is promoted to a
+   terminating exception by `-ErrorAction Stop`, masking the real failure site.
+
+8. **Never mock `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`, `New-ScheduledTaskSettingsSet`,
+   or `New-ScheduledTaskPrincipal`.** These must run as real Windows cmdlets to produce the
+   `CimInstance` types that `Register-ScheduledTask` requires. `-RemoveParameterValidation` does not
+   override type constraints. Mock only the persistence layer: `Register-ScheduledTask`,
+   `Get-ScheduledTask`, `Unregister-ScheduledTask`.
+
+9. **Module-qualified calls (`Module\Cmdlet`) are intercepted by Pester mocks.** There is no way
+   to call the real implementation from inside a Pester mock body. If the real behavior is needed,
+   do not mock the cmdlet at all.
+
+10. **Do not use `<token>` in Pester 5 test names** unless that token is a `-ForEach` data key in
+    scope. Use plain prose descriptions instead.
+
+---
+
 ## Architecture
 
 **One file, one exe.**
