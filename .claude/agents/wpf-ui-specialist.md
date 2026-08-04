@@ -166,3 +166,4 @@ When reviewing WPF/UI code:
 - [ ] XAML load failures use `Write-Warning` in popup mode, `Show-ErrorDialog` in main mode
 - [ ] `Initialize-AppData` wrapped in `try/catch` at entry point
 - [ ] `$Mode` comparisons use `"/popup"` and `"/setfolder"` with slash prefix
+- [ ] No bug-ID inline comments (e.g., `# AG19-003:`, `# AG7-004:`) — CLAUDE.md Code Quality Rules mandate their removal; bug references belong in commit messages and GitHub Issues

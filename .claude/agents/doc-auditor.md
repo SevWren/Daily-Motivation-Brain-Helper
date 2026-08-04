@@ -26,7 +26,6 @@ You are the documentation auditor for the Daily Motivation Brain Helper project.
 | `docs/reference/` | Developers | functions.md, config.md, cli.md |
 | `docs/development/` | Developers | local-setup.md, ci.md |
 | `manual/` | End users | Installation, quickstart, guides, troubleshooting, reference |
-| `CONTEXT.md` | All | Domain glossary |
 
 ### Historical / investigation docs (do not modify, reference only):
 - `docs/archive/` — agent completion reports, bug reports

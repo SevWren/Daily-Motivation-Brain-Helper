@@ -67,10 +67,10 @@ CLAUDE/skills/           # Engineering and productivity skills
 | `tasks.json` | MotivationTask list | Array: `task_id`, `task_name`, `folder_path`, `folder_name`, `scheduled_time`, `created_at`, `status`, `snooze_count` |
 | `popup_log.txt` | Outcome Log | Pipe-delimited: `[timestamp] \| task_id \| folder_name \| HASH:{sha256} \| Outcome \| snooze_count` |
 
-## How to load functions for testing
+## Dot-Sourcing the Script for testing
 
 ```powershell
-. .\DailyMotivation.ps1 -NoRun  # loads all functions, skips entry point
+. .\DailyMotivation.ps1 -NoRun  # dot-sources the Script; defines all functions, skips entry point
 ```
 
 ## Key script-level variables

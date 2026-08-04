@@ -75,6 +75,7 @@ When invoked, do the following:
 7. Check for mocked builder cmdlets
 8. Check for `<token>` patterns in test names
 9. Check for module-qualified cmdlet calls in mock bodies
-10. Report each violation with the specific WRONG pattern number and the CORRECT pattern that must replace it
+10. **Check for bug-ID inline comments** (e.g., `# AG19-003:`, `# AG7-004:`). CLAUDE.md Code Quality Rules mandate their removal. Bug references belong in commit messages and GitHub Issues, not inline comments. Flag any such comment as a violation.
+11. Report each violation with the specific WRONG pattern number and the CORRECT pattern that must replace it
 
 **Never declare any scheduling/permissions fix resolved without flagging that a live Windows 10/11 test is required.**

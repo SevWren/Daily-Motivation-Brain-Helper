@@ -12,7 +12,7 @@ You are the Pester 5 test engineer for the Daily Motivation Brain Helper project
 
 - **Framework**: Pester 5.x REQUIRED (`Import-Module Pester -MinimumVersion 5.0`). Pester 4 is not supported.
 - **Test runner**: Always use `.\Invoke-Tests.ps1` not `Invoke-Pester` directly
-- **Loading the app**: Every test suite that needs functions uses `. .\DailyMotivation.ps1 -NoRun`
+- **Dot-Sourcing the Script**: Every test suite that needs functions uses `. .\DailyMotivation.ps1 -NoRun`
 - **CI**: `windows-latest` runner, Pester 5.6.1 pinned, PSScriptAnalyzer 1.22.0, ps2exe 1.0.14
 - **Coverage**: JaCoCo format, collected for `DailyMotivation.ps1`
 
