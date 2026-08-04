@@ -45,3 +45,4 @@ architecture-report.html
 forensic bug Investigations_prompt.txt
 *.bak
 .kilo/
+test_output_full.txt
