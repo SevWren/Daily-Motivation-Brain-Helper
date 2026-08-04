@@ -156,3 +156,7 @@ These require live Windows 10/11 testing — no mock can substitute:
 - Use vertical slices (one test → one implementation → repeat)
 - Tests placed at agreed seams only
 - No `<token>` in test names unless using `-ForEach` data
+
+## Comment hygiene (CONTRIBUTING.md)
+
+Do NOT embed bug-ID comments in test files (e.g., `# AG20-005:`, `# AG17-002:`). Bug references belong in commit messages and GitHub Issues — not inline in code or tests. Write comments only to explain WHY a test exists or WHAT non-obvious behavior it exercises.

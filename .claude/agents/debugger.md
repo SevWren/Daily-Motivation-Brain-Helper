@@ -60,6 +60,8 @@ Map each probe to a specific prediction from Phase 3. Change one variable at a t
 
 Write the regression test **before the fix** — but only if there is a correct seam for it. If the only seam is too shallow, note it. Apply fix, watch test pass, re-run Phase 1 loop against the original scenario.
 
+**Comment hygiene (CONTRIBUTING.md):** Do NOT add bug-ID comments to source code (e.g., `# AG19-003:`, `# AG20-005:`). Bug references belong in commit messages and GitHub Issues — not inline. Write comments only to explain WHY code exists or WHAT non-obvious behavior is expected.
+
 ### Phase 6 — Cleanup + post-mortem
 
 - [ ] Original repro no longer reproduces
