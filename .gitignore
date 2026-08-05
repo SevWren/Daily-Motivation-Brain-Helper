@@ -1,5 +1,7 @@
 DailyMotivation.exe
 digest.txt
+
+
 # Test and build artifacts
 TestResults.xml
 coverage.xml
@@ -24,6 +26,10 @@ Output/
 *.exe
 !docs/**/*.exe
 
+# Local LLM
+CLAUDE/skills/misc/official-docs/references/
+
+
 # Temporary files
 *.tmp
 ~$*
@@ -39,10 +45,27 @@ docs/What Does This Program Do.md
 daily-motivation-brain-helper-codebase-6_6_2026.txt
 tree.txt
 debug/
-maton_ai_prompt.txt
 architecture-report*forensic bug Investigations_prompt.txt
 architecture-report.html
 forensic bug Investigations_prompt.txt
 *.bak
 .kilo/
 test_output_full.txt
+
+# Files re Maton.AI
+
+maton_ai_prompt.txt
+Glossary - Claude Code Docs.pdf
+Maton.md
+Maton.pdf    
+code-reviewer.md
+codebase-explorer.md
+debugger.md
+doc-auditor.md
+domain-language-enforcer.md
+pester-engineer.md.md
+ps2exe-compat-checker.md
+scheduling-guardian.md
+security-auditor.md
+triage-agent.md
+wpf-ui-specialist.md

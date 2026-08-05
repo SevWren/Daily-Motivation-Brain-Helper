@@ -34,3 +34,5 @@
 ## Related issues
 
 <!-- Fixes #123 -->
+<!-- Closes #456 -->
+<!-- Resolves #789 -->
