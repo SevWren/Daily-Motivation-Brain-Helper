@@ -17,7 +17,6 @@ End-user docs live in [`../manual/`](../manual/README.md). Domain terminology is
 | [reviews/](reviews/README.md) | Review records |
 | [reports/](reports/README.md) | Investigation and diagnostic reports |
 | [ideas/](ideas/README.md) | Spikes and exploratory notes |
-| [archive/](archive/README.md) | Historical agent/completion reports |
 
 ## Quick links
 

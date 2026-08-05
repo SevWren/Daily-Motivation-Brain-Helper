@@ -26,9 +26,13 @@ Output/
 *.exe
 !docs/**/*.exe
 
+# archive
+
+Archive/
+*.zip
+
 # Local LLM
 CLAUDE/skills/misc/official-docs/references/
-
 
 # Temporary files
 *.tmp
