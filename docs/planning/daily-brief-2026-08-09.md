@@ -66,15 +66,15 @@ After this fix, clicking Dismiss should not open Explorer, and clicking Open Fol
 
 When you try to schedule a reminder without running the app as administrator, you get an error dialog that says "Invalid Folder." That's wrong — the folder is fine, it's the Windows Task Scheduler registration that failed. The title needs to say "Schedule Failed" instead.
 
-Find the catch block in `DailyMotivation.ps1` that handles the `Register-ScheduledTask` failure and shows this dialog. Change the title from "Invalid Folder" to "Schedule Failed" and update the message to say that the OS task registration failed — not the folder. The exact location is TBD (use the `/diagnosing-bugs` skill or search for "Invalid Folder" in the file). Full detail is in the **BUG-3** section below.
+Find the catch block in `DailyMotivation.ps1` that handles the `Register-ScheduledTask` failure and shows this dialog. Change the title from "Invalid Folder" to "Schedule Failed" and update the message to say that the OS Task registration failed — not the folder. The exact location is TBD (use the `/diagnosing-bugs` skill or search for "Invalid Folder" in the file). Full detail is in the **BUG-3** section below.
 
 ---
 
 **Step 4 — Investigate why the app schedules the wrong folder (BUG-4) — 30–60 minutes, may carry over**
 
-This one is trickier. When you click "Schedule Reminder," the task gets created in Windows Task Scheduler correctly — but the app doesn't update the config file that tells the popup which folder to open. So the popup fires but opens an old folder.
+This one is trickier. When you click "Schedule Reminder," the OS Task gets created in Windows Task Scheduler correctly — but the App doesn't update the PopupConfig that tells the Popup which folder to open. So the Popup fires but opens an old folder.
 
-The investigation so far has ruled out nine possible causes (see Appendix). What's left: something in the button → schedule → config-write chain exits early or silently crashes before the config write happens. You need to add a few temporary log lines to find exactly where it stops.
+The investigation so far has ruled out nine possible causes (see Appendix). What's left: something in the button → schedule → PopupConfig-write chain exits early or silently crashes before the PopupConfig write happens. You need to add a few temporary log lines to find exactly where it stops.
 
 The exact `Write-Host` lines to add as a diagnostic are in the **BUG-4** section below. Add them, run the app (elevated), click Schedule Reminder, and read the output. **Don't commit these log lines** — they're just to find the problem.
 
@@ -123,7 +123,7 @@ These are pre-built helper instructions for the AI assistant you work with. You 
 
 Issue #183 documents four confirmed bugs in `DailyMotivation.ps1`. All four are present in the current codebase (`project-restart-pwsh7` branch, now `main`). No code fixes have been committed yet. The diagnostic thread in the issue is complete for BUG-1 and BUG-2; BUG-3 and BUG-4 have partial root causes confirmed. Tomorrow's primary objective is to implement and test BUG-1 and BUG-2 fixes, resolve the inverse regression test in `UIDisposal.Tests.ps1`, and continue BUG-4 trace-logging investigation.
 
-A live observation opportunity exists: scheduled task `afce0852e0764809` (folder: `Ai Test Aug 12`) is set to fire at **14:00 today (2026-08-08)**. If you are at your Windows machine at that time, observe whether the popup appears, which button you click, and what `popup_log.txt` records. This will confirm or deny BUG-1 in a real task-fire scenario.
+A live observation opportunity exists: MotivationTask `afce0852e0764809` (folder: `Ai Test Aug 12`) is set to fire at **14:00 today (2026-08-08)**. If you are at your Windows machine at that time, observe whether the Popup appears, which button you click, and what the Outcome Log records. This will confirm or deny BUG-1 in a real task-fire scenario.
 
 ---
 
@@ -239,11 +239,11 @@ OS task registration was denied. Ensure Task Scheduler is enabled for your accou
 
 ---
 
-### BUG-4 — `Set-PopupConfig` not persisting new task data after Schedule Reminder
-**Severity:** High (Data integrity — popup fires for wrong folder)
+### BUG-4 — `Set-PopupConfig` not completing the Handoff after Schedule
+**Severity:** High (Data integrity — Popup fires for wrong folder)
 **Status:** Root cause narrowed but not fully confirmed. Trace logging diagnostic pending.
 
-**What it breaks:** After clicking "Schedule Reminder" (when elevated), `popup_config.json` is not updated with the new task's `task_id`, `explorer_path`, or `folder_name`. When the task fires, the popup reads stale config and displays a reminder for the previously scheduled folder, not the newly scheduled one.
+**What it breaks:** After clicking "Schedule Reminder" (when elevated), the PopupConfig is not updated with the new MotivationTask's `task_id`, `explorer_path`, or `folder_name`. When the OS Task fires, the Popup reads stale PopupConfig and opens the previously scheduled folder, not the newly scheduled one.
 
 **Ruled out (from 8-comment diagnostic thread):**
 - ✅ APPDATA path mismatch between elevated/non-elevated — ruled out (same `$env:APPDATA`, same `$env:USERNAME`)
@@ -362,12 +362,12 @@ Expected post-fix result: ≥ 359 passed, 0 failed, ≤ 7 skipped (new tests fro
 Per issue #183 acceptance criteria — must be checked on live Windows machine:
 
 - [ ] Close `DailyMotivation.exe` main window → **no error dialog** (BUG-2 fix)
-- [ ] Click Dismiss in popup → Explorer does NOT open; `popup_log.txt` logs `Dismissed` (BUG-1 fix)
-- [ ] Click Snooze in popup → Explorer does NOT open; `popup_log.txt` logs `Snoozed` (BUG-1 fix)
-- [ ] Click Exit in popup → Explorer does NOT open (BUG-1 fix)
-- [ ] Click Open Folder in popup → correct scheduled folder opens; `popup_log.txt` logs `Opened` (BUG-1 correct path)
-- [ ] `popup_log.txt` shows varied outcomes across sessions — not all `Opened` (BUG-1 fix confirmed)
-- [ ] Schedule Reminder → confirm `popup_config.json` updated with correct `task_id` and `explorer_path` (BUG-4 diagnostic)
+- [ ] Click Dismiss in Popup → Explorer does NOT open; the Outcome Log records `Dismissed` (BUG-1 fix)
+- [ ] Click Snooze in Popup → Explorer does NOT open; the Outcome Log records `Snoozed` (BUG-1 fix)
+- [ ] Click Exit in Popup → Explorer does NOT open (BUG-1 fix)
+- [ ] Click Open Folder in Popup → correct scheduled folder opens; the Outcome Log records `Opened` (BUG-1 correct path)
+- [ ] Outcome Log shows varied Outcomes across sessions — not all `Opened` (BUG-1 fix confirmed)
+- [ ] Schedule Reminder → confirm the PopupConfig is updated with correct `task_id` and `explorer_path` (BUG-4 diagnostic)
 - [ ] "Schedule Reminder" failure dialog title reads "Schedule Failed", not "Invalid Folder" (BUG-3 fix)
 
 ---
@@ -449,12 +449,12 @@ session start → /diagnosing-bugs (BUG-3 catch site scan)
 | # | Author | Timestamp | Key finding |
 |---|--------|-----------|-------------|
 | 1 | SevWren | 2026-08-07T23:02 | BUG-3 confirmed (non-elevated). BUG-2 confirmed in standard user context. Reproduction matrix documented. |
-| 2 | SevWren | 2026-08-07T23:10 | Run-as-admin unblocks task creation. `popup_log.txt` vs `tasks.json` cross-reference: 14/17 task_ids orphaned (historical). Rapid-fire triple popup execution observed (mutex question). |
-| 3 | SevWren | 2026-08-07T23:13 | Prior "orphaned tasks still firing" hypothesis ruled out — only 1 task in Task Scheduler. Corrected: all popup_log entries read from whatever `popup_config.json` held at fire time. Stale config confirmed. |
-| 4 | SevWren | 2026-08-07T23:15 | `popup_config.json` shows stale `d337a75afe434197` / `Daily-Motivation-Brain-Helper`. BUG-4 added. Root cause hypothesis: APPDATA mismatch or mutex throwing from elevated context. |
+| 2 | SevWren | 2026-08-07T23:10 | Run-as-admin unblocks OS Task creation. Outcome Log vs `tasks.json` cross-reference: 14/17 TaskIds orphaned (historical). Rapid-fire triple Popup execution observed (Mutex question). |
+| 3 | SevWren | 2026-08-07T23:13 | Prior "orphaned OS Tasks still firing" hypothesis ruled out — only 1 OS Task in Task Scheduler. Corrected: all Outcome Log entries read from whatever PopupConfig held at TriggerTime. Stale PopupConfig confirmed. |
+| 4 | SevWren | 2026-08-07T23:15 | PopupConfig shows stale TaskId `d337a75afe434197` / `Daily-Motivation-Brain-Helper`. BUG-4 added. Root cause hypothesis: APPDATA mismatch or Mutex throwing from elevated context. |
 | 5 | SevWren | 2026-08-07T23:21 | APPDATA paths identical. Mutex constructor hypothesis: `UnauthorizedAccessException` from elevated context. Call chain analysis: `scheduleBtn.Add_Click` → `Do-Schedule` → exception swallowed by WPF dispatcher. |
-| 6 | SevWren | 2026-08-08T00:36 | Mutex probe from elevated PowerShell: **acquired successfully**. BUG-4a (mutex throws) ruled out. Cause still in call chain. `Set-PopupConfig` direct test needed. |
-| 7 | SevWren | 2026-08-08T02:01 | `Set-PopupConfig` called directly from elevated PS: **succeeds**. `popup_config.json` now patched for 14:00 task fire. Root cause is in the UI button handler call chain — something exits before `Set-PopupConfig` is reached. Trace logging diagnostic prescribed. |
+| 6 | SevWren | 2026-08-08T00:36 | Mutex probe from elevated PowerShell: **acquired successfully**. BUG-4a (Mutex throws) ruled out. Cause still in call chain. `Set-PopupConfig` direct test needed. |
+| 7 | SevWren | 2026-08-08T02:01 | `Set-PopupConfig` called directly from elevated PS: **succeeds**. PopupConfig now patched for 14:00 OS Task TriggerTime. Root cause is in the UI button handler call chain — something exits before `Set-PopupConfig` is reached. Trace logging diagnostic prescribed. |
 | 8 | SevWren | 2026-08-08T02:43 | File lock, ACL, mutex, JSON serialization all ruled out. `scheduleBtn.Add_Click` is a one-liner with no error handling — any throw in `Do-Schedule` is silently swallowed. Four early-return points in `Invoke-FolderScheduling` mapped. Old-build BUG-1, BUG-2 fixed in `src/`; new `project-restart-pwsh7` monolith still has them. |
 
 ---
