@@ -778,10 +778,10 @@ function New-MotivationTask {
         # CRITICAL - Never use 'Highest' RunLevel for security
         $runLevel = 'Limited'
 
-        # Use S4U (Service for User) LogonType instead of Interactive
+        # Use Interactive LogonType for per-user interactive desktop session
         $principalParams = @{
             UserId    = $env:USERNAME
-            LogonType = 'S4U'
+            LogonType = 'Interactive'
             RunLevel  = $runLevel
         }
         $principal = New-ScheduledTaskPrincipal @principalParams
@@ -1850,8 +1850,9 @@ function Show-MainWindow {
         # Handle validation errors
         if (-not $result.Success -and -not $result.IsDuplicate) {
             if ($result.Error) {
-
-                [void][System.Windows.MessageBox]::Show($result.Error, "Invalid Folder", "OK", "Warning")
+                [void][System.Windows.MessageBox]::Show(
+                    "Could not schedule reminder for this folder.`n`n$($result.Error)",
+                    "Schedule Failed", "OK", "Warning")
             }
             else {
                 Show-ErrorDialog "Could not create the scheduled task."
@@ -2134,7 +2135,7 @@ function Show-MainWindow {
     }
     finally {
         if ($window) {
-            $window.Dispose()
+            $window.Close()
         }
     }
 }
@@ -2792,10 +2793,10 @@ function Show-PopupWindow {
     }
     catch {}
     finally {
-        # Dispose WPF window to release resources
+        # Close WPF window to release resources
         if ($window) {
             try {
-                $window.Dispose()
+                $window.Close()
             }
             catch {}
         }

@@ -218,3 +218,26 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
         }
     }
 }
+
+Describe 'BUG-3: Do-Schedule error dialog title for scheduling failures' {
+    It 'uses "Schedule Failed" title, not "Invalid Folder", when Invoke-FolderScheduling returns an error' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+        $fnStart = $content.IndexOf('function Do-Schedule')
+        $fnEnd   = $content.IndexOf("`nfunction ", $fnStart + 20)
+        $functionBody = if ($fnEnd -gt $fnStart) { $content.Substring($fnStart, $fnEnd - $fnStart) } else { $content.Substring($fnStart) }
+        $hasScheduleFailed = $functionBody -match 'Schedule Failed'
+        $hasInvalidFolder  = $functionBody -match '"Invalid Folder"'
+        $hasScheduleFailed | Should -Be $true
+        $hasInvalidFolder  | Should -Be $false
+    }
+
+    It 'preserves "Invalid Folder" title in Set-SelectedPath for actual FolderPath validation failures' {
+        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
+        $content = Get-Content $sourceFile -Raw
+        $fnStart = $content.IndexOf('function Set-SelectedPath')
+        $fnEnd   = $content.IndexOf("`nfunction ", $fnStart + 25)
+        $functionBody = if ($fnEnd -gt $fnStart) { $content.Substring($fnStart, $fnEnd - $fnStart) } else { $content.Substring($fnStart) }
+        $functionBody -match '"Invalid Folder"' | Should -Be $true
+    }
+}

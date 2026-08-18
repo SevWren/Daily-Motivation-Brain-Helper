@@ -160,35 +160,40 @@ Describe 'AG8-016: Timer Object Cleanup in Tests' {
     }
 }
 
-Describe 'AG6-004: Window Disposal After ShowDialog' {
-    It 'Should have try-finally with window disposal in Show-MainWindow' {
-        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
-        $content = Get-Content $sourceFile -Raw
-        
-        $functionStart = $content.IndexOf('function Show-MainWindow')
-        $functionEnd = $content.IndexOf('function Show-PopupWindow', $functionStart)
-        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
-        
-        # Should wrap ShowDialog in try-finally with window disposal
-        $hasShowDialog = $functionBody -match 'ShowDialog\(\)'
-        $hasDisposal = ($functionBody -match 'finally\s*\{[^\}]*\$window.*Dispose\(\)') -or
-                       ($functionBody -match '\$window\.Dispose\(\)[^\}]*\}[^\}]*$')  # At end before function close
-        
-        ($hasShowDialog -and $hasDisposal) | Should -Be $true -Because "WPF Window implements IDisposable and must be disposed"
+Describe 'BUG-2: WPF Window Disposal Regression Guard' {
+    It 'Show-MainWindow does not call $window.Dispose()' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-MainWindow')
+        $functionEnd = $src.IndexOf('function Show-PopupWindow', $functionStart)
+        $functionBody = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$window\.Dispose\(\)' | Should -Be $false -Because 'System.Windows.Window does not implement IDisposable'
     }
+    It 'Show-MainWindow uses $window.Close() instead of $window.Dispose()' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-MainWindow')
+        $functionEnd = $src.IndexOf('function Show-PopupWindow', $functionStart)
+        $functionBody = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$window\.Close\(\)' | Should -Be $true -Because 'WPF windows must be closed with .Close()'
+    }
+    It 'Show-PopupWindow does not call $window.Dispose()' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$window\.Dispose\(\)' | Should -Be $false -Because 'System.Windows.Window does not implement IDisposable'
+    }
+    It 'Show-PopupWindow uses $window.Close() instead of $window.Dispose()' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$window\.Close\(\)' | Should -Be $true -Because 'WPF windows must be closed with .Close()'
+    }
+}
 
-    It 'Should have try-finally with window disposal in Show-PopupWindow' {
-        $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
-        $content = Get-Content $sourceFile -Raw
-        
-        $functionStart = $content.IndexOf('function Show-PopupWindow')
-        $functionEnd = $content.IndexOf('# ============================================================', $functionStart + 100)
-        $functionBody = $content.Substring($functionStart, $functionEnd - $functionStart)
-        
-        $hasShowDialog = $functionBody -match 'ShowDialog\(\)'
-        $hasDisposal = ($functionBody -match 'finally\s*\{[^\}]*\$window.*Dispose\(\)') -or
-                       ($functionBody -match '\$window\.Dispose\(\)[^\}]*\}[^\}]*$')
-        
-        ($hasShowDialog -and $hasDisposal) | Should -Be $true -Because "WPF Window implements IDisposable and must be disposed"
+Describe 'BUG-2 File-Wide Regression Guard: $window.Dispose() must not exist' {
+    It 'DailyMotivation.ps1 contains zero calls to $window.Dispose()' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $src -match '\$window\.Dispose\(\)' | Should -Be $false -Because 'System.Windows.Window does not implement IDisposable'
     }
 }
