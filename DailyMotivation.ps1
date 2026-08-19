@@ -2389,6 +2389,41 @@ function Show-MainWindow {
 # SECTION 9: Popup Window Logic
 # ============================================================
 
+function Get-PopupOutcome {
+    <#
+    .SYNOPSIS
+        Maps the popup's end-of-session state to the canonical Outcome string.
+    .DESCRIPTION
+        Pure (stateless) function kept out of Show-PopupWindow so the outcome
+        mapping is independently unit-testable. The Outcome written to the
+        Outcome Log must reflect the action the user actually took (or the
+        countdown auto-open) -- never a fixed default.
+        Precedence:
+          1. PathMissing -- the folder is gone AND the user did not open/re-pick
+          2. Opened      -- the user opened the folder, the countdown auto-opened,
+                            or the user re-picked a new folder
+          3. Snoozed     -- the user snoozed at least once before closing
+          4. Dismissed   -- default: closed without opening (Dismiss / Exit)
+    .PARAMETER PathMissing
+        $true when the FolderPath no longer exists at popup display time.
+    .PARAMETER OpenExplorer
+        $true when the user's final action requires Explorer to open.
+    .PARAMETER SnoozeCount
+        Number of times the user snoozed during this popup session.
+    .OUTPUTS
+        [string] One of: Opened, Snoozed, Dismissed, PathMissing.
+    #>
+    param(
+        [bool]$PathMissing,
+        [bool]$OpenExplorer,
+        [int]$SnoozeCount = 0
+    )
+    if ($PathMissing -and -not $OpenExplorer) { return "PathMissing" }
+    if ($OpenExplorer)                       { return "Opened" }
+    if ($SnoozeCount -gt 0)                  { return "Snoozed" }
+    return "Dismissed"
+}
+
 function Show-PopupWindow {
     $configPath = $script:PopupCfgPath
 
@@ -2671,6 +2706,14 @@ function Show-PopupWindow {
                     "Snooze Failed", "OK", "Error")
                 return
             }
+            # Refresh popup_config.json with the NEW TaskId. The snooze creates a fresh
+            # MotivationTask; without this, popup_config.json still holds the original
+            # task id, so when the snoozed task fires its post-close Remove-MotivationTask
+            # targets an already-removed id (a no-op) and the snoozed OS task is never
+            # deleted (BUG-B, issue #183). Preserve the existing message/folder.
+            Set-PopupConfig -Glyph ([string]$config.glyph) -Title ([string]$config.title) `
+                            -Body ([string]$config.body) -ExplorerPath $config.explorer_path `
+                            -TaskId $snoozeResult.TaskId
             $window.Close()
         }
         catch {
@@ -2786,12 +2829,35 @@ function Show-PopupWindow {
         catch {}
     })
 
-    # Show popup
+    # BUG-A diagnostics (issue #183): record entry time + task_id before showing so
+    # the gap to the close timestamp in popup_log.txt reveals whether the window stayed
+    # up the full 20s countdown or closed early. popup_debug.txt is separate from the
+    # outcome log, so history parsing is unaffected. Safe to remove once confirmed.
     try {
-
-        [void]$window.ShowDialog()
+        Add-Content -Path (Join-Path $script:AppDataDir 'popup_debug.txt') `
+                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Show-PopupWindow: entered, task_id=$($config.task_id) path_exists=$(-not $script:pathMissing)" `
+                    -Encoding UTF8 -ErrorAction SilentlyContinue
     }
     catch {}
+
+    # Show popup
+    try {
+        [void]$window.ShowDialog()
+    }
+    catch {
+        # BUG-A diagnostics (issue #183): a swallowed exception here is the leading
+        # suspect for the popup "appearing then closing within seconds." If ShowDialog
+        # throws, the window never stays up; post-close then runs with the default open
+        # flag still set from the State block, so the outcome is logged "Opened."
+        # Written to a dedicated debug file (not popup_log.txt) so the outcome log
+        # and history parser are unaffected. Safe to remove once BUG-A is confirmed.
+        try {
+            Add-Content -Path (Join-Path $script:AppDataDir 'popup_debug.txt') `
+                        -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Show-PopupWindow: ShowDialog threw: $($_.Exception.Message)" `
+                        -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
+        catch {}
+    }
     finally {
         # Close WPF window to release resources
         if ($window) {
@@ -2801,13 +2867,13 @@ function Show-PopupWindow {
             catch {}
         }
 
-        # Reset state variables to prevent leakage between popup instances
-        $script:pathMissing = $false
-        $script:openExplorer = $true
-        $script:newExplorerPath = ""
-        $script:remaining = 20
-        $script:snoozeCount = 0
-        $script:windowClosed = $false
+        # DO NOT reset $script:openExplorer / $script:snoozeCount / $script:pathMissing /
+        # $script:newExplorerPath here. This finally block runs before the post-close
+        # cleanup and outcome-logging below, which read those values to decide the Outcome
+        # and the effective folder path. Resetting them here forces every outcome to
+        # "Opened" (BUG-1) and reverts a RePick folder to the stale path.
+        # State is initialised once at the top of this function (the "# State" block),
+        # which is the single reset point between popup instances.
 
         if ($mutexOwned -and $mutex) {
             try { $mutex.ReleaseMutex() }
@@ -2841,10 +2907,7 @@ function Show-PopupWindow {
     }
 
     # Log outcome
-    $outcome = if ($script:pathMissing -and -not $script:openExplorer) { "PathMissing" }
-               elseif ($script:openExplorer) { "Opened" }
-               elseif ($script:snoozeCount -gt 0) { "Snoozed" }
-               else { "Dismissed" }
+    $outcome = Get-PopupOutcome -PathMissing $script:pathMissing -OpenExplorer $script:openExplorer -SnoozeCount $script:snoozeCount
     Write-OutcomeLog -TaskId $config.task_id -FolderName $config.folder_name -FolderPath $effectivePath -Outcome $outcome -SnoozeCount $script:snoozeCount
 }
 

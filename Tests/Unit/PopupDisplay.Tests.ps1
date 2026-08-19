@@ -120,6 +120,30 @@ Describe 'Message title and body validation' {
     }
 }
 
+Describe 'Snooze refreshes popup_config.json task_id (BUG-B, issue #183)' {
+    Context 'Stale task_id cleanup gap' {
+        BeforeAll {
+            $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+            $functionStart = $src.IndexOf('function Show-PopupWindow')
+            $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+            $script:popupBody = $src.Substring($functionStart, $functionEnd - $functionStart)
+
+            $snoozeStart  = $script:popupBody.IndexOf('$snoozeBtn.Add_Click({')
+            $dismissStart = $script:popupBody.IndexOf('$dismissBtn.Add_Click({')
+            $script:snoozeHandler = $script:popupBody.Substring($snoozeStart, $dismissStart - $snoozeStart)
+        }
+
+        It 'The Snooze handler refreshes popup_config.json after creating the snoozed task' {
+            # BUG-B: New-MotivationTask in the snooze path creates a NEW TaskId, but
+            # if popup_config.json is not refreshed it still holds the original id.
+            # The next popup's post-close Remove-MotivationTask then targets the
+            # already-removed id (a no-op) and the snoozed OS task is never deleted.
+            $script:snoozeHandler -match 'Set-PopupConfig' | Should -Be $true -Because `
+                'the snooze handler must write the new TaskId to popup_config.json so the snoozed task is cleaned up when it fires'
+        }
+    }
+}
+
 Describe 'Strip-MarkupText' {
     Context 'AG12-005: Remove markdown and HTML formatting' {
         It 'Should strip markdown bold syntax' {
