@@ -158,13 +158,20 @@ exercises the real `Register-ScheduledTask` cmdlet with no mocking.
 #### CORRECT 1: Task principal configuration (current — do not change without live testing)
 
 ```powershell
-New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 ```
 
 - `RunLevel Limited` (not `Highest`) is correct — `Highest` requires UAC elevation and causes
   "Access is denied" for standard users.
-- `S4U` is the intended logon type for per-user tasks that run without an active session.
-- Do not change either of these values without a live Windows 10 test confirming the alternative works.
+- `LogonType Interactive` is the current, live-validated value. The App's OS Task exists to launch
+  a **WPF popup window on the user's interactive desktop**, which requires an active interactive
+  user session. `S4U` ("Service logon as ...", session-less) was tried and **fails with
+  "Access is denied" for a non-elevated standard user**, and even if it registered it cannot host a
+  UI window because there is no interactive session to display on. Live probe on the target Windows
+  10 machine (issue #183, 2026-07): `S4U` → "Access is denied"; `Interactive` → task registered and
+  the popup displayed correctly.
+- Do not change either of these values without a live Windows 10/11 test confirming the alternative
+  works (see the real-`Register-ScheduledTask` integration test required by CORRECT 5).
 
 #### CORRECT 2: ExePath resolution for ps2exe compiled executables
 
