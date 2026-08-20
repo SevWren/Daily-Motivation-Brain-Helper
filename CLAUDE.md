@@ -158,12 +158,12 @@ exercises the real `Register-ScheduledTask` cmdlet with no mocking.
 #### CORRECT 1: Task principal configuration (current — do not change without live testing)
 
 ```powershell
-New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 ```
 
 - `RunLevel Limited` (not `Highest`) is correct — `Highest` requires UAC elevation and causes
   "Access is denied" for standard users.
-- `S4U` is the intended logon type for per-user tasks that run without an active session.
+- `Interactive` is the current logon type so the reminder fires in the user's active desktop session (changed from `S4U` in commit `e0e0da6`, 2026-08-18 — not yet validated on Windows 10/11).
 - Do not change either of these values without a live Windows 10 test confirming the alternative works.
 
 #### CORRECT 2: ExePath resolution for ps2exe compiled executables
@@ -276,9 +276,8 @@ scheduling principal configuration is declared resolved.
    directly causes "Access is denied" regressions by introducing null-reference paths that propagate
    into Windows API error strings.
 
-5. **Task principal parameters (`LogonType`, `RunLevel`) are frozen at `S4U / Limited` until a live
-   Windows integration test confirms any proposed alternative works.** Do not change these values
-   based solely on documentation or Linux-side reasoning.
+5. **Task principal parameters (`LogonType`, `RunLevel`) are currently `Interactive / Limited` (changed from `S4U / Limited` in commit `e0e0da6`, 2026-08-18 — live Windows 10/11 validation not yet confirmed).** Do not change these values
+   based solely on documentation or Linux-side reasoning. Any further change requires a live Windows 10/11 test confirming the alternative works.
 
 6. **Error messages must name the failing operation.** Path sanitization (`[PATH]`) is correct for
    privacy but must not replace the operation name or Windows error code. A "Schedule Failed" dialog
