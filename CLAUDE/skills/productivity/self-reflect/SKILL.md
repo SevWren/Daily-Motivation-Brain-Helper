@@ -379,3 +379,64 @@ STANDING GAPS (known issues not addressed this window)
 ```
 
 After the full report, output a **CRITICAL ACTIONS** block — the top 3 generation constraints extracted verbatim from Phase 7, boxed separately for immediate reference.
+
+---
+
+## Phase 9 — Persist Report and Update Index
+
+### 9.1 — Write the report file
+
+Filename pattern: `self-reflection-<YYYY-MM-DD>-<window>.md`
+Example: `self-reflection-2026-08-22-14d.md`
+
+Save the complete Phase 8 output (audit report + CRITICAL ACTIONS block) to:
+
+```
+docs/reports/self-reflection-<YYYY-MM-DD>-<window>.md
+```
+
+The file must open with this frontmatter block:
+
+```markdown
+# Self-Reflection Audit — <date range>
+
+**Generated:** <YYYY-MM-DD>
+**Window:** <window>
+**Commits analysed:** <N>
+**Overall result:** COMPLETE | INCOMPLETE
+**Critical findings:** <N>
+**Gates failed:** <list or "none">
+```
+
+Followed by the full Phase 8 content verbatim.
+
+### 9.2 — Refresh docs/reports/README.md
+
+Read the current `docs/reports/README.md`. Add a new row to the **Self-Reflection Reports** table (create the table if it does not exist) under an `## Self-Reflection Reports` heading:
+
+```markdown
+## Self-Reflection Reports
+
+| File | Date | Window | Result | Critical findings |
+|------|------|--------|--------|-------------------|
+| [self-reflection-<YYYY-MM-DD>-<window>.md](./self-reflection-<YYYY-MM-DD>-<window>.md) | <YYYY-MM-DD> | <window> | COMPLETE / INCOMPLETE | <N> |
+```
+
+Preserve all existing content in `docs/reports/README.md`. Insert rows in reverse-chronological order (newest first).
+
+### 9.3 — Commit and push
+
+Stage both files and commit as the SevwrenAI GitHub App using the token helper:
+
+```bash
+python3 /home/vercel-sandbox/gh_app_token.py --configure
+git add docs/reports/self-reflection-<YYYY-MM-DD>-<window>.md docs/reports/README.md
+git commit -m "docs(reports): add self-reflection audit <YYYY-MM-DD> <window>"
+git push
+```
+
+**GATE 9 — Persist complete**
+- [ ] Report file written to `docs/reports/` with correct filename and frontmatter
+- [ ] `docs/reports/README.md` updated with new row, existing content intact
+- [ ] Committed and pushed as `sevwrenai[bot]`
+- [ ] Commit SHA recorded in the session output
