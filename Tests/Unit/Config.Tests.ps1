@@ -122,10 +122,7 @@ Describe 'Initialize-AppData' {
             $script:AppDataBlockerFile = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_blocker_$(New-Guid)"
             New-Item -Path $script:AppDataBlockerFile -ItemType File -Force | Out-Null
             $env:APPDATA = $script:AppDataBlockerFile
-            # Ensure TempDir is set (top-level assignment in DailyMotivation.ps1 runs at dot-source time)
-            if (-not $script:TempDir) {
-                $script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { '/tmp' }
-            }
+            # $script:TempDir is assigned unconditionally at module scope during dot-source.
         }
 
         AfterEach {
@@ -188,7 +185,7 @@ Describe 'Get-Config and Save-Config' {
         (Get-Config).default_trigger_hour | Should -Be 9
     }
 
-    It 'Should return safe defaults when config.json is corrupted' {
+    It 'Should return default_trigger_hour=14 and task_warning_threshold=5 when config.json is corrupted' {
         $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
         'invalid json{' | Set-Content $configPath -Encoding UTF8
         $cfg = Get-Config
@@ -277,30 +274,43 @@ Describe 'Write-OutcomeLog' {
 
     # AG8-011: Parameter Validation Tests
     Context 'Parameter validation' {
-        It 'Should write log entry even with empty TaskId (defensive coding)' {
-            Write-OutcomeLog -TaskId '' -FolderName 'TestFolder' -FolderPath 'C:\Test' -Outcome 'Opened'
-            $logPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_log.txt'
-            $content = Get-Content $logPath -Raw
-            # Log should contain something, even if TaskId is empty
-            $content | Should -Not -BeNullOrEmpty
-            # Should contain the non-empty fields
-            $content | Should -Match 'TestFolder'
-            $content | Should -Match 'Opened'
-        }
-
-        It 'Should handle null FolderName gracefully' {
-            { Write-OutcomeLog -TaskId 'test-id' -FolderName $null -FolderPath 'C:\Test' -Outcome 'Opened' } |
+        It 'Should <Description>' -ForEach @(
+            @{
+                Description  = 'write log entry even with empty TaskId (defensive coding)'
+                TaskId       = ''
+                FolderName   = 'TestFolder'
+                FolderPath   = 'C:\Test'
+                Outcome      = 'Opened'
+                AssertMatch  = @('TestFolder', 'Opened')
+                AssertNotNull = $true
+            }
+            @{
+                Description  = 'not throw when FolderName is null'
+                TaskId       = 'test-id'
+                FolderName   = $null
+                FolderPath   = 'C:\Test'
+                Outcome      = 'Opened'
+                AssertMatch  = @()
+                AssertNotNull = $false
+            }
+            @{
+                Description  = 'not throw with special characters in parameters'
+                TaskId       = 'test|id'
+                FolderName   = 'Folder|Name'
+                FolderPath   = 'C:\Path|With|Pipes'
+                Outcome      = 'Opened'
+                AssertMatch  = @()
+                AssertNotNull = $true
+            }
+        ) {
+            { Write-OutcomeLog -TaskId $TaskId -FolderName $FolderName -FolderPath $FolderPath -Outcome $Outcome } |
                 Should -Not -Throw
-        }
-
-        It 'Should handle special characters in parameters' {
-            # Pipes are delimiters - ensure proper handling
-            { Write-OutcomeLog -TaskId 'test|id' -FolderName 'Folder|Name' -FolderPath 'C:\Path|With|Pipes' -Outcome 'Opened' } |
-                Should -Not -Throw
-            $logPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_log.txt'
-            $content = Get-Content $logPath -Raw
-            # Verify data was written (even if delimiters might be affected)
-            $content | Should -Not -BeNullOrEmpty
+            if ($AssertNotNull -or $AssertMatch.Count -gt 0) {
+                $logPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_log.txt'
+                $content = Get-Content $logPath -Raw
+                if ($AssertNotNull) { $content | Should -Not -BeNullOrEmpty }
+                foreach ($pattern in $AssertMatch) { $content | Should -Match $pattern }
+            }
         }
 
         It 'Should sanitize or escape pipe characters to avoid delimiter corruption' {

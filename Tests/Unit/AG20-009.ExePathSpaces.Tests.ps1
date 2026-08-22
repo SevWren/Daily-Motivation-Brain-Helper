@@ -75,9 +75,6 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
         $script:MockedTasks           = @{}
 
         # Reset tasks.json to empty so duplicate-detection does not interfere.
-        if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
-            New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
-        }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
 
         # Override ExePath to a path that contains spaces — the core of this issue.
@@ -91,7 +88,7 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
 
     Context 'New-ScheduledTaskAction -Execute argument' {
 
-        It 'Should call New-ScheduledTaskAction exactly once when ExePath contains spaces' {
+        It 'Should register exactly one scheduled task when ExePath contains spaces' {
             # Verified via Register-ScheduledTask capture: exactly one registration means
             # New-ScheduledTaskAction was called exactly once.
             New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
@@ -138,7 +135,6 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
             $result = New-MotivationTask -FolderPath 'C:\Projects\TestFolder' `
                                          -TriggerTime ((Get-Date).AddHours(2))
 
-            Write-Host "AG20-009 Ctx2: Success=$($result.Success) Error='$($result['Error'])' IsDuplicate=$($result.IsDuplicate) TaskId=$($result.TaskId)"
             $result.Success | Should -Be $true
         }
 

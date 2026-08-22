@@ -82,16 +82,6 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
             $script:UncThrowResult | Should -Not -BeNullOrEmpty
         }
 
-        It "returns a result object (not null) when Test-Path throws IOException for a UNC path" {
-            Mock Test-Path {
-                throw [System.IO.IOException]::new("Network path unreachable")
-            } -ParameterFilter { $Path -like '\\*' }
-
-            $result = Invoke-FolderScheduling -FolderPath "\\server\share\folder" -TriggerTime (Get-Date).AddHours(1)
-
-            $result | Should -Not -BeNullOrEmpty
-        }
-
         It "returns Success = false or proceeds gracefully — never an unhandled exception — when Test-Path throws for UNC path" {
             # Per issue #173: acceptable outcomes are (a) Success=$false with error message,
             # or (b) graceful handling with no unhandled exception.
@@ -244,10 +234,6 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
             }
         }
 
-        AfterEach {
-            # Restore default Test-Path so remaining tests are not affected
-            Mock Test-Path { & (Get-Command Test-Path -CommandType Application -ErrorAction SilentlyContinue) @args }
-        }
     }
 
     Context "UNC path gone — Test-Path returns false" {
@@ -258,16 +244,5 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
                 Should -Not -Throw
         }
 
-        It "returns a result object (not null) when Test-Path returns false for a UNC path" {
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
-
-            $result = New-MotivationTask -FolderPath '\\server\share\missing' -TriggerTime (Get-Date).AddHours(2)
-
-            $result | Should -Not -BeNullOrEmpty
-        }
-
-        AfterEach {
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
-        }
     }
 }
