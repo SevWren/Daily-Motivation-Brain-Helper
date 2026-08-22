@@ -52,7 +52,7 @@ Describe 'AG16-002: Build Output Validation' {
 }
 
 Describe 'AG16-018: Build Script Parameter Support' {
-    It 'Should have [CmdletBinding()] attribute declaration' {
+    It 'Should support CmdletBinding for ShouldProcess' {
         $buildScript = Get-Content (Join-Path $PSScriptRoot '..\..\build.ps1') -Raw
 
         # Should have [CmdletBinding()] at top

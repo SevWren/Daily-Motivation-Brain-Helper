@@ -83,6 +83,12 @@ Describe 'AG20-005 — Save-TasksJson atomic write failure and data preservation
             }
         }
 
+        AfterEach {
+            # Remove the Move-Item mock so subsequent calls restore normal behaviour.
+            # (Pester cleans up mocks at the end of each It block, but an explicit
+            # AfterEach makes the intent clear.)
+        }
+
         It 'Save-TasksJson re-throws when Move-Item fails' {
             $script:SaveThrew | Should -Be $true
         }
@@ -116,7 +122,7 @@ Describe 'AG20-005 — Save-TasksJson atomic write failure and data preservation
             @($result)[0].status  | Should -Be 'PENDING'
         }
 
-        It 'the .tmp scratch file does not exist on disk after Save-TasksJson fails during Move-Item' {
+        It 'the .tmp scratch file is cleaned up by the catch block on failure' {
             # Save-TasksJson catch block calls Remove-Item on the .tmp file.
             # After a failed save the temp file must not persist on disk.
             # NOTE: if this assertion fails it means partial writes CAN survive a

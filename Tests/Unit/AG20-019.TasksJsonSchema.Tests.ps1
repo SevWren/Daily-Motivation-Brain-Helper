@@ -53,6 +53,14 @@ Describe 'tasks.json schema contract — malformed entries' {
             { Get-TasksJson } | Should -Not -Throw
         }
 
+        It 'returns the entry (or skips it) without throwing — either behavior is acceptable' {
+            $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
+            @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
+
+            $result = Get-TasksJson
+            # Must not throw; result is either an array containing the entry or an empty array
+            $result | Should -Not -Be $null
+        }
     }
 
     Context 'Get-MotivationTasks with null task_id' {
@@ -176,7 +184,7 @@ Describe 'tasks.json schema contract — malformed entries' {
             $script:Platform = $null
         }
 
-        It 'returns $false without throwing when TaskId is not found — Windows Task Scheduler mocked' -Skip:(-not $IsWindows) {
+        It 'is a graceful no-op on Windows with mocked Task Scheduler cmdlets' -Skip:(-not $IsWindows) {
             Mock Unregister-ScheduledTask { }
             Mock Get-ScheduledTask { return $null }
             Mock Sync-TaskStatuses { }

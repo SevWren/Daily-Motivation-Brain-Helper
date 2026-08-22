@@ -9,6 +9,7 @@
 
 BeforeAll {
     if (-not $IsWindows) {
+        Write-Host "Skipping AG20-001 - Windows Task Scheduler required" -ForegroundColor Yellow
         return
     }
     $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
@@ -45,9 +46,9 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
 
     BeforeEach {
         $script:MockedTasks = @{}
-        $appDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'
-        if (Test-Path $appDir) {
-            Remove-Item -Path $appDir -Recurse -Force
+        $script:AppDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'
+        if (Test-Path $script:AppDir) {
+            Remove-Item -Path $script:AppDir -Recurse -Force
         }
         Initialize-AppData
     }
