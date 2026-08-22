@@ -35,7 +35,6 @@ Describe 'Single-File Dot-Source' {
     It 'Should dot-source without errors using -NoRun' {
         # BeforeAll already succeeded if we reached this point;
         # this assertion makes failure explicit.
-        $script:ScriptPath | Should -Not -BeNullOrEmpty
         { . $script:ScriptPath -NoRun } | Should -Not -Throw
     }
 }
@@ -201,10 +200,6 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
         $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
-        Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: '$($result['Error'])'"
-        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
-        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
 
         # Verify task persists
@@ -266,10 +261,6 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     It 'Should complete full task lifecycle: create, list, remove' {
         # Create task
         $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
-        Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: '$($result['Error'])'"
-        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
-        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
         $taskId = $result.TaskId
 
@@ -286,15 +277,12 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
         $tasks.Count | Should -Be 0
     }
 
-    It 'Should handle duplicate detection across task operations' {
+    It 'Attempting to schedule the same folder at the same time twice returns IsDuplicate=$true and does not add a second task record' {
         # Use relative time to ensure it's always in the future
         $triggerTime = (Get-Date).AddHours(2)
 
         # Create first task
         $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
-        Write-Host "DEBUG - r1.Success: $($r1.Success)"
-        Write-Host "DEBUG - r1.IsDuplicate: $($r1.IsDuplicate)"
-        Write-Host "DEBUG - r1.TaskId: $($r1.TaskId)"
         $r1.Success | Should -Be $true
 
         # Attempt duplicate

@@ -12,7 +12,6 @@
 
 BeforeAll {
     if (-not $IsWindows) {
-        Write-Host "Skipping AG20-022.ConcurrentTaskSync.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
         return
     }
 
@@ -22,12 +21,10 @@ BeforeAll {
     $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Sync_Test_$(New-Guid)"
     Initialize-AppData
 
-    $script:ExePath = "C:\Test\DailyMotivation.exe"
-
     $script:SyncMockedTasks = @{}
 
     Mock Register-ScheduledTask {
-        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
+        param($TaskName)
         $script:SyncMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
         return $null
     }
@@ -51,8 +48,6 @@ Describe 'Sync-TaskStatuses - concurrent multi-task reconciliation' -Skip:(-not 
     Context 'When tasks.json has 3 PENDING tasks and OS scheduler is missing task 2' {
 
         BeforeAll {
-            if (-not $IsWindows) { return }
-
             # task 1: present in OS scheduler
             # task 2: absent from OS scheduler (should become DELETED)
             # task 3: present in OS scheduler
@@ -78,8 +73,6 @@ Describe 'Sync-TaskStatuses - concurrent multi-task reconciliation' -Skip:(-not 
         }
 
         BeforeEach {
-            if (-not $IsWindows) { return }
-
             $futureTime = (Get-Date).AddHours(2).ToString('yyyy-MM-ddTHH:mm:ss')
             $createdAt  = (Get-Date -Format 'o')
 
@@ -117,7 +110,7 @@ Describe 'Sync-TaskStatuses - concurrent multi-task reconciliation' -Skip:(-not 
             Save-TasksJson @($task1, $task2, $task3)
         }
 
-        It 'Should not throw during reconciliation of 3 simultaneous tasks' {
+        It 'Sync-TaskStatuses completes without error when tasks.json contains 3 PENDING tasks and one is absent from the OS scheduler' {
             { Sync-TaskStatuses } | Should -Not -Throw
         }
 

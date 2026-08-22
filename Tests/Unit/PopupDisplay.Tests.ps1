@@ -46,14 +46,11 @@ Describe 'Escape-XmlText' {
             $result | Should -Be 'Normal Folder Name'
         }
 
-        It 'Should handle empty string' {
-            $result = Escape-XmlText ''
-            $result | Should -Be ''
-        }
-
-        It 'Should handle null input gracefully' {
-            $result = Escape-XmlText $null
-            $result | Should -Be ''
+        It 'Should return empty string for <label> input' -ForEach @(
+            @{ label = 'empty string'; Input = '' }
+            @{ label = 'null';         Input = $null }
+        ) {
+            Escape-XmlText $Input | Should -Be ''
         }
     }
 }
@@ -66,27 +63,17 @@ Describe 'Truncate-TextForDisplay' {
             $result | Should -Be $text
         }
 
-        It 'Should truncate text over 150 characters with ellipsis' {
-            $text = "A" * 160
-            $result = Truncate-TextForDisplay -Text $text -MaxLength 150
-            $result.Length | Should -Be 150
-            $result | Should -Match '\.\.\.$'
-        }
-
         It 'Should preserve content and add ellipsis at exactly 150 chars' {
             $text = "A" * 160
             $result = Truncate-TextForDisplay -Text $text -MaxLength 150
             $result | Should -Be (("A" * 147) + "...")
         }
 
-        It 'Should handle empty string' {
-            $result = Truncate-TextForDisplay -Text "" -MaxLength 150
-            $result | Should -Be ""
-        }
-
-        It 'Should handle null input gracefully' {
-            $result = Truncate-TextForDisplay -Text $null -MaxLength 150
-            $result | Should -Be ''
+        It 'Should return empty string for <label> input' -ForEach @(
+            @{ label = 'empty string'; Input = '' }
+            @{ label = 'null';         Input = $null }
+        ) {
+            Truncate-TextForDisplay -Text $Input -MaxLength 150 | Should -Be ''
         }
 
         It 'Should handle text exactly at max length' {
@@ -176,14 +163,11 @@ Describe 'Strip-MarkupText' {
             $result | Should -Be 'plain text'
         }
 
-        It 'Should handle empty string' {
-            $result = Strip-MarkupText ''
-            $result | Should -Be ''
-        }
-
-        It 'Should handle null input gracefully' {
-            $result = Strip-MarkupText $null
-            $result | Should -Be ''
+        It 'Should return empty string for <label> input' -ForEach @(
+            @{ label = 'empty string'; Input = '' }
+            @{ label = 'null';         Input = $null }
+        ) {
+            Strip-MarkupText $Input | Should -Be ''
         }
     }
 }

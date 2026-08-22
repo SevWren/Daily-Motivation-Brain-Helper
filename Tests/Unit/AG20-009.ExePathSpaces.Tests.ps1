@@ -78,12 +78,7 @@ Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $I
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
 
         # Override ExePath to a path that contains spaces — the core of this issue.
-        $script:OriginalExePath = $script:ExePath
         $script:ExePath = 'C:\Program Files\Daily Motivation\DailyMotivation.exe'
-    }
-
-    AfterEach {
-        $script:ExePath = $script:OriginalExePath
     }
 
     Context 'New-ScheduledTaskAction -Execute argument' {

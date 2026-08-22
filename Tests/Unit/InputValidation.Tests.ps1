@@ -56,43 +56,19 @@ Describe 'AG2-001: Missing null check on $FolderPath before length comparison' -
         '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
     }
 
-    Context 'New-MotivationTask' {
-        It 'Should handle null FolderPath without throwing NullReferenceException' {
-            $result = $null
-            { $result = New-MotivationTask -FolderPath $null -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-        }
-
-        It 'Should handle empty FolderPath without throwing' {
-            $result = $null
-            { $result = New-MotivationTask -FolderPath '' -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-        }
-
-        It 'Should handle single character FolderPath without array index error' {
-            $result = $null
-            { $result = New-MotivationTask -FolderPath 'C' -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-        }
+    It 'New-MotivationTask does not throw for FolderPath = <label>' -ForEach @(
+        @{ label = 'null';         path = $null }
+        @{ label = 'empty string'; path = '' }
+        @{ label = 'single char';  path = 'C' }
+    ) {
+        { New-MotivationTask -FolderPath $path -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
     }
 
-    Context 'Invoke-FolderScheduling' {
-        It 'Should handle null FolderPath without throwing NullReferenceException' {
-            $result = $null
-            { $result = Invoke-FolderScheduling -FolderPath $null -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-        }
-
-        It 'Should handle empty FolderPath without throwing' {
-            $result = $null
-            { $result = Invoke-FolderScheduling -FolderPath '' -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-        }
+    It 'Invoke-FolderScheduling does not throw for FolderPath = <label>' -ForEach @(
+        @{ label = 'null';         path = $null }
+        @{ label = 'empty string'; path = '' }
+    ) {
+        { Invoke-FolderScheduling -FolderPath $path -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
     }
 }
 
-Describe 'AG2-004: Unvalidated array index access on $FolderPath' -Skip:(-not $IsWindows) {
-    BeforeEach {
-        '[]' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
-    }
-
-    It 'Should handle single character path without array bounds exception' {
-        $result = $null
-        { $result = New-MotivationTask -FolderPath 'X' -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
-    }
-}

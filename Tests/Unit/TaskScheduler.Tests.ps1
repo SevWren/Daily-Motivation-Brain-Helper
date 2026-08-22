@@ -11,7 +11,6 @@
 BeforeAll {
     # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
     if (-not $IsWindows) {
-        Write-Host "Skipping TaskScheduler.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
         return
     }
 
@@ -48,8 +47,7 @@ BeforeAll {
     # Track registered tasks in script scope for stateful mocking
     $script:MockedTasks = @{}
 
-    # AG8-001: Add -Verifiable to enable mock call verification
-    Mock Register-ScheduledTask -Verifiable {
+    Mock Register-ScheduledTask {
         param(
             $TaskName,
             $Action,
@@ -68,8 +66,7 @@ BeforeAll {
 
         return $null
     }
-    # AG8-003: Add -Verifiable to Unregister mock for validation
-    Mock Unregister-ScheduledTask -Verifiable {
+    Mock Unregister-ScheduledTask {
         param($TaskName, $Confirm)
         # Remove from tracked tasks
         if ($script:MockedTasks.ContainsKey($TaskName)) {
@@ -287,7 +284,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     }
 
     Context 'Edge cases - Path handling' {
-        It 'Should not crash on very long folder paths (AG8-013)' {
+        It 'Should return a non-null result (success or graceful failure) for paths exceeding 260 characters (AG8-013)' {
             # Windows path limit is ~260 chars, task name limit is 238
             $longPath = 'C:\' + ('VeryLongFolderName' * 15)  # ~285 characters
             $result = New-MotivationTask -FolderPath $longPath -TriggerTime ((Get-Date).AddHours(2))
@@ -426,13 +423,6 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             Should -Invoke New-ScheduledTaskPrincipal -Times 1
         }
 
-        AfterEach {
-            # Restore default mock
-            Mock New-ScheduledTaskPrincipal {
-                param($UserId, $LogonType, $RunLevel)
-                return [PSCustomObject]@{ UserId = $UserId; LogonType = $LogonType; RunLevel = $RunLevel }
-            }
-        }
     }
 
     Context 'Task action path validation (AG5-005, AG5-023)' {
@@ -530,9 +520,7 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
 
         # AG8-025: Strict property validation (not just -Not -BeNullOrEmpty)
         # Verify task_id is hexadecimal GUID format (16 chars)
-        $task.task_id        | Should -Not -BeNullOrEmpty
         $task.task_id        | Should -Match '^[a-f0-9]{16}$' -Because "task_id should be 16-char hex string"
-        $task.task_id.Length | Should -BeExactly 16
 
         # Verify task_name follows naming convention
         $task.task_name      | Should -Match '^DailyMotivation_[a-f0-9]{16}$'

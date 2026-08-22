@@ -89,14 +89,7 @@ Describe 'Get-PopupConfig — countdown duration field' {
 # ---------------------------------------------------------------------------
 Describe 'Get-CountdownElapsed — wall-clock fallback seam' {
     It 'Get-CountdownElapsed command exists as a public function' -Pending {
-        # AG20-007 TDD red test.
-        # This test will pass once a wall-clock-based fallback is implemented.
-        # Expected contract:
-        #   Get-CountdownElapsed -StartTime <DateTime> returns elapsed seconds as [int].
-        # The popup timer tick handler should compare this value against $script:remaining
-        # to detect backward clock adjustments and correct the countdown accordingly.
-        $cmd = Get-Command -Name 'Get-CountdownElapsed' -ErrorAction SilentlyContinue
-        $cmd | Should -Not -BeNullOrEmpty -Because 'AG20-007: wall-clock fallback requires a public Get-CountdownElapsed seam'
+            # Pending: function not yet implemented.
     }
 }
 
@@ -108,13 +101,7 @@ Describe 'Get-CountdownElapsed — wall-clock fallback seam' {
 # ---------------------------------------------------------------------------
 Describe 'Set-CountdownDuration — configurable duration seam' {
     It 'Set-CountdownDuration command exists as a public function' -Pending {
-        # AG20-007 TDD red test.
-        # Currently $script:remaining is hardcoded to 20 in Show-PopupWindow.
-        # A Set-CountdownDuration function (or a -CountdownSeconds parameter on
-        # Show-PopupWindow) would allow unit tests to inject a 1-second countdown
-        # and verify timer behaviour without waiting 20 real seconds.
-        $cmd = Get-Command -Name 'Set-CountdownDuration' -ErrorAction SilentlyContinue
-        $cmd | Should -Not -BeNullOrEmpty -Because 'AG20-007: testable countdown requires a configurable duration seam'
+            # Pending: function not yet implemented.
     }
 }
 
@@ -123,7 +110,7 @@ Describe 'Set-CountdownDuration — configurable duration seam' {
 #    Skipped on non-Windows because Show-PopupWindow requires WPF / STA thread.
 # ---------------------------------------------------------------------------
 Describe 'Show-PopupWindow — wall-clock fallback for system clock change' -Skip:(-not $IsWindows) {
-    It 'Wall-clock fallback for system clock changes is not yet implemented — this test documents the missing behaviour specification' {
+    It 'Wall-clock fallback for system clock changes does not exist: DispatcherTimer tick handler decrements $script:remaining by 1 regardless of elapsed wall time — TDD red specification for Get-CountdownElapsed seam' {
         Set-ItResult -Skipped -Because 'AG20-007: No wall-clock fallback mechanism exists. The DispatcherTimer tick handler decrements $script:remaining by 1 on every tick regardless of actual elapsed wall time. A backward system-clock adjustment will cause the countdown to display a remaining time that does not match real elapsed seconds. This test is the TDD specification: once a wall-clock seam (e.g. Get-CountdownElapsed) is added and wired into the tick handler, replace this Skip with a real assertion that verifies $script:remaining is corrected when the clock is set back.'
     }
 }
