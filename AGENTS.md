@@ -283,10 +283,9 @@ scheduling principal configuration is declared resolved.
    directly causes "Access is denied" regressions by introducing null-reference paths that propagate
    into Windows API error strings.
 
-5. **Task principal parameters are `LogonType Interactive / RunLevel Limited`.** Live Windows 10/11
-   testing confirmed `S4U` fails with "Access is denied" for non-elevated users; `Interactive` is
-   required so the popup fires on the user's active desktop session. Do not change these values based
-   solely on documentation or Linux-side reasoning — any change requires a live Windows 10/11 test.
+5. **Task principal parameters (`LogonType`, `RunLevel`) are frozen at `S4U / Limited` until a live
+   Windows integration test confirms any proposed alternative works.** Do not change these values
+   based solely on documentation or Linux-side reasoning.
 
 6. **Error messages must name the failing operation.** Path sanitization (`[PATH]`) is correct for
    privacy but must not replace the operation name or Windows error code. A "Schedule Failed" dialog
