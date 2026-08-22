@@ -156,7 +156,7 @@ Describe 'Config schema contract' {
             $cfg.task_warning_threshold | Should -Be 5
         }
 
-        It 'documents current behavior: task_warning_threshold = 0 is returned as-is (guard only rejects < 0, not = 0)' {
+        It 'returns 0 when task_warning_threshold is 0 (guard rejects only < 0)' {
             # NOTE: 0 is a non-positive value and arguably invalid for a "warning threshold"
             # (AG20-016 gap). The current guard is (< 0), so 0 passes through without correction.
             # This test documents that gap rather than asserting aspirational validation.

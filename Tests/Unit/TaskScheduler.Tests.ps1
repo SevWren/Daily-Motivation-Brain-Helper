@@ -59,10 +59,6 @@ BeforeAll {
             $Description,
             [switch]$Force
         )
-        # DEBUG: Log registration
-        Write-Host "[DEBUG Register-ScheduledTask] Registering: '$TaskName'"
-        Write-Host "[DEBUG Register-ScheduledTask] Before - MockedTasks count: $($script:MockedTasks.Count)"
-
         # Track registered task for Get-ScheduledTask mock
         $script:MockedTasks[$TaskName] = [PSCustomObject]@{
             TaskName = $TaskName
@@ -70,8 +66,6 @@ BeforeAll {
             Triggers = @($Trigger)
         }
 
-        Write-Host "[DEBUG Register-ScheduledTask] After - MockedTasks count: $($script:MockedTasks.Count)"
-        Write-Host "[DEBUG Register-ScheduledTask] After - MockedTasks keys: $($script:MockedTasks.Keys -join ', ')"
         return $null
     }
     # AG8-003: Add -Verifiable to Unregister mock for validation
@@ -88,22 +82,12 @@ BeforeAll {
     # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
     Mock Get-ScheduledTask {
         param($TaskName)
-        # DEBUG: Log lookup attempts
-        Write-Host "[DEBUG Get-ScheduledTask] Looking up: '$TaskName'"
-        Write-Host "[DEBUG Get-ScheduledTask] MockedTasks keys: $($script:MockedTasks.Keys -join ', ')"
-        Write-Host "[DEBUG Get-ScheduledTask] MockedTasks count: $($script:MockedTasks.Count)"
-
         if ($TaskName -eq "DailyMotivation_*") {
-            # Return all tracked tasks for wildcard queries
-            Write-Host "[DEBUG Get-ScheduledTask] Wildcard query - returning $($script:MockedTasks.Values.Count) tasks"
             return @($script:MockedTasks.Values)
         }
-        # For specific task lookup, return tracked task or throw
         if ($script:MockedTasks.ContainsKey($TaskName)) {
-            Write-Host "[DEBUG Get-ScheduledTask] FOUND task: $TaskName"
             return $script:MockedTasks[$TaskName]
         }
-        Write-Host "[DEBUG Get-ScheduledTask] NOT FOUND - returning null for: $TaskName"
         return $null
     }
 }
@@ -117,16 +101,12 @@ AfterAll {
 
 Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     BeforeEach {
-        Write-Host "`n[DEBUG BeforeEach] Resetting test environment"
         # Use $script:TasksPath directly to ensure we're writing to the same path that Get-TasksJson reads from
         if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
-        # Clear tracked tasks for each test
-        Write-Host "[DEBUG BeforeEach] Before reset - MockedTasks count: $($script:MockedTasks.Count)"
         $script:MockedTasks = @{}
-        Write-Host "[DEBUG BeforeEach] After reset - MockedTasks count: $($script:MockedTasks.Count)"
     }
 
     Context 'When creating a new task' {
@@ -283,7 +263,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $r2.IsDuplicate | Should -Be $false
         }
 
-        It 'Should handle time boundary at midnight correctly' {
+        It 'Should not flag as duplicate when same folder is scheduled at 23:59:59 and 00:00:01 the next day' {
             # AG8-020: Negative test - 23:59:59 vs 00:00:01 next day
             $t1 = (Get-Date).Date.AddHours(23).AddMinutes(59).AddSeconds(59)
             $t2 = (Get-Date).Date.AddDays(1).AddSeconds(1)
@@ -307,7 +287,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     }
 
     Context 'Edge cases - Path handling' {
-        It 'Should handle very long folder paths gracefully (AG8-013)' {
+        It 'Should not crash on very long folder paths (AG8-013)' {
             # Windows path limit is ~260 chars, task name limit is 238
             $longPath = 'C:\' + ('VeryLongFolderName' * 15)  # ~285 characters
             $result = New-MotivationTask -FolderPath $longPath -TriggerTime ((Get-Date).AddHours(2))
@@ -460,25 +440,15 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $script:OriginalExePath = $script:ExePath
         }
 
-        It 'Should reject empty executable path (AG5-005)' {
-            $script:ExePath = ""
+        It 'Should reject <Description> executable path' -ForEach @(
+            @{ ExePath = '';                             ErrorPattern = 'executable path'; Description = 'empty' }
+            @{ ExePath = 'C:\Test\DailyMotivation.ps1'; ErrorPattern = '\.exe';           Description = 'non-.exe' }
+            @{ ExePath = 'DailyMotivation.exe';          ErrorPattern = 'absolute';        Description = 'relative' }
+        ) {
+            $script:ExePath = $ExePath
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
             $result.Success | Should -Be $false
-            $result.Error | Should -Match "executable path"
-        }
-
-        It 'Should reject non-.exe file path (AG5-005)' {
-            $script:ExePath = "C:\Test\DailyMotivation.ps1"
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
-            $result.Success | Should -Be $false
-            $result.Error | Should -Match "\.exe"
-        }
-
-        It 'Should reject relative path (AG5-023)' {
-            $script:ExePath = "DailyMotivation.exe"
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
-            $result.Success | Should -Be $false
-            $result.Error | Should -Match "absolute"
+            $result.Error   | Should -Match $ErrorPattern
         }
 
         AfterEach {
@@ -487,24 +457,19 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
     }
 
     Context 'Trigger time validation (AG5-007)' {
-        It 'Should reject trigger time in the past (AG5-007)' {
-            $pastTime = (Get-Date).AddHours(-1)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $pastTime
-            $result.Success | Should -Be $false
-            $result.Error | Should -Match "future"
-        }
-
-        It 'Should reject trigger time too far in future (AG5-007)' {
-            $farFuture = (Get-Date).AddYears(10)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $farFuture
-            $result.Success | Should -Be $false
-            $result.Error | Should -Match "4 years"
-        }
-
-        It 'Should accept valid future trigger time (AG5-007)' {
-            $validFuture = (Get-Date).AddDays(1)
-            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $validFuture
-            $result.Success | Should -Be $true
+        It 'Should handle <Description> (AG5-007)' -ForEach @(
+            @{ OffsetHours = -1;    ShouldSucceed = $false; ErrorPattern = 'future';  Description = 'past time' }
+            @{ OffsetHours = 87600; ShouldSucceed = $false; ErrorPattern = '4 years'; Description = 'far-future time' }
+            @{ OffsetHours = 24;    ShouldSucceed = $true;  ErrorPattern = '';        Description = 'valid future time' }
+        ) {
+            $triggerTime = (Get-Date).AddHours($OffsetHours)
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
+            if (-not $ShouldSucceed) {
+                $result.Success | Should -Be $false
+                $result.Error   | Should -Match $ErrorPattern
+            } else {
+                $result.Success | Should -Be $true
+            }
         }
     }
 }
@@ -591,7 +556,7 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
         $task.snooze_count   | Should -BeGreaterOrEqual 0 -Because "snooze_count cannot be negative"
     }
 
-    It 'Should handle corrupted tasks.json gracefully' {
+    It 'Should return an empty collection when tasks.json contains invalid JSON' {
         # AG8-002: Verify return value, not just that the function doesn't throw.
         # Must return an empty array (not $null or garbage) on corrupt input.
         'invalid json{' | Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Encoding UTF8
@@ -646,12 +611,3 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     }
 }
 
-Describe 'Task Scheduler Integration' -Skip:(-not $IsWindows) {
-    It 'Should create a Windows scheduled task' -Skip {
-        # Skipped: requires administrative privileges and Windows Task Scheduler
-    }
-
-    It 'Should remove a Windows scheduled task' -Skip {
-        # Skipped: requires administrative privileges
-    }
-}

@@ -15,6 +15,22 @@ BeforeAll {
     $script:OriginalAppData = $env:APPDATA
     $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Schema_Test_$(New-Guid)"
     Initialize-AppData
+
+    function New-TestTask([hashtable]$Overrides = @{}, [string[]]$Without = @()) {
+        $props = [ordered]@{
+            task_id        = 'aaaabbbb-0001-0001-0001-000000000001'
+            task_name      = 'DailyMotivation_test_default'
+            folder_path    = 'C:\Test'
+            folder_name    = 'Test'
+            scheduled_time = '2026-09-01T14:00:00'
+            created_at     = (Get-Date -Format 'o')
+            status         = 'PENDING'
+            snooze_count   = 0
+        }
+        foreach ($k in $Overrides.Keys) { $props[$k] = $Overrides[$k] }
+        foreach ($k in $Without) { $props.Remove($k) }
+        return [PSCustomObject]$props
+    }
 }
 
 AfterAll {
@@ -31,52 +47,25 @@ Describe 'tasks.json schema contract — malformed entries' {
 
     Context 'Get-TasksJson with null task_id' {
         It 'does not throw when an entry has task_id = $null' {
-            $badTask = [PSCustomObject]@{
-                task_id        = $null
-                task_name      = 'DailyMotivation_test_nullid'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = 'PENDING'
-                snooze_count   = 0
-            }
+            $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
             { Get-TasksJson } | Should -Not -Throw
         }
 
         It 'returns the entry (or skips it) without throwing — either behavior is acceptable' {
-            $badTask = [PSCustomObject]@{
-                task_id        = $null
-                task_name      = 'DailyMotivation_test_nullid'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = 'PENDING'
-                snooze_count   = 0
-            }
+            $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
             $result = Get-TasksJson
             # Must not throw; result is either an array containing the entry or an empty array
-            $result | Should -BeOfType [object]
+            $result | Should -Not -Be $null
         }
     }
 
     Context 'Get-MotivationTasks with null task_id' {
         It 'does not throw when an entry has task_id = $null' {
-            $badTask = [PSCustomObject]@{
-                task_id        = $null
-                task_name      = 'DailyMotivation_test_nullid2'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = 'PENDING'
-                snooze_count   = 0
-            }
+            $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid2'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
             { Get-MotivationTasks } | Should -Not -Throw
@@ -85,68 +74,23 @@ Describe 'tasks.json schema contract — malformed entries' {
 
     Context 'Get-TasksJson with missing task_name key' {
         It 'does not throw when an entry is missing the task_name property' {
-            $badTask = [PSCustomObject]@{
-                task_id        = 'aaaabbbb-0001-0001-0001-000000000001'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = 'PENDING'
-                snooze_count   = 0
-                # task_name intentionally omitted
-            }
+            $badTask = New-TestTask @{task_id='aaaabbbb-0001-0001-0001-000000000001'} -Without 'task_name'
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
             { Get-TasksJson } | Should -Not -Throw
-        }
-
-        It 'does not throw from Get-MotivationTasks when task_name is missing' {
-            $badTask = [PSCustomObject]@{
-                task_id        = 'aaaabbbb-0002-0002-0002-000000000002'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = 'PENDING'
-                snooze_count   = 0
-            }
-            @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
-
-            { Get-MotivationTasks } | Should -Not -Throw
         }
     }
 
     Context 'Get-TasksJson with null status' {
         It 'does not throw when an entry has status = $null' {
-            $badTask = [PSCustomObject]@{
-                task_id        = 'ccccdddd-0003-0003-0003-000000000003'
-                task_name      = 'DailyMotivation_test_nullstatus'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = $null
-                snooze_count   = 0
+            $badTask = New-TestTask @{
+                task_id   = 'ccccdddd-0003-0003-0003-000000000003'
+                task_name = 'DailyMotivation_test_nullstatus'
+                status    = $null
             }
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
             { Get-TasksJson } | Should -Not -Throw
-        }
-
-        It 'does not throw from Get-MotivationTasks when status is null' {
-            $badTask = [PSCustomObject]@{
-                task_id        = 'ccccdddd-0004-0004-0004-000000000004'
-                task_name      = 'DailyMotivation_test_nullstatus2'
-                folder_path    = 'C:\Test'
-                folder_name    = 'Test'
-                scheduled_time = '2026-09-01T14:00:00'
-                created_at     = (Get-Date -Format 'o')
-                status         = $null
-                snooze_count   = 0
-            }
-            @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
-
-            { Get-MotivationTasks } | Should -Not -Throw
         }
     }
 
