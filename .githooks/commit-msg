@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Git Hook: commit-msg
+# Enforces zero em dashes in the commit message body.
+# ==============================================================================
+
+COMMIT_MSG_FILE="$1"
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Run check on the commit message
+if [ -f "$HOOK_DIR/check-emdash.sh" ]; then
+  bash "$HOOK_DIR/check-emdash.sh" --commit-msg "$COMMIT_MSG_FILE"
+  exit $?
+fi
+
+# Fallback to repo root utility script
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [ -f "$REPO_ROOT/utility/Check-EmDash.ps1" ] && command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -File "$REPO_ROOT/utility/Check-EmDash.ps1" -Mode CommitMsg -CommitMsgFile "$COMMIT_MSG_FILE"
+  exit $?
+fi
+
+exit 0

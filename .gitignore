@@ -82,3 +82,6 @@ handoff-issue-183.md
 Tests/tests_line_count.txt
 utility/tests_line_count.txt
 sevwrenai.2026-08-22.private-key.pem
+.claude/agents/pester-engineer/
+.claude/agents/windows-platform-advisor/
+.claude/agents/writing-docs/
