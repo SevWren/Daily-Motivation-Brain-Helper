@@ -10,7 +10,10 @@
 
 BeforeAll {
     # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
-    if (-not $IsWindows) { return }
+    if (-not $IsWindows) {
+        Write-Host "Skipping SyncTaskStatuses.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
+        return
+    }
 
     . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
@@ -23,6 +26,11 @@ BeforeAll {
     # Track registered tasks for stateful mocking
     $script:SyncMockedTasks = @{}
 
+    Mock Register-ScheduledTask {
+        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
+        $script:SyncMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
+        return $null
+    }
     Mock Unregister-ScheduledTask {
         param($TaskName, $Confirm)
         if ($script:SyncMockedTasks.ContainsKey($TaskName)) {

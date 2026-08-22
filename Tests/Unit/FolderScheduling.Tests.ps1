@@ -5,6 +5,7 @@
 
 .DESCRIPTION
     Tests Invoke-FolderScheduling function (extracted from Show-MainWindow's Do-Schedule).
+    Per architecture-report.html Candidate 1.
 #>
 
 BeforeAll {
@@ -125,7 +126,7 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
     Context "Get-RandomMessage integration (AG8-017)" {
         # AG8-017: Test that calling code correctly handles Get-RandomMessage return values
 
-        It "Returns a non-null result object when Get-RandomMessage returns null" {
+        It "Should handle Get-RandomMessage returning null gracefully" {
             # Mock Get-RandomMessage to return null
             Mock Get-RandomMessage { return $null }
 
@@ -136,7 +137,7 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
             $result | Should -Not -BeNullOrEmpty
         }
 
-        It "Returns a non-null result object when Get-RandomMessage returns an object missing required properties" {
+        It "Should handle Get-RandomMessage returning invalid object (missing properties)" {
             # Mock to return object missing required properties
             Mock Get-RandomMessage {
                 return [PSCustomObject]@{ invalid = 'data' }
@@ -182,6 +183,11 @@ Describe "Invoke-FolderScheduling" -Tag "Unit", "BusinessLogic" {
 
     Context "Windows path handling (AG8-024)" {
         # AG8-024: Add cross-platform path tests for Windows-specific scenarios
+
+        It "Should detect Windows UNC paths correctly" {
+            $result = Invoke-FolderScheduling -FolderPath "\\server\share\folder" -TriggerTime (Get-Date).AddHours(1)
+            $result.IsNetworkPath | Should -Be $true
+        }
 
         It "Should handle Windows drive letters as local paths" -Skip:(-not $IsWindows) {
             # This test only makes sense on Windows

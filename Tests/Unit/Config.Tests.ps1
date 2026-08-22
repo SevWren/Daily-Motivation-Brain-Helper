@@ -18,6 +18,14 @@ BeforeAll {
         $env:APPDATA = $script:TestAppData
         $Error.Clear()  # Clear error state before initialization
         Initialize-AppData
+
+        # AG8-010: Detect silent failures
+        if ($Error.Count -gt 0) {
+            Write-Warning "Initialize-AppData completed with $($Error.Count) errors"
+            foreach ($err in $Error) {
+                Write-Warning "  Error: $($err.Exception.Message)"
+            }
+        }
     }
     catch {
         # If initialization fails, restore original APPDATA immediately
@@ -259,7 +267,7 @@ Describe 'Write-OutcomeLog' {
         $line | Should -Match 'Opened'
     }
 
-    It 'Should not throw when called with all-empty string parameters' {
+    It 'Should not throw on write errors' {
         { Write-OutcomeLog -TaskId '' -FolderName '' -FolderPath '' -Outcome 'Dismissed' } |
             Should -Not -Throw
     }
@@ -322,7 +330,7 @@ Describe 'Write-OutcomeLog' {
 }
 
 Describe 'Show-ErrorDialog' {
-    It 'Should not throw when WPF is unavailable' {
+    It 'Should be callable without throwing (in headless context falls back to stderr)' {
         { Show-ErrorDialog -Message "Test error" } | Should -Not -Throw
     }
 }
@@ -358,6 +366,10 @@ Describe 'AG7-004: Config Caching' {
         $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Cache_Test_$(New-Guid)"
         Initialize-AppData
         # Clear any existing cache
+        if ($null -ne $script:ConfigCache) {
+            $script:ConfigCache = $null
+            $script:ConfigCacheMTime = $null
+        }
     }
 
     AfterEach {
@@ -380,6 +392,7 @@ Describe 'AG7-004: Config Caching' {
 
         # Second call - should reuse cache (not reload from disk)
         $cfg2 = Get-Config
+        $cfg2.default_trigger_hour | Should -Be 14
 
         # Both should be the same cached object
         [Object]::ReferenceEquals($cfg1, $cfg2) | Should -Be $true

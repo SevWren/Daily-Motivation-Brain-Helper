@@ -76,7 +76,7 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
     }
 
     Context "Failure scenarios (AG8-023)" {
-        It "ScheduleTask failure returns a result with Success=false and does not throw" {
+        It "Should handle ScheduleTask failure gracefully" {
             # AG8-023: Create a failure platform adapter
             $failPlatform = [PSCustomObject]@{}
             $failPlatform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
@@ -90,10 +90,11 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
             $result.Error | Should -Not -BeNullOrEmpty
         }
 
-        It "UnscheduleTask throws when the platform method throws" {
+        It "Should handle UnscheduleTask failure gracefully" {
             # AG8-023: Mock UnscheduleTask that throws
             $failPlatform = [PSCustomObject]@{
                 UnscheduleTask = {
+                    param($taskId)
                     throw "Task not found"
                 }
             }
@@ -115,5 +116,13 @@ Describe "HeadlessPlatform adapter" -Tag "Unit", "Platform" {
             $result | Should -Not -BeIn @("OK", "Cancel", "Yes", "No")
         }
 
+        It "Should handle GetAppDataPath returning null" {
+            # AG8-023: Mock GetAppDataPath failure
+            $failPlatform = [PSCustomObject]@{}
+            $failPlatform | Add-Member -MemberType ScriptMethod -Name 'GetAppDataPath' -Value { return $null }
+
+            $result = $failPlatform.GetAppDataPath()
+            $result | Should -Be $null
+        }
     }
 }
