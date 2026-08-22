@@ -18,6 +18,7 @@ BeforeAll {
     . "$PSScriptRoot\..\..\DailyMotivation.ps1" -NoRun
 
     $script:TestAppData = Join-Path ([System.IO.Path]::GetTempPath()) "DailyMotivationTest_$(New-Guid)"
+    $script:OuterOriginalAppData = $env:APPDATA
     $env:APPDATA = $script:TestAppData
 }
 
@@ -25,6 +26,7 @@ AfterAll {
     if (Test-Path $script:TestAppData) {
         Remove-Item -Path $script:TestAppData -Recurse -Force -ErrorAction SilentlyContinue
     }
+    $env:APPDATA = $script:OuterOriginalAppData
 }
 
 Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag "Unit", "NetworkPath" {
@@ -82,7 +84,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
             $script:UncThrowResult | Should -Not -BeNullOrEmpty
         }
 
-        It "returns Success = false or proceeds gracefully — never an unhandled exception — when Test-Path throws for UNC path" {
+        It "does not throw, returns a non-null result, and includes a non-empty Error field when Success=false, when Test-Path throws IOException for a UNC path" {
             # Per issue #173: acceptable outcomes are (a) Success=$false with error message,
             # or (b) graceful handling with no unhandled exception.
             Mock Test-Path {
@@ -105,19 +107,13 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
     }
 
     Context "UNC path gone — Test-Path returns false (simulated share removal)" {
-        It "does not throw an unhandled exception when Test-Path returns false for a UNC path" {
+        It "does not throw and returns a non-null result when Test-Path returns false for a UNC path" {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
 
-            { Invoke-FolderScheduling -FolderPath "\\server\share\gone" -TriggerTime (Get-Date).AddHours(1) } |
+            $script:UncGoneResult = $null
+            { $script:UncGoneResult = Invoke-FolderScheduling -FolderPath "\\server\share\gone" -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
-        }
-
-        It "returns a result object when Test-Path returns false for a UNC path" {
-            Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
-
-            $result = Invoke-FolderScheduling -FolderPath "\\server\share\gone" -TriggerTime (Get-Date).AddHours(1)
-
-            $result | Should -Not -BeNullOrEmpty
+            $script:UncGoneResult | Should -Not -BeNullOrEmpty
         }
 
         It "behavior when UNC path Test-Path returns false is consistent with a missing local folder" {

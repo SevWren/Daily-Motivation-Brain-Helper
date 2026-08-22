@@ -24,26 +24,17 @@ AfterAll {
     }
 }
 
-Describe "New-MotivationTask with platform adapter" -Tag "Unit", "TaskScheduler", "Platform" {
-
-    BeforeEach {
-        # Clean slate for each test
-        if (Test-Path $script:TestAppData) {
-            Remove-Item -Path $script:TestAppData -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        # Inject HeadlessPlatform adapter
-        $script:Platform = [HeadlessPlatform]::new()
-
-        # Initialize app data with platform adapter
-        Initialize-AppData
-
-        # Ensure tasks.json is empty
-        Set-Content -Path $script:TasksPath -Value "[]" -Encoding UTF8 -NoNewline
-
-        # Override exe path for tests
-        $script:ExePath = "/usr/local/bin/DailyMotivation.exe"
+BeforeEach {
+    if (Test-Path $script:TestAppData) {
+        Remove-Item -Path $script:TestAppData -Recurse -Force -ErrorAction SilentlyContinue
     }
+    $script:Platform = [HeadlessPlatform]::new()
+    Initialize-AppData
+    Set-Content -Path $script:TasksPath -Value "[]" -Encoding UTF8 -NoNewline
+    $script:ExePath = "/usr/local/bin/DailyMotivation.exe"
+}
+
+Describe "New-MotivationTask with platform adapter" -Tag "Unit", "TaskScheduler", "Platform" {
 
     Context "When platform adapter is injected" {
         It "creates a task without calling Windows Task Scheduler API" {
@@ -71,7 +62,7 @@ Describe "New-MotivationTask with platform adapter" -Tag "Unit", "TaskScheduler"
             $tasks[0].status | Should -Be "PENDING"
         }
 
-        It "works on Linux without Register-ScheduledTask cmdlet" {
+        It "New-MotivationTask does not throw when Register-ScheduledTask cmdlet is absent (Linux / HeadlessPlatform)" {
             # On Linux, Register-ScheduledTask doesn't exist
             # Platform adapter should handle this gracefully
             { New-MotivationTask -FolderPath "/tmp/test" -TriggerTime (Get-Date).AddHours(1) } | Should -Not -Throw
@@ -82,22 +73,7 @@ Describe "New-MotivationTask with platform adapter" -Tag "Unit", "TaskScheduler"
 Describe "Remove-MotivationTask with platform adapter" -Tag "Unit", "TaskScheduler", "Platform" {
 
     BeforeEach {
-        # Clean slate
-        if (Test-Path $script:TestAppData) {
-            Remove-Item -Path $script:TestAppData -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        # Inject HeadlessPlatform adapter
-        $script:Platform = [HeadlessPlatform]::new()
-        Initialize-AppData
-
-        # Ensure tasks.json is empty
-        Set-Content -Path $script:TasksPath -Value "[]" -Encoding UTF8 -NoNewline
-
-        $script:ExePath = "/usr/local/bin/DailyMotivation.exe"
-
-        # Create a test task
-        $result = New-MotivationTask -FolderPath "/tmp/test" -TriggerTime (Get-Date).AddHours(1)
+        $result = New-MotivationTask -FolderPath "/tmp/test-folder" -TriggerTime (Get-Date).AddHours(1)
         $script:TestTaskId = $result.TaskId
     }
 

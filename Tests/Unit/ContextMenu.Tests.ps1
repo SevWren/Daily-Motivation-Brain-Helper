@@ -97,7 +97,7 @@ Describe 'Register-ContextMenu' {
         }
     }
 
-    It 'Should not throw when called multiple times (idempotent)' {
+    It 'Should leave command value and subkey count unchanged after a second call' {
         # AG8-022: Verify true idempotency - state unchanged after second call
         if ($IsWindows) {
             # Verify initial state
@@ -118,11 +118,8 @@ Describe 'Register-ContextMenu' {
             $subkeys = Get-ChildItem -Path $script:VerbKey -ErrorAction SilentlyContinue
             @($subkeys).Count | Should -Be 1  # Only 'command' subkey
         } else {
-            # On non-Windows, verify behavior through mocks
-            Register-ContextMenu -ExePath $script:TestExe
-            Register-ContextMenu -ExePath $script:TestExe
-            # Both calls should succeed without errors
-            $true | Should -Be $true
+            { Register-ContextMenu -ExePath $script:TestExe } | Should -Not -Throw
+            { Register-ContextMenu -ExePath $script:TestExe } | Should -Not -Throw
         }
     }
 
@@ -164,7 +161,7 @@ Describe 'Unregister-ContextMenu' {
         }
     }
 
-    It 'Should not throw when the key does not exist' {
+    It 'Unregister-ContextMenu does not throw when verb key is absent' {
         Remove-Item $script:VerbKey -Recurse -Force -ErrorAction SilentlyContinue
         { Unregister-ContextMenu } | Should -Not -Throw
     }

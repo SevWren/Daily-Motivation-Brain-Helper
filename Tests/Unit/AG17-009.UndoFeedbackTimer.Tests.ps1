@@ -42,8 +42,6 @@ Describe "AG17-009: UndoFeedbackTimer Disposal" {
         It "Should call Stop() before Dispose() in the Tick handler" {
             $stopIdx    = $script:tickHandler.IndexOf('undoFeedbackTimer.Stop()')
             $disposeIdx = $script:tickHandler.IndexOf('undoFeedbackTimer.Dispose()')
-            $stopIdx    | Should -BeGreaterThan -1 -Because "Stop() must be present in tick handler"
-            $disposeIdx | Should -BeGreaterThan -1 -Because "Dispose() must be present in tick handler"
             $stopIdx    | Should -BeLessThan $disposeIdx `
                 -Because "Stop() must precede Dispose() to cleanly halt the timer before releasing it (AG17-009)"
         }

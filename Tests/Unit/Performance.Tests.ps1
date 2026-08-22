@@ -35,15 +35,11 @@ Describe 'AG14-001: FolderBrowserDialog Not Disposed' {
 
         # Find the rePickBtn.Add_Click block
         $clickHandlerStart = $content.IndexOf('$rePickBtn.Add_Click')
-        if ($clickHandlerStart -gt 0) {
-            $clickHandlerSection = $content.Substring($clickHandlerStart, 2000)
-
-            # Should have finally block with dialog.Dispose()
-            $hasFinally = $clickHandlerSection -match 'finally'
-            $hasDispose = $clickHandlerSection -match 'Dispose.*AG14-001'
-
-            ($hasFinally -and $hasDispose) | Should -Be $true -Because "FolderBrowserDialog must be disposed to prevent window handle leak (AG14-001)"
-        }
+        $clickHandlerStart | Should -BeGreaterThan -1 -Because '$rePickBtn.Add_Click handler must exist in source'
+        $clickHandlerSection = $content.Substring($clickHandlerStart, 2000)
+        $hasFinally = $clickHandlerSection -match 'finally'
+        $hasDispose = $clickHandlerSection -match 'Dispose.*AG14-001'
+        ($hasFinally -and $hasDispose) | Should -Be $true -Because "rePickBtn click handler must dispose dialog in finally block (AG14-001)"
     }
 }
 
@@ -63,10 +59,8 @@ Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
         $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
         $hasDisposal  = $functionBody -match 'driveInfo.*\.Dispose\(\)'
 
-        if ($hasDriveInfo) {
-            # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
-            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
-        }
+        # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
+        $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
     }
 
     It 'Should NOT call Dispose() on DriveInfo in New-MotivationTask — DriveInfo is not IDisposable' {
@@ -80,10 +74,8 @@ Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
         $hasDriveInfo = $functionBody -match '\[System\.IO\.DriveInfo\]'
         $hasDisposal  = $functionBody -match 'driveInfo.*\.Dispose\(\)'
 
-        if ($hasDriveInfo) {
-            # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
-            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
-        }
+        # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
+        $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
     }
 }
 

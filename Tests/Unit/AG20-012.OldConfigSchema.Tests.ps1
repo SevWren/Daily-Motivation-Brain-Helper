@@ -30,53 +30,20 @@ Describe 'Get-Config old schema upgrade path' {
         if (Test-Path $env:APPDATA) {
             Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
         }
-        $script:ConfigCache = $null
+    }
+
+    It 'Returns <ExpectedValue> for <AssertProperty> when config contains only <SeedKey>' -ForEach @(
+        @{ SeedJson = '{"default_trigger_hour":9}';   AssertProperty = 'task_warning_threshold'; ExpectedValue = 5;  SeedKey = 'default_trigger_hour' }
+        @{ SeedJson = '{"default_trigger_hour":9}';   AssertProperty = 'default_trigger_hour';   ExpectedValue = 9;  SeedKey = 'default_trigger_hour' }
+        @{ SeedJson = '{"task_warning_threshold":3}'; AssertProperty = 'default_trigger_hour';   ExpectedValue = 14; SeedKey = 'task_warning_threshold' }
+        @{ SeedJson = '{"task_warning_threshold":3}'; AssertProperty = 'task_warning_threshold'; ExpectedValue = 3;  SeedKey = 'task_warning_threshold' }
+    ) {
+        $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
+        $SeedJson | Set-Content $configPath -Encoding UTF8
+        $script:ConfigCache      = $null
         $script:ConfigCacheMTime = $null
-    }
-
-    It 'Returns task_warning_threshold = 5 when config.json is missing that key (old schema)' {
-        # Seed: only default_trigger_hour present — simulates config written before task_warning_threshold existed
-        @{ default_trigger_hour = 9 } |
-            ConvertTo-Json |
-            Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
-
         $cfg = Get-Config
-
-        $cfg.task_warning_threshold | Should -Be 5
-    }
-
-    It 'Preserves the present key default_trigger_hour = 9 when task_warning_threshold is missing' {
-        # The valid key that IS present must survive — only the missing key gets a default
-        @{ default_trigger_hour = 9 } |
-            ConvertTo-Json |
-            Set-Content $script:ConfigPath -Encoding UTF8
-        $script:ConfigCache = $null; $script:ConfigCacheMTime = $null
-
-        $cfg = Get-Config
-
-        $cfg.default_trigger_hour | Should -Be 9
-    }
-
-    It 'Returns default_trigger_hour = 14 when config.json is missing that key' {
-        # Seed: only task_warning_threshold present — simulates config missing default_trigger_hour
-        @{ task_warning_threshold = 3 } |
-            ConvertTo-Json |
-            Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
-
-        $cfg = Get-Config
-
-        $cfg.default_trigger_hour | Should -Be 14
-    }
-
-    It 'Preserves the present key task_warning_threshold = 3 when default_trigger_hour is missing' {
-        @{ task_warning_threshold = 3 } |
-            ConvertTo-Json |
-            Set-Content $script:ConfigPath -Encoding UTF8
-        $script:ConfigCache = $null; $script:ConfigCacheMTime = $null
-
-        $cfg = Get-Config
-
-        $cfg.task_warning_threshold | Should -Be 3
+        $cfg.$AssertProperty | Should -Be $ExpectedValue
     }
 
     It 'Returns default_trigger_hour = 14 when config.json has old renamed key trigger_hour' {
