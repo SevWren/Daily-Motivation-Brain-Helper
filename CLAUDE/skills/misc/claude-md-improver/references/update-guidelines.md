@@ -1,150 +1,114 @@
 # CLAUDE.md Update Guidelines
 
-## Core Principle
+## The constraint that overrides everything else
 
-Only add information that will genuinely help future Claude sessions. The context window is precious - every line must earn its place.
+**Target: under 200 lines.** Every proposed change must be evaluated against this constraint first. If a file is already at or over 200 lines, no additions are permitted until cuts bring it below 180 (leaving 20 lines of headroom).
 
-## What TO Add
+Source: code.claude.com/docs/en/best-practices — *"If your CLAUDE.md is too long, Claude ignores half of it because important rules get lost in the noise. Ruthlessly prune."*
 
-### 1. Commands/Workflows Discovered
+---
 
-```markdown
-## Build
-
-`npm run build:prod` - Full production build with optimization
-`npm run build:dev` - Fast dev build (no minification)
-```
-
-Why: Saves future sessions from discovering these again.
-
-### 2. Gotchas and Non-Obvious Patterns
-
-```markdown
-## Gotchas
-
-- Tests must run sequentially (`--runInBand`) due to shared DB state
-- `yarn.lock` is authoritative; delete `node_modules` if deps mismatch
-```
-
-Why: Prevents repeating debugging sessions.
-
-### 3. Package Relationships
-
-```markdown
-## Dependencies
-
-The `auth` module depends on `crypto` being initialized first.
-Import order matters in `src/bootstrap.ts`.
-```
-
-Why: Architecture knowledge that isn't obvious from code.
-
-### 4. Testing Approaches That Worked
-
-```markdown
-## Testing
-
-For API endpoints: Use `supertest` with the test helper in `tests/setup.ts`
-Mocking: Factory functions in `tests/factories/` (not inline mocks)
-```
-
-Why: Establishes patterns that work.
-
-### 5. Configuration Quirks
-
-```markdown
-## Config
-
-- `NEXT_PUBLIC_*` vars must be set at build time, not runtime
-- Redis connection requires `?family=0` suffix for IPv6
-```
-
-Why: Environment-specific knowledge.
-
-## What NOT to Add
-
-### 1. Obvious Code Info
-
-Bad:
-```markdown
-The `UserService` class handles user operations.
-```
-
-The class name already tells us this.
-
-### 2. Generic Best Practices
-
-Bad:
-```markdown
-Always write tests for new features.
-Use meaningful variable names.
-```
-
-This is universal advice, not project-specific.
-
-### 3. One-Off Fixes
-
-Bad:
-```markdown
-We fixed a bug in commit abc123 where the login button didn't work.
-```
-
-Won't recur; clutters the file.
-
-### 4. Verbose Explanations
-
-Bad:
-```markdown
-The authentication system uses JWT tokens. JWT (JSON Web Tokens) are
-an open standard (RFC 7519) that defines a compact and self-contained
-way for securely transmitting information between parties as a JSON
-object. In our implementation, we use the HS256 algorithm which...
-```
-
-Good:
-```markdown
-Auth: JWT with HS256, tokens in `Authorization: Bearer <token>` header.
-```
-
-## Diff Format for Updates
-
-For each suggested change:
-
-### 1. Identify the File
+## Decision tree for every line
 
 ```
-File: ./CLAUDE.md
-Section: Commands (new section after ## Architecture)
+Does removing this line cause Claude to make a specific, identifiable mistake?
+│
+├─ NO  → Cut it, or move it (see below)
+│
+└─ YES → Is it a multi-step procedure or task-specific workflow?
+         │
+         ├─ YES → Move to .claude/skills/<name>/SKILL.md
+         │
+         └─ NO  → Does it only apply when editing specific file types/paths?
+                  │
+                  ├─ YES → Move to .claude/rules/<name>.md with paths: frontmatter
+                  │
+                  └─ NO  → Keep it in CLAUDE.md
 ```
 
-### 2. Show the Change
+---
 
-```diff
- ## Architecture
- ...
+## What to KEEP in CLAUDE.md
 
-+## Commands
-+
-+| Command | Purpose |
-+|---------|---------|
-+| `npm run dev` | Dev server with HMR |
-+| `npm run build` | Production build |
-+| `npm test` | Run test suite |
+Only content where removing it would cause Claude to make a specific mistake in every session:
+
+| Category | Example |
+|----------|---------|
+| Build commands Claude can't guess | `.\build.ps1` requires ps2exe pre-installed |
+| Style rules that differ from defaults | "Use `Interactive` not `S4U` for LogonType" |
+| Non-obvious gotchas | "`Get-MotivationTasks` is plural — singular throws CommandNotFoundException" |
+| Environment quirks | "`$script:ExePath` is undefined under `-NoRun`; tests must set it" |
+| Constraints with silent failure modes | "Never put ErrorAction in a splatted hashtable passed to a mock" |
+| Critical architectural decisions | "One file, one exe — never split into src/" |
+
+---
+
+## What to CUT from CLAUDE.md
+
+| Category | Why | Alternative |
+|----------|-----|-------------|
+| Directory trees / file listings | Claude reads the filesystem | None — Claude reads it |
+| Function/class inventories | Claude reads the source | `docs/reference/` |
+| Architecture overviews | Claude reads `docs/architecture/` | Link to `docs/architecture/` |
+| Standard conventions Claude knows | Already in pretraining | None needed |
+| Verbose explanations of how a pattern works | Too long for CLAUDE.md | Link to ADR or doc |
+| Historical bug notes ("we fixed X in commit Y") | Past, not future | Git history |
+| Content that duplicates README.md or CONTRIBUTING.md | Stale risk, redundant | Link to those files |
+| Generic advice ("write clean code") | Claude already does this | Nothing |
+
+---
+
+## What to MOVE (not cut — preserve the value, change the location)
+
+### Move to `.claude/skills/<name>/SKILL.md`
+
+When: the content is a multi-step procedure (3+ steps), a repeatable workflow, or domain knowledge needed only for specific tasks.
+
+Skills are loaded on demand — they never consume context unless invoked. This is the correct home for content that matters sometimes but shouldn't bloat every session.
+
+```yaml
+# .claude/skills/run-integration-tests/SKILL.md
+---
+name: run-integration-tests
+description: Run the Windows integration test suite on the real Task Scheduler
+disable-model-invocation: true
+---
+1. Ensure running on Windows 10/11 PowerShell 7
+2. Run: .\Invoke-Tests.ps1 -Tag Integration
+3. Post terminal output to the relevant GitHub issue before closing it
 ```
 
-### 3. Explain Why
+### Move to `.claude/rules/<name>.md`
 
-> **Why this helps:** The build commands weren't documented, causing
-> confusion about how to run the project. This saves future sessions
-> from needing to inspect `package.json`.
+When: the content only applies when Claude is working with specific file types or paths.
 
-## Validation Checklist
+Rules with `paths:` frontmatter load only when Claude reads matching files — they don't appear in every session.
 
-Before finalizing an update, verify:
+```yaml
+# .claude/rules/pester-tests.md
+---
+paths:
+  - "Tests/**/*.ps1"
+---
+Never mock New-ScheduledTaskAction, New-ScheduledTaskTrigger, New-ScheduledTaskSettingsSet,
+or New-ScheduledTaskPrincipal. Only mock the persistence layer.
+Never include ErrorAction in a splatted hashtable — specify it on the call directly.
+```
 
-- [ ] Each addition is project-specific
-- [ ] No generic advice or obvious info
-- [ ] Commands are tested and work
-- [ ] File paths are accurate
-- [ ] Would a new Claude session find this helpful?
-- [ ] Is this the most concise way to express the info?
+---
+
+## What @path imports do NOT do
+
+`@path/to/file` syntax in CLAUDE.md imports the target file — but it **does not reduce context**. The imported file loads into the context window at session start, same as if it were inline. Using imports for "organization" while keeping CLAUDE.md under 200 lines only works if the imported content would have been cut anyway. If you import a 300-line file from a 50-line CLAUDE.md, you now have 350 lines of context.
+
+---
+
+## Validation checklist before finalizing any update
+
+- [ ] File is under 200 lines after all proposed changes
+- [ ] Every retained line passes: "Would removing this cause Claude to make a specific mistake?"
+- [ ] No line is something Claude can derive by reading the codebase
+- [ ] No multi-step procedure — those belong in skills
+- [ ] No path-specific instruction — those belong in `.claude/rules/`
+- [ ] No `@path` import that increases total context beyond 200 lines
+- [ ] Projected line count is shown to the user before applying changes

@@ -1,179 +1,150 @@
 ---
 name: claude-md-improver
-description: Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, outputs quality report, then makes targeted updates. Also use when the user mentions "CLAUDE.md maintenance" or "project memory optimization".
-tools: Read, Glob, Grep, Bash, Edit
+description: Audit and improve CLAUDE.md files. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files, or mentions "CLAUDE.md maintenance" or "project memory optimization".
+tools: Read, Glob, Grep, Bash, Edit, WebFetch
 ---
 
 # CLAUDE.md Improver
 
-Audit, evaluate, and improve CLAUDE.md files across a codebase to ensure Claude Code has optimal project context.
+Audit and improve CLAUDE.md files so they stay under the official 200-line limit while containing only what Claude cannot derive from reading the code.
 
-**This skill can write to CLAUDE.md files.** After presenting a quality report and getting user approval, it updates CLAUDE.md files with targeted improvements.
+**Official constraint (code.claude.com/docs/en/memory):**
+> Target under 200 lines per CLAUDE.md file. Longer files consume more context and reduce adherence. Bloated CLAUDE.md files cause Claude to ignore your actual instructions.
 
-## Workflow
+**The primary action for a file over 200 lines is pruning, not adding.**
 
-### Phase 1: Discovery
+---
 
-Find all CLAUDE.md files in the repository:
+## Phase 1 — Discovery
+
+Find all CLAUDE.md files and related instruction files:
 
 ```bash
-find . -name "CLAUDE.md" -o -name ".claude.md" -o -name ".claude.local.md" 2>/dev/null | head -50
+find . \( -name "CLAUDE.md" -o -name "CLAUDE.local.md" -o -name ".claude.md" \) 2>/dev/null
+find . -path "./.claude/rules/*.md" 2>/dev/null
+find . -path "./.claude/CLAUDE.md" 2>/dev/null
 ```
 
-**File Types & Locations:**
+Also note what off-load destinations already exist (used in Phase 3):
+- `.claude/rules/` — path-scoped rules that only load when Claude touches matching files
+- `.claude/skills/` — on-demand workflows that never enter context unless invoked
+- `CLAUDE.local.md` — personal/local preferences, gitignored
 
-| Type | Location | Purpose |
-|------|----------|---------|
-| Project root | `./CLAUDE.md` | Primary project context (checked into git, shared with team) |
-| Local overrides | `./.claude.local.md` | Personal/local settings (gitignored, not shared) |
-| Global defaults | `~/.claude/CLAUDE.md` | User-wide defaults across all projects |
-| Package-specific | `./packages/*/CLAUDE.md` | Module-level context in monorepos |
-| Subdirectory | Any nested location | Feature/domain-specific context |
+---
 
-**Note:** Claude auto-discovers CLAUDE.md files in parent directories, making monorepo setups work automatically.
+## Phase 2 — Measure and Classify
 
-### Phase 2: Quality Assessment
+For each CLAUDE.md file:
 
-For each CLAUDE.md file, evaluate against quality criteria. See [references/quality-criteria.md](references/quality-criteria.md) for detailed rubrics.
+1. **Count lines**: `wc -l <file>`
+2. **Flag if over 200 lines** — this is the primary quality gate
+3. **Classify every line** into one of four buckets:
 
-**Quick Assessment Checklist:**
+| Bucket | Definition | Action |
+|--------|-----------|--------|
+| **Keep** | Claude cannot derive this from reading the code; removing it would cause mistakes | Retain |
+| **Cut** | Claude can derive this by reading the code, or it is generic/obvious | Delete |
+| **Move to skill** | A multi-step procedure or task-specific workflow | Extract to `.claude/skills/` |
+| **Move to rules** | An instruction that only applies to specific file types/paths | Extract to `.claude/rules/` |
 
-| Criterion | Weight | Check |
-|-----------|--------|-------|
-| Commands/workflows documented | High | Are build/test/deploy commands present? |
-| Architecture clarity | High | Can Claude understand the codebase structure? |
-| Non-obvious patterns | Medium | Are gotchas and quirks documented? |
-| Conciseness | Medium | No verbose explanations or obvious info? |
-| Currency | High | Does it reflect current codebase state? |
-| Actionability | High | Are instructions executable, not vague? |
+Apply the official test to every line: *"Would removing this cause Claude to make mistakes?"* If no — it is Cut or Move, never Keep.
 
-**Quality Scores:**
-- **A (90-100)**: Comprehensive, current, actionable
-- **B (70-89)**: Good coverage, minor gaps
-- **C (50-69)**: Basic info, missing key sections
-- **D (30-49)**: Sparse or outdated
-- **F (0-29)**: Missing or severely outdated
+**Official Keep examples:** build commands Claude can't guess, style rules that differ from defaults, testing instructions, repo etiquette, architectural decisions, environment quirks, non-obvious gotchas.
 
-### Phase 3: Quality Report Output
+**Official Cut examples:** anything Claude can derive by reading code, standard conventions, detailed API docs, verbose explanations, file-by-file descriptions, information that changes frequently.
 
-**ALWAYS output the quality report BEFORE making any updates.**
+---
 
-Format:
+## Phase 3 — Quality Report
+
+Output this report before making any changes.
 
 ```
 ## CLAUDE.md Quality Report
 
-### Summary
-- Files found: X
-- Average score: X/100
-- Files needing update: X
+### Size
+- Current lines: X
+- Target: under 200 lines
+- Status: OVER / WITHIN / WELL WITHIN limit
+- Lines to cut before any additions are considered: X
 
-### File-by-File Assessment
+### Classification breakdown
+- Keep: X lines
+- Cut: X lines (list each — what it says, why it's cuttable)
+- Move to skill: X lines (list each — what it says, which skill name)
+- Move to rules: X lines (list each — what it says, which path glob)
 
-#### 1. ./CLAUDE.md (Project Root)
-**Score: XX/100 (Grade: X)**
+### Accuracy issues (separate from size)
+- Stale or wrong claims: [list with line numbers]
+- Missing critical items: [list — ONLY items that would cause mistakes if absent]
 
-| Criterion | Score | Notes |
-|-----------|-------|-------|
-| Commands/workflows | X/20 | ... |
-| Architecture clarity | X/20 | ... |
-| Non-obvious patterns | X/15 | ... |
-| Conciseness | X/15 | ... |
-| Currency | X/15 | ... |
-| Actionability | X/15 | ... |
-
-**Issues:**
-- [List specific problems]
-
-**Recommended additions:**
-- [List what should be added]
-
-#### 2. ./packages/api/CLAUDE.md (Package-specific)
-...
+### Score: X/100
 ```
 
-### Phase 4: Targeted Updates
+**Scoring:**
+- Under 200 lines: +30 points (hard gate — a file over 200 cannot score above 70)
+- Every line passes "would removing this cause mistakes?" test: +25 points
+- No content Claude can derive from reading the code: +15 points
+- Commands/gotchas are accurate and copy-paste ready: +20 points
+- No content that belongs in a skill or rule instead: +10 points
 
-After outputting the quality report, ask user for confirmation before updating.
+---
 
-**Update Guidelines (Critical):**
+## Phase 4 — Proposed Changes
 
-1. **Propose targeted additions only** - Focus on genuinely useful info:
-   - Commands or workflows discovered during analysis
-   - Gotchas or non-obvious patterns found in code
-   - Package relationships that weren't clear
-   - Testing approaches that work
-   - Configuration quirks
+**Gate: if the file is over 200 lines, propose cuts first. Do not propose any additions until the cut list brings the file under 200 lines.**
 
-2. **Keep it minimal** - Avoid:
-   - Restating what's obvious from the code
-   - Generic best practices already covered
-   - One-off fixes unlikely to recur
-   - Verbose explanations when a one-liner suffices
+Present changes in this order:
 
-3. **Show diffs** - For each change, show:
-   - Which CLAUDE.md file to update
-   - The specific addition (as a diff or quoted block)
-   - Brief explanation of why this helps future sessions
-
-**Diff Format:**
-
-```markdown
-### Update: ./CLAUDE.md
-
-**Why:** Build command was missing, causing confusion about how to run the project.
-
-```diff
-+ ## Quick Start
-+
-+ ```bash
-+ npm install
-+ npm run dev  # Start development server on port 3000
-+ ```
+### 1. Cuts (always first)
+For each Cut-bucket line:
 ```
+CUT: line X–Y
+Content: "..."
+Reason: Claude can derive this by reading [specific file/code], OR: generic/obvious
 ```
 
-### Phase 5: Apply Updates
+### 2. Moves
+For each Move-bucket item:
+```
+MOVE: line X–Y → .claude/skills/<name>/SKILL.md  (or .claude/rules/<name>.md)
+Content: "..."
+Reason: [multi-step procedure / path-specific rule]
+New location: [proposed file path + brief structure]
+```
 
-After user approval, apply changes using the Edit tool. Preserve existing content structure.
+### 3. Additions (only if cuts bring file under 180 lines — leave 20-line headroom)
+For each genuinely missing item that would cause mistakes if absent:
+```
+ADD: after line X
+Content: "..."
+Reason: Claude cannot derive this from the code; removing it would cause [specific mistake]
+```
 
-## Templates
+### 4. Accuracy fixes
+For each stale/wrong claim:
+```
+FIX: line X
+Old: "..."
+New: "..."
+Reason: [what changed in the code]
+```
 
-See [references/templates.md](references/templates.md) for CLAUDE.md templates by project type.
+Show the projected line count after all proposed changes.
 
-## Common Issues to Flag
+---
 
-1. **Stale commands**: Build commands that no longer work
-2. **Missing dependencies**: Required tools not mentioned
-3. **Outdated architecture**: File structure that's changed
-4. **Missing environment setup**: Required env vars or config
-5. **Broken test commands**: Test scripts that have changed
-6. **Undocumented gotchas**: Non-obvious patterns not captured
+## Phase 5 — Apply
 
-## User Tips to Share
+After user approval, apply changes using the Edit tool. After applying:
+1. Run `wc -l CLAUDE.md` and confirm under 200
+2. Report final line count
 
-When presenting recommendations, remind users:
+## Key rules
 
-- **`#` key shortcut**: During a Claude session, press `#` to have Claude auto-incorporate learnings into CLAUDE.md
-- **Keep it concise**: CLAUDE.md should be human-readable; dense is better than verbose
-- **Actionable commands**: All documented commands should be copy-paste ready
-- **Use `.claude.local.md`**: For personal preferences not shared with team (add to `.gitignore`)
-- **Global defaults**: Put user-wide preferences in `~/.claude/CLAUDE.md`
-
-## What Makes a Great CLAUDE.md
-
-**Key principles:**
-- Concise and human-readable
-- Actionable commands that can be copy-pasted
-- Project-specific patterns, not generic advice
-- Non-obvious gotchas and warnings
-
-**Recommended sections** (use only what's relevant):
-- Commands (build, test, dev, lint)
-- Architecture (directory structure)
-- Key Files (entry points, config)
-- Code Style (project conventions)
-- Environment (required vars, setup)
-- Testing (commands, patterns)
-- Gotchas (quirks, common mistakes)
-- Workflow (when to do what)
+- Never propose adding content Claude can derive by reading the codebase
+- Never propose adding architecture overviews, directory trees, or function lists — these belong in docs or skills
+- The `@path` import syntax does NOT reduce context — imported files load at session start just like CLAUDE.md content
+- `.claude/rules/` with `paths:` frontmatter is the correct home for instructions that only apply to specific file types
+- Skills with `disable-model-invocation: true` are the correct home for multi-step procedures
+- Run `/doctor` in a Claude Code session to get Claude's own proposed cuts for a checked-in CLAUDE.md
