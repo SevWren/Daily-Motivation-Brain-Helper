@@ -1,152 +1,74 @@
 # CLAUDE.md — Daily Motivation Brain Helper
 
-## CRITICAL: Testing Environment Requirements
+## CRITICAL: Testing Environment
 
-**⚠️ AI AGENTS MUST READ THIS FIRST ⚠️**
+This app targets **Windows 10/11** (WPF, Task Scheduler, registry). Tests run in two incompatible environments:
 
-This application targets **Windows 10/11** at runtime (WPF, Task Scheduler, registry, Explorer). The test suite has **two incompatible execution environments:**
+| Environment | Valid for |
+|-------------|-----------|
+| Windows 10/11 PowerShell 7 | All tests — PRIMARY |
+| Linux PowerShell 7 | Platform-abstraction tests only |
 
-1. **Windows 10/11 PowerShell 7** (PRIMARY) - Where test baselines originate
-2. **Linux PowerShell 7** (SECONDARY) - For CI/platform abstraction validation only
+**Linux-safe tests** (HeadlessPlatform injection): `Config.Platform.Tests.ps1`, `TaskScheduler.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, `FolderScheduling.Tests.ps1`
 
-### Test Validation Rules for AI Agents
+**Windows-only tests**: `TaskScheduler.Tests.ps1`, `ContextMenu.Tests.ps1`, all integration tests
 
-**🚨 CRITICAL RULE: DO NOT assume test fixes are valid based solely on tests passing in a Unix/Linux environment.**
-
-- Test baselines were created on Windows 10 with Windows-specific paths, registry operations, and Task Scheduler behavior
-- Tests passing in the Linux sandbox **DO NOT** guarantee they will pass on Windows 10
-- Mock behavior differs between Windows and Linux (especially for Task Scheduler, Registry, and CIM exceptions)
-- Platform abstraction tests (`*.Platform.Tests.ps1`) are designed for Linux; regular tests are designed for Windows
-
-### Required Validation Process
-
-Before declaring any test fix "successful":
-
-1. ✅ **MUST** verify tests pass on **Windows 10/11 PowerShell 7** (the target platform)
-2. ✅ **MUST** review Windows-specific test log output (not Linux sandbox output)
-3. ✅ **MUST** understand the difference between:
-   - Platform tests (HeadlessPlatform injection) - run on Linux
-   - Regular unit tests (Windows API mocks) - run on Windows
-4. ⚠️ **DO NOT** commit changes that only work in the Linux sandbox
-5. ⚠️ **DO NOT** assume mock behavior is equivalent between Windows and Linux
-
-### Windows-Specific Test Dependencies
-
-These tests **REQUIRE** Windows 10/11 to validate correctly:
-
-- `TaskScheduler.Tests.ps1` - Mocks Windows Task Scheduler cmdlets (`Register-ScheduledTask`, `Get-ScheduledTask`)
-- `ContextMenu.Tests.ps1` - Uses Windows registry (`HKCU:\` provider)
-- Integration tests - Validate Task Scheduler integration on Windows
-
-### Platform Abstraction Tests (Linux-Safe)
-
-These tests CAN run on Linux with HeadlessPlatform:
-
-- `Config.Platform.Tests.ps1`
-- `TaskScheduler.Platform.Tests.ps1`
-- `PlatformAdapter.Tests.ps1`
-- `FolderScheduling.Tests.ps1`
-
-**Bottom Line:** If you're working in a Linux sandbox, your test results **do not represent Windows 10/11 behavior**. Always request Windows test logs before declaring fixes complete.
+**Tests passing in Linux do not validate Windows behavior.** Always get Windows test output before declaring any fix complete.
 
 ---
 
-## MANDATE: Schedule Failed / "Access is denied" Bug — Correct and Incorrect Fix Patterns
+## MANDATE: Schedule Failed / "Access is denied" — Correct and Incorrect Fix Patterns
 
-> **This section is binding on all agents and contributors.**
-> See [ADR-005](docs/architecture/adr-005-mandate-history.md) for the full incident history that produced these rules.
+> **Binding on all agents and contributors.** See [ADR-005](docs/architecture/adr-005-mandate-history.md) for incident history.
 
-### The Bug
+### WRONG 1 — Declaring a fix verified from Linux CI or mocked tests alone
 
-```
-Schedule Failed
+**Rule:** Never close or declare resolved any bug involving `Register-ScheduledTask`, task principal configuration, or context-menu invocation without a live test on a real Windows 10/11 machine.
 
-Could not schedule '[PATH]'
+### WRONG 2 — Calling `.Dispose()` on a WPF `System.Windows.Window`
 
-Access is denied.
-```
-
-This dialog appears in `setfolder` mode (Explorer context-menu verb) and `main` mode (Schedule Reminder button).
-The folder is accessible to the user. The failure originates inside `Register-ScheduledTask`, not filesystem ACL
-validation. A secondary symptom — `Window.Dispose()` error after closing the app — is caused by calling
-`.Dispose()` on a WPF `System.Windows.Window`, which does not implement `IDisposable`.
-
----
-
-### WRONG APPROACHES — Do Not Repeat These
-
-#### WRONG 1: Declaring the fix verified based on Linux CI / mocked tests alone
-
-**Rule:** Do not close or declare resolved any bug involving `Register-ScheduledTask`, task principal
-configuration, or context-menu invocation without a live test on a real Windows 10/11 machine.
-
-#### WRONG 2: Calling `.Dispose()` on a WPF `System.Windows.Window`
-
-`System.Windows.Window` does not implement `System.IDisposable`. Calling `.Dispose()` on it throws:
+`System.Windows.Window` does not implement `IDisposable`. Calling it throws:
 ```
 Method invocation failed because [System.Windows.Window] does not contain a method named 'Dispose'.
 ```
+**Rule:** Use `.Close()` on windows. Guard all other objects with `$obj -is [System.IDisposable]` before `.Dispose()`. `DriveInfo` is not IDisposable.
 
-**Rule:** Never call `.Dispose()` on `System.Windows.Window`. Use `.Close()` instead.
-For `DispatcherTimer`, `Mutex`, and `FolderBrowserDialog` — verify the object implements `IDisposable`
-before calling `.Dispose()`. `DriveInfo` is a value type and is not `IDisposable`.
+### WRONG 3 — Removing `$script:*` variables without checking all call sites
 
-#### WRONG 3: Removing `$script:*` variables during cleanup without checking all call sites
+**Rule:** Grep the entire file for every reference before removing any `$script:*` variable. A variable with no obvious callers in the happy path may still be a required fallback (e.g. `$script:ConfigDefaults`).
 
-**Rule:** Before removing any `$script:*` module-level variable, grep the entire file for every
-reference. A variable with zero obvious callers in the happy path may still be a required fallback.
+### WRONG 4 — Sanitizing error messages to `[PATH]` without naming the operation
 
-#### WRONG 4: Sanitizing all error messages to `[PATH]` without preserving the operation name
+**Rule:** Path sanitization to `[PATH]` is correct. But every error message must also name the failing operation (e.g., "OS task registration failed") — not just the path. Include the Windows error code where possible.
 
-Path sanitization to `[PATH]` is correct for privacy. But without the operation name the dialog is
-ambiguous — "Access is denied" could come from folder validation, `Register-ScheduledTask`, a wrong
-exe path, or the Task Scheduler service being stopped.
+### WRONG 5 — Narrow `catch` pattern that misses real Task Scheduler errors
 
-**Rule:** Error messages must always include the name of the failing operation. The path may be
-sanitized to `[PATH]`, but the error must identify what failed (e.g., "OS task registration failed").
-Always propagate the Windows error code alongside the sanitized message where possible.
+| Windows condition | Error string |
+|-------------------|-------------|
+| Standard access denied | "Access is denied." |
+| Elevation required | "The requested operation requires elevation." |
+| S4U logon failure | "A specified logon session does not exist." |
+| Service unavailable | "The Task Scheduler service is not available." |
+| Bad exe path | "The system cannot find the file specified." |
 
-#### WRONG 5: Using a narrow `catch` pattern that misses real Windows Task Scheduler error strings
+**Rule:** Cover all cases above, or catch all terminating exceptions and inspect `$_.Exception.HResult`.
 
-The catch block for `Register-ScheduledTask` must not match only `'Access Denied|not have permission'`.
-Real Windows Task Scheduler errors that pattern misses:
+### WRONG 6 — Changing task principal configuration without a live Windows test
 
-| Windows condition | Typical error string | Matched by current pattern? |
-|-------------------|---------------------|-----------------------------|
-| Standard access denied | "Access is denied." | Yes |
-| Elevation required | "The requested operation requires elevation." | No |
-| S4U logon failure | "A specified logon session does not exist." | No |
-| Service unavailable | "The Task Scheduler service is not available." | No |
-| File not found (bad exe path) | "The system cannot find the file specified." | No |
-
-**Rule:** The catch block must cover the full range of Windows Task Scheduler failure modes,
-or catch all terminating exceptions and inspect `$_.Exception.HResult` for known codes.
-
-#### WRONG 6: Changing task principal configuration without a live Windows test
-
-**Rule:** Any change to `New-ScheduledTaskPrincipal` parameters (`UserId`, `LogonType`, `RunLevel`)
-requires a live Windows 10/11 manual test or a `-Skip:(-not $IsWindows)` integration test that
-exercises the real `Register-ScheduledTask` cmdlet with no mocking.
+**Rule:** Any change to `New-ScheduledTaskPrincipal` parameters (`UserId`, `LogonType`, `RunLevel`) requires a live Windows 10/11 test or a `-Skip:(-not $IsWindows)` integration test against the real `Register-ScheduledTask`.
 
 ---
 
-### CORRECT APPROACH — Follow This Pattern
-
-#### CORRECT 1: Task principal configuration (current — do not change without live testing)
+### CORRECT 1 — Task principal configuration (validated — do not change without live testing)
 
 ```powershell
 New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 ```
 
-- `RunLevel Limited` (not `Highest`) is correct — `Highest` requires UAC elevation and causes
-  "Access is denied" for standard users.
-- `LogonType Interactive` is the live-validated value. The App's OS Task must display a WPF popup
-  on the user's interactive desktop — `S4U` is session-less and cannot host UI. See [ADR-005](docs/architecture/adr-005-mandate-history.md) for validation history.
-- Do not change either of these values without a live Windows 10/11 test confirming the alternative works.
+- `RunLevel Limited` — `Highest` requires UAC elevation and causes "Access is denied" for standard users.
+- `LogonType Interactive` — required so the popup fires on the user's active desktop session. `S4U` is session-less and cannot host UI. See [ADR-005](docs/architecture/adr-005-mandate-history.md).
 
-#### CORRECT 2: ExePath resolution for ps2exe compiled executables
-
-ps2exe may leave `$MyInvocation.MyCommand.Path` empty at runtime. The correct resolution order is:
+### CORRECT 2 — ExePath resolution for ps2exe compiled executables
 
 ```powershell
 $script:ExePath = if ($MyInvocation.MyCommand.Path -and $MyInvocation.MyCommand.Path -ne '') {
@@ -156,29 +78,20 @@ $script:ExePath = if ($MyInvocation.MyCommand.Path -and $MyInvocation.MyCommand.
 }
 ```
 
-Always guard `Register-ContextMenu` to reject `.ps1` paths — the context-menu verb must point to
-the compiled `.exe`, not the source script. This guard is in place; do not remove it.
+Guard `Register-ContextMenu` to reject `.ps1` paths — context-menu verb must point to the compiled `.exe`.
 
-#### CORRECT 3: WPF window and resource cleanup
+### CORRECT 3 — WPF window and resource cleanup
 
 ```powershell
-# CORRECT: close the window
-$window.Close()
-
-# CORRECT: dispose only objects that implement IDisposable
+$window.Close()                                                        # windows: Close(), never Dispose()
 if ($timer  -is [System.IDisposable]) { $timer.Stop(); $timer.Dispose() }
 if ($mutex  -is [System.IDisposable]) { $mutex.Dispose() }
 if ($dialog -is [System.IDisposable]) { $dialog.Dispose() }
-
-# WRONG — do not do either of these:
-# $window.Dispose()     <- System.Windows.Window has no Dispose() method
-# $driveInfo.Dispose()  <- DriveInfo is not IDisposable
+# $window.Dispose()    <- WRONG: no such method on System.Windows.Window
+# $driveInfo.Dispose() <- WRONG: DriveInfo is not IDisposable
 ```
 
-Use `$obj -is [System.IDisposable]` before calling `.Dispose()` on any object whose IDisposable
-status is not statically certain from the .NET type documentation.
-
-#### CORRECT 4: Error handling around Register-ScheduledTask
+### CORRECT 4 — Error handling around Register-ScheduledTask
 
 ```powershell
 try {
@@ -197,16 +110,14 @@ try {
         'cannot find the file|0x80070002'  { "Executable path not found. Rebuild the application and try again." }
         default                            { "OS task registration failed (0x{0:X8})." -f $hresult }
     }
-    # Never surface a Register-ScheduledTask failure as "Invalid Folder"
     Show-ErrorDialog -Title "Schedule Failed" -Message "Could not schedule reminder for [PATH].`n`n$userMsg"
     return $false
 }
 ```
 
-A `Register-ScheduledTask` failure must never be shown as "Invalid Folder". Folder validation and
-OS task registration are separate operations; surface them separately.
+A `Register-ScheduledTask` failure must never surface as "Invalid Folder" — these are separate operations.
 
-#### CORRECT 5: The Windows integration test that must exist before any scheduling fix is closed
+### CORRECT 5 — Windows integration test required before any scheduling fix is closed
 
 ```powershell
 Describe 'New-MotivationTask - real Task Scheduler integration' {
@@ -215,220 +126,87 @@ Describe 'New-MotivationTask - real Task Scheduler integration' {
         $testPath = Join-Path $env:TEMP 'dmh-integration-test'
         New-Item -ItemType Directory -Path $testPath -Force | Out-Null
         try {
-            $result = New-MotivationTask -FolderPath $testPath `
-                                         -TriggerTime (Get-Date).AddHours(2)
+            $result = New-MotivationTask -FolderPath $testPath -TriggerTime (Get-Date).AddHours(2)
             $result.Success | Should -Be $true
-            $task = Get-ScheduledTask -TaskName $result.TaskName -ErrorAction SilentlyContinue
-            $task | Should -Not -BeNullOrEmpty
+            (Get-ScheduledTask -TaskName $result.TaskName -ErrorAction SilentlyContinue) | Should -Not -BeNullOrEmpty
             Remove-MotivationTask -TaskId $result.TaskId
-        } finally {
-            Remove-Item $testPath -Force -ErrorAction SilentlyContinue
-        }
+        } finally { Remove-Item $testPath -Force -ErrorAction SilentlyContinue }
     }
 }
 ```
 
-This test is currently absent. It must exist and pass on Windows before any future change to the
-scheduling principal configuration is declared resolved.
-
----
-
-### MANDATE STATEMENT
-
-**This mandate is binding on all AI agents, automated systems, and human contributors.**
-
-1. **No scheduling or permissions bug may be declared resolved without live Windows 10/11 validation.**
-   Linux CI passing is necessary but not sufficient for closure.
-
-2. **`Register-ScheduledTask` must always be wrapped in `try/catch` with `-ErrorAction Stop`.**
-   The catch block must distinguish access-denied, elevation-required, service-unavailable, and
-   logon-failure cases, and surface each with a user-visible message naming the failing operation —
-   not the folder path.
-
-3. **Never call `.Dispose()` on `System.Windows.Window`.** Use `.Close()`. For all other objects,
-   check `$obj -is [System.IDisposable]` before calling `.Dispose()`. `DriveInfo` is not IDisposable.
-
-4. **No `$script:*` module-level variable may be removed during cleanup without a grep of all
-   references in the file.** Silent removal of fallback objects (e.g., `$script:ConfigDefaults`)
-   directly causes "Access is denied" regressions.
-
-5. **Task principal parameters are `LogonType Interactive / RunLevel Limited`.** Do not change
-   these values based solely on documentation or Linux-side reasoning. Any change requires a live
-   Windows 10/11 test confirming the alternative works.
-
-6. **Error messages must name the failing operation.** Path sanitization (`[PATH]`) is correct for
-   privacy but must not replace the operation name or Windows error code.
+**This test is currently absent.** It must exist and pass on Windows before any scheduling principal change is declared resolved.
 
 ---
 
 ## MANDATE: Pester 5 / CI Test Infrastructure — Correct and Incorrect Patterns
 
-> **This section is binding on all AI agents, automated systems, and human contributors.**
-> See [ADR-005](docs/architecture/adr-005-mandate-history.md) for the incident history that produced these rules.
+> **Binding on all agents and contributors.** See [ADR-005](docs/architecture/adr-005-mandate-history.md) for incident history.
 
----
+### WRONG 7 — `ErrorAction` inside a splatted hashtable passed to a mocked cmdlet
 
-### WRONG APPROACHES — Do Not Repeat These
-
-#### WRONG 7: Including `ErrorAction` in a splatted hashtable passed to a mocked cmdlet
-
-When `ErrorAction` (or any PowerShell common parameter) is included in a `@splat` dict AND also
-specified directly on the call, Pester's mock proxy binds the parameter twice — producing a
-**non-terminating error with an empty message**. `-ErrorAction Stop` promotes it to a terminating
-`RuntimeException` with `$_.Exception.Message = ""`, masking the real failure site.
+Including any PowerShell common parameter in a `@splat` dict AND on the call causes Pester's mock proxy to double-bind it — producing a silent non-terminating error with an empty message that `-ErrorAction Stop` promotes to a terminating exception.
 
 ```powershell
-# WRONG — ErrorAction in splat dict + on call = double-bind
-$params = @{
-    TaskName  = $taskName
-    Action    = $action
-    ErrorAction = 'Stop'   # <-- DO NOT include common params in splat
-}
+# WRONG
+$params = @{ TaskName = $taskName; Action = $action; ErrorAction = 'Stop' }
+Register-ScheduledTask @params -ErrorAction Stop
+
+# CORRECT
+$params = @{ TaskName = $taskName; Action = $action }
 Register-ScheduledTask @params -ErrorAction Stop
 ```
 
-```powershell
-# CORRECT — ErrorAction on the call only, never in the splat
-$params = @{
-    TaskName = $taskName
-    Action   = $action
-}
-Register-ScheduledTask @params -ErrorAction Stop
-```
+**Rule:** Never put `ErrorAction`, `WarningAction`, `Verbose`, or `Debug` in a splatted hashtable.
 
-**Rule:** Never include `ErrorAction`, `WarningAction`, `Verbose`, `Debug`, or any other PowerShell
-common parameter in a splatted hashtable. Specify them directly on the cmdlet call only.
+### WRONG 8 — Mocking `New-ScheduledTask*` helpers with PSCustomObjects
 
----
-
-#### WRONG 8: Mocking `New-ScheduledTask*` helper cmdlets with PSCustomObjects + `-RemoveParameterValidation`
-
-`-RemoveParameterValidation` strips `[Validate*]` attributes only — it does **not** strip parameter
-type constraints. `Register-ScheduledTask` has hard CIM type constraints on `Action`, `Trigger`,
-`Settings`, and `Principal` — each must be a `Microsoft.Management.Infrastructure.CimInstance`.
-Passing a `PSCustomObject` always fails with:
-
-```
-Cannot convert the "@{Execute=...}" value of type "System.Management.Automation.PSCustomObject"
-to type "Microsoft.Management.Infrastructure.CimInstance".
-```
+`-RemoveParameterValidation` strips `[Validate*]` only — not type constraints. `Register-ScheduledTask` requires `CimInstance` for `Action`, `Trigger`, `Settings`, `Principal`. A `PSCustomObject` always fails.
 
 ```powershell
-# WRONG — PSCustomObject never satisfies CimInstance type constraints
+# WRONG
 Mock New-ScheduledTaskAction { return [PSCustomObject]@{ Execute = $Execute } }
-Mock Register-ScheduledTask -RemoveParameterValidation 'Action','Trigger','Settings','Principal' { ... }
-```
 
-```powershell
-# CORRECT — let real Windows cmdlets produce genuine CimInstance objects
-# Do NOT mock New-ScheduledTaskAction, New-ScheduledTaskTrigger,
-# New-ScheduledTaskSettingsSet, or New-ScheduledTaskPrincipal.
-# Only mock the persistence layer.
-Mock Register-ScheduledTask { ... }   # captures the real CimInstance objects
+# CORRECT — never mock the builder cmdlets; only mock the persistence layer
+Mock Register-ScheduledTask { ... }
 Mock Get-ScheduledTask { ... }
 Mock Unregister-ScheduledTask { ... }
 ```
 
-**Rule:** Never mock `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`,
-`New-ScheduledTaskSettingsSet`, or `New-ScheduledTaskPrincipal`. Let them run as real Windows
-cmdlets. Only mock `Register-ScheduledTask`, `Get-ScheduledTask`, and `Unregister-ScheduledTask`.
-See the AG8-007 test in `SingleFile.Tests.ps1` for the canonical reference pattern.
+**Rule:** Never mock `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`, `New-ScheduledTaskSettingsSet`, or `New-ScheduledTaskPrincipal`. See AG8-007 in `SingleFile.Tests.ps1` for the canonical pattern.
 
----
+### WRONG 9 — Module-qualified calls to escape Pester interception
 
-#### WRONG 9: Using module-qualified calls to escape Pester mock interception
+Pester 5 intercepts `ScheduledTasks\New-ScheduledTaskAction`. Calling the real cmdlet from inside a mock body via module qualification causes infinite recursion.
 
-Pester 5 intercepts module-qualified calls (`ScheduledTasks\New-ScheduledTaskAction`). Attempting
-to delegate to the real implementation from inside a mock body via module qualification causes
-infinite recursion.
+**Rule:** No escape from Pester mocking via module qualification. If real behavior is needed, do not mock the cmdlet.
 
-```powershell
-# WRONG — module-qualified call is still intercepted; causes infinite recursion
-Mock New-ScheduledTaskAction {
-    $script:CapturedActions += ...
-    return ScheduledTasks\New-ScheduledTaskAction @PSBoundParameters  # <-- infinite loop
-}
-```
+### WRONG 10 — `<token>` syntax in Pester 5 test names
 
-**Rule:** There is no escape route from Pester mocking via module qualification. If the real
-cmdlet behavior is needed, do not mock the cmdlet at all.
-
----
-
-#### WRONG 10: Using `<token>` syntax in Pester 5 test names
-
-Pester 5 treats `<key>` tokens in test names as `${key}` template variable expansions (used with
-`-ForEach`). Under `Set-StrictMode -Version Latest`, if no `$key` variable exists in scope, Pester
-throws `The variable '$key' cannot be retrieved because it has not been set`.
+Pester 5 expands `<key>` as a `-ForEach` template variable. Under `Set-StrictMode -Version Latest` an undefined `$key` aborts the entire describe block.
 
 ```powershell
-# WRONG — Pester 5 tries to expand <id> as a template variable
+# WRONG
 It 'Should set task_name to DailyMotivation_<id> format' { ... }
-```
-
-```powershell
-# CORRECT — no angle brackets in test names unless using -ForEach data
+# CORRECT
 It 'Should set task_name to DailyMotivation_ followed by a 16-char hex id' { ... }
 ```
 
-**Rule:** Never use `<word>` tokens in Pester test names unless using `-ForEach` and `$word`
-is a key in that data source.
+**Rule:** No `<token>` in test names unless it is a `-ForEach` data key in scope.
 
 ---
 
-### MANDATE STATEMENT — Pester CI Rules
+## MANDATE: GitHub Issue Closure Gate
 
-**These rules are binding on all AI agents, automated systems, and human contributors.**
+> **Binding on all agents and contributors.** See [ADR-005](docs/architecture/adr-005-mandate-history.md).
 
-7. **Never include PowerShell common parameters (`ErrorAction`, `WarningAction`, `Verbose`, `Debug`, etc.)
-   in a splatted hashtable passed to a mocked cmdlet.** Specify them directly on the call.
+**Any issue whose resolution includes `-Skip:(-not $IsWindows)` tests may not be closed until a passing Windows 10/11 run is posted as an issue comment.**
 
-8. **Never mock `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`, `New-ScheduledTaskSettingsSet`,
-   or `New-ScheduledTaskPrincipal`.** These must run as real Windows cmdlets. Mock only the persistence
-   layer: `Register-ScheduledTask`, `Get-ScheduledTask`, `Unregister-ScheduledTask`.
+Accepted proof: full `.\Invoke-Tests.ps1` terminal output from Windows 10/11 PS7, a CI Windows runner link, or a terminal screenshot — all showing 0 failures for the affected tests.
 
-9. **Module-qualified calls (`Module\Cmdlet`) are intercepted by Pester mocks.** Do not mock
-   a cmdlet if the real behavior is needed.
+Linux CI passing, code review, or platform-abstraction-only test results do not count.
 
-10. **Do not use `<token>` in Pester 5 test names** unless that token is a `-ForEach` data key in
-    scope.
-
----
-
-## MANDATE: GitHub Issue Closure Gate — Windows-Validated Tests
-
-> **This section is binding on all AI agents, automated systems, and human contributors.**
-> See [ADR-005](docs/architecture/adr-005-mandate-history.md) for the closure incidents that produced this rule.
-
-### The rule
-
-**Any GitHub issue whose resolution includes one or more tests guarded by `-Skip:(-not $IsWindows)`
-may not be closed until proof of a 100% successful validation run on a real Windows 10/11 machine
-is attached to the issue as a comment.**
-
-### What counts as proof
-
-One of the following must be posted as a comment on the issue before it is closed:
-
-- Full `Invoke-Pester` or `.\Invoke-Tests.ps1` terminal output from a Windows 10/11 PowerShell 7
-  session showing the relevant tests passed with 0 failures
-- A CI run link where a Windows runner executed the affected tests and all passed
-- A screenshot of the terminal on Windows showing the passing test results
-
-### What does NOT count as proof
-
-- Linux CI passing — always insufficient for `-Skip:(-not $IsWindows)` tests
-- "The code looks correct" or "the logic is sound" — no substitute for a test run
-- A prior Windows run for a different commit or a different issue
-- Passing only the platform-abstraction subset (`*.Platform.Tests.ps1`)
-
-### Violation response
-
-If an agent or contributor closes an issue without the required Windows validation evidence:
-
-1. Reopen the issue immediately.
-2. Add a comment stating the closure was premature and which Windows-only tests remain unvalidated.
-3. Do not re-close until proof is attached.
+If closed prematurely: reopen, comment which Windows-only tests are unvalidated, do not re-close until proof is attached.
 
 ---
 
@@ -439,8 +217,6 @@ If an agent or contributor closes an issue without the required Windows validati
 ```
 DailyMotivation.ps1  →  Invoke-ps2exe -STA -noConsole  →  DailyMotivation.exe
 ```
-
-The compiled exe is fully self-contained. No `src/`, no companion files, no setup script.
 
 ## Execution Modes
 
@@ -468,80 +244,49 @@ The compiled exe is fully self-contained. No `src/`, no companion files, no setu
 
 Full function list and config schemas: [docs/reference/](docs/reference/README.md). Domain language: [CONTEXT.md](CONTEXT.md).
 
-## Config Files (all in `%APPDATA%\DailyMotivationBrainHelper\`)
+## Config Files (`%APPDATA%\DailyMotivationBrainHelper\`)
 
 | File | Contents |
 |------|----------|
 | `config.json` | `{"default_trigger_hour": 14, "task_warning_threshold": 5}` |
-| `popup_config.json` | Written by `main`/`setfolder` mode, read by `popup` mode |
+| `popup_config.json` | Written by `main`/`setfolder`, read by `popup` |
 | `tasks.json` | Scheduled task list |
 | `popup_log.txt` | Pipe-delimited outcome history |
 
-## Build
+## Build & Test
 
 ```powershell
-.\build.ps1
+.\build.ps1                  # requires: Install-Module ps2exe -Scope CurrentUser
+.\Invoke-Tests.ps1           # all tests
+.\Invoke-Tests.ps1 -CI       # CI mode (exit code + XML reports)
 ```
 
-Requires `ps2exe` module: `Install-Module ps2exe -Scope CurrentUser`
-
-## Test
-
-```powershell
-.\Invoke-Tests.ps1               # all tests
-.\Invoke-Tests.ps1 -CI           # CI mode (exit code, XML reports)
-```
-
-Tests dot-source the script with `-NoRun` — no exe required to run tests.
-
-### Linux/Unix Test Environment Setup
-
-> **Scope: Platform-abstraction tests only.** Does **not** substitute for Windows 10/11 validation of Task Scheduler, registry, and CIM-dependent tests.
-
-```bash
-if [[ "$OSTYPE" == "linux-gnu"* ]] || [[ "$OSTYPE" == "darwin"* ]]; then
-    if ! command -v pwsh &> /dev/null; then
-        mkdir -p "$HOME/.powershell" && cd "$HOME/.powershell"
-        wget -q https://github.com/PowerShell/PowerShell/releases/download/v7.4.2/powershell-7.4.2-linux-x64.tar.gz
-        tar -xzf powershell-7.4.2-linux-x64.tar.gz
-        export PATH="$HOME/.powershell:$PATH"
-    fi
-fi
-```
+Tests dot-source `DailyMotivation.ps1 -NoRun` — no exe required.
 
 ## Key Design Constraints
 
-- **Development/Testing**: PowerShell 7 (`pwsh`)
-- **Compiled exe target**: .NET Framework 4.x (ps2exe limitation - WPF/Task Scheduler require .NET Framework)
-- **Source code compatibility**: Must work when compiled to .NET Framework 4.x (avoid PowerShell 7-only features in runtime code paths)
+- **Compiled exe target**: .NET Framework 4.x — avoid PS7-only syntax in runtime code paths
 - STA thread model required for WPF (`-STA` baked in by ps2exe)
-- Popup mutex `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}` enforces one popup per user session; config writes use `Global\DailyMotivationPopupConfigLock`
-- Task Scheduler action calls `$script:ExePath /popup` (captured at runtime via `$MyInvocation.MyCommand.Path`)
-- Tests override `$script:ExePath` before calling `New-MotivationTask`
+- Popup mutex: `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`; config lock: `Global\DailyMotivationPopupConfigLock`
+- Task Scheduler action: `$script:ExePath /popup` — resolved at runtime, overridden in tests
 - `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time (enables test redirects)
-- `Get-TasksJson` wraps result in `@()` for consistent array handling; valid statuses: PENDING, DELETED, COMPLETED, FAILED
+- `Get-TasksJson` wraps result in `@()` — valid statuses: `PENDING`, `DELETED`, `COMPLETED`, `FAILED`
 - Outcome log stores SHA-256 path hashes, not plaintext paths
 
 ## Code Quality Rules
 
-### No Startup Popups
-**CRITICAL:** DailyMotivation.exe must NEVER display a popup message on startup in main mode. The application should launch directly into the main window UI without any blocking dialogs, confirmation prompts, or informational messages.
+**No Startup Popups:** `DailyMotivation.exe` must never show a dialog, prompt, or message on startup in `main` mode.
 
-### Comment Hygiene
-Remove bloat comments that reference bug IDs (e.g., `# AG19-003:`, `# AG7-004:`). Keep only comments that explain **why** code exists or **what** non-obvious behavior is expected. Bug tracking belongs in commit history and bug reports, not inline comments.
+**Comment Hygiene:** Remove bug-ID comments (`# AG19-003:`). Keep only comments that explain *why* code exists or *what* non-obvious behavior does.
 
-## Documentation map
+## Documentation Map
 
 | Doc | Purpose |
 |-----|---------|
 | [README.md](README.md) | Product overview |
-| [CONTEXT.md](CONTEXT.md) | Domain language (authoritative terminology) |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
-| [docs/](docs/README.md) | Developer documentation |
+| [CONTEXT.md](CONTEXT.md) | Domain language (authoritative) |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution guide |
 | [docs/architecture/adr-005-mandate-history.md](docs/architecture/adr-005-mandate-history.md) | Incident history behind the mandates above |
+| [docs/](docs/README.md) | Developer documentation |
 | [manual/](manual/README.md) | End-user documentation |
 | [SECURITY.md](SECURITY.md) | Vulnerability reporting |
-
-External requirements / NFR source of truth (if present outside the repo):
-`DailyMotivationBrainHelper_TechnicalReflection_2026-06-12_v2_1_CORRECTED.md`.
-In-repo architecture notes live under [docs/architecture/](docs/architecture/README.md).
