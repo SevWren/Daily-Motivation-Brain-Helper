@@ -3,6 +3,7 @@ param(
     [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot)
 )
 
+
 $testsDirectory = Join-Path $ProjectRoot 'Tests'
 $outputPath = Join-Path $testsDirectory 'tests_line_count.txt'
 
@@ -12,6 +13,7 @@ if (-not (Test-Path -LiteralPath $testsDirectory -PathType Container)) {
 
 $reportLines = [System.Collections.Generic.List[string]]::new()
 $reportLines.Add(('Time Of Line Count: {0}' -f (Get-Date -Format 'M/d/yyyy h:mm tt')))
+$reportLines.Add([Environment]::NewLine)
 
 $testFiles = Get-ChildItem -LiteralPath $testsDirectory -File -Recurse |
     Where-Object { $_.Name -like '*.Tests.ps1' } |

@@ -73,8 +73,6 @@ scheduling-guardian.md
 security-auditor.md
 triage-agent.md
 wpf-ui-specialist.md
-
-
 daily-brief*
 maton_ai_bug_prompt.md
 bug_fix_instructions_kilo_code_needs_review.md
@@ -83,3 +81,4 @@ personal_notes.md
 handoff-issue-183.md
 Tests/tests_line_count.txt
 utility/tests_line_count.txt
+sevwrenai.2026-08-22.private-key.pem
