@@ -22,7 +22,7 @@ passed) or in tests via `-NoRun`.
 
 New contributors may expect `$Mode -eq "popup"` to work. The slash requirement is
 non-obvious from PowerShell alone but is a constraint of how ps2exe binds
-positional parameters — not a design choice that can be removed without
+positional parameters - not a design choice that can be removed without
 replacing the compiler.
 
 ## Evidence

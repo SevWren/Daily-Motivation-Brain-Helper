@@ -5,21 +5,21 @@ thresholds must be chosen: when to rotate and how long to keep archives.
 
 ## Decision
 
-- **Rotate when `popup_log.txt` exceeds 1 MB** — create a timestamped archive
+- **Rotate when `popup_log.txt` exceeds 1 MB** - create a timestamped archive
   (`popup_log.txt.archive_{yyyyMMdd_HHmmss}`) and start a fresh active log.
-- **Delete archives older than 30 days** — keeps roughly one month of history.
+- **Delete archives older than 30 days** - keeps roughly one month of history.
 
-At ~50 bytes per record, 1 MB holds approximately 20 000 records — several months
+At ~50 bytes per record, 1 MB holds approximately 20 000 records - several months
 of daily popup interactions for a typical user. 30 days of archived history covers
 the window where users are likely to investigate past behavior or share logs for
 debugging.
 
 ## Considered Options
 
-- **No rotation** — unbounded disk growth; unacceptable
-- **Per-day rotation** — 30 daily files; harder to query and manage
-- **Fixed record-count window** — loses timestamp continuity; harder to correlate with calendar dates
-- **User-configurable thresholds** — unnecessary complexity for current usage patterns
+- **No rotation** - unbounded disk growth; unacceptable
+- **Per-day rotation** - 30 daily files; harder to query and manage
+- **Fixed record-count window** - loses timestamp continuity; harder to correlate with calendar dates
+- **User-configurable thresholds** - unnecessary complexity for current usage patterns
 
 ## Consequences
 

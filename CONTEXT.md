@@ -8,12 +8,12 @@ opening a chosen folder in Explorer to launch a focused work session.
 ### The app and its parts
 
 **App**:
-The compiled artifact `DailyMotivation.exe` — the thing end users run. When
+The compiled artifact `DailyMotivation.exe` - the thing end users run. When
 describing what a user interacts with, use App, not "script" or "tool".
 _Avoid_: Tool, Script, Program, Utility
 
 **Script**:
-The source file `DailyMotivation.ps1` — the single file that compiles into the
+The source file `DailyMotivation.ps1` - the single file that compiles into the
 App. Use Script when talking about source-level concerns (sections, functions,
 dot-sourcing, building).
 _Avoid_: Source file, Entry point
@@ -39,7 +39,7 @@ _Avoid_: Invocation type, Run context, Entry path
 
 **main mode**:
 Default Mode. Entered when `$Mode` is anything other than `"/popup"` or
-`"/setfolder"`. Shows the Main Window — folder picker and task scheduler UI.
+`"/setfolder"`. Shows the Main Window - folder picker and task scheduler UI.
 _Avoid_: Normal mode, UI mode, Interactive mode
 
 **popup mode**:
@@ -161,7 +161,7 @@ _Avoid_: Auto-open timer, Timer, Clock
 **Open Folder** (primary Popup action):
 The primary Popup action. UI label is `Open Folder →` on button `LetsGoBtn`.
 Opens Explorer at the FolderPath, writes `Opened` to the Outcome Log, and closes
-the Popup. Historical domain name "Let's Go" refers to the same action — prefer
+the Popup. Historical domain name "Let's Go" refers to the same action - prefer
 **Open Folder** in new writing to match the UI.
 _Avoid_: Let's Go (legacy term), Confirm, Go button, Launch
 
@@ -173,7 +173,7 @@ _Avoid_: Delay, Postpone, Remind me later
 **Dismiss**:
 The "Dismiss for Today" Popup action. Removes all PENDING MotivationTasks whose
 FolderPath matches the current popup's folder. Writes `Dismissed` to the Outcome
-Log and closes the Popup without opening Explorer. Scoped to the Popup only —
+Log and closes the Popup without opening Explorer. Scoped to the Popup only - 
 the dismiss button on the last-folder banner in the Main Window
 (`LastFolderDismissBtn`) hides the banner only and does not remove any
 MotivationTask or write to the Outcome Log.
@@ -183,7 +183,7 @@ _Avoid_: Cancel, Close, Ignore, Skip
 The "Choose new location" action available in the path-missing panel. Opens a
 folder picker allowing the user to substitute a new FolderPath for the current
 popup session. Updates the PopupConfig with the new path, opens Explorer at the
-new location, and closes the Popup. Writes `Opened` to the Outcome Log — not
+new location, and closes the Popup. Writes `Opened` to the Outcome Log - not
 `PathMissing`.
 _Avoid_: Browse, Change path, Select folder, Retry
 
@@ -198,12 +198,12 @@ _Avoid_: Result, Action, Response, Decision
 A popup-session counter tracked in `$script:snoozeCount` and written to the
 Outcome Log entry. Counts how many times the user Snoozed during a single popup
 session. The `snooze_count` field on the persisted MotivationTask record is
-always `0` — it is initialised at creation and never updated thereafter.
+always `0` - it is initialised at creation and never updated thereafter.
 _Avoid_: Snooze number, Delay count
 
 **Path Missing**:
 The error state when the FolderPath stored in the PopupConfig no longer exists on
-disk at the time the Popup appears. Detected at trigger time only — scheduling
+disk at the time the Popup appears. Detected at trigger time only - scheduling
 always succeeds regardless of path availability at Schedule time. Shows the
 path-missing panel instead of normal Popup content. The user can close the Popup
 (logging `PathMissing` as the Outcome) or use **Re-Pick Folder** to substitute a
@@ -221,7 +221,7 @@ Primary keys: `glyph`, `title`, `body`, `explorer_path` (folder path),
 `folder_name`, `task_id`. `Set-PopupConfig` also writes compatibility aliases
 `folder_path` (same as `explorer_path`) and `message_glyph` / `message_title` /
 `message_body` (same as glyph/title/body). Prefer `explorer_path` when reading.
-_Avoid_: Popup settings, Shared state, Config (ambiguous — see AppConfig)
+_Avoid_: Popup settings, Shared state, Config (ambiguous - see AppConfig)
 
 **Handoff**:
 The write-then-read cycle of the PopupConfig. main mode or setfolder mode writes
@@ -231,7 +231,7 @@ _Avoid_: Data pass, State share, IPC
 **AppConfig**:
 The JSON file (`config.json`) storing persistent app-level settings:
 `default_trigger_hour` and `task_warning_threshold`. Never read by popup mode.
-_Avoid_: Config (ambiguous — see PopupConfig), Settings, Preferences
+_Avoid_: Config (ambiguous - see PopupConfig), Settings, Preferences
 
 **AppData Dir**:
 The directory `%APPDATA%\DailyMotivationBrainHelper\`. All persistent state lives
@@ -241,7 +241,7 @@ _Avoid_: App folder, Data directory, Config directory
 **Outcome Log**:
 The file `popup_log.txt` in AppData Dir. Pipe-delimited records:
 `[timestamp] | TaskId | FolderName | HASH:{sha256} | Outcome | SnoozeCount`.
-The folder path is **not** stored in plaintext — only a SHA-256 hex digest
+The folder path is **not** stored in plaintext - only a SHA-256 hex digest
 prefixed with `HASH:` (or `HASH:NO_PATH` when empty). Append-only, with rotation
 when the file exceeds 1MB (archives older than 30 days are deleted).
 _Avoid_: Log file, History, Activity log
@@ -254,15 +254,15 @@ _Avoid_: Log file, History, Activity log
 The right-click entry "Set as tomorrow's folder (Daily Motivation)" registered
 under `HKCU:\Software\Classes\Directory\shell\ScheduleMotivation`. Invokes
 setfolder mode. Registered on every successful Schedule via `Register-ContextMenu`
-(idempotent — re-registering with `New-Item -Force` is safe).
+(idempotent - re-registering with `New-Item -Force` is safe).
 _Avoid_: Right-click option, Shell extension, Registry entry
 
 **Mutex**:
 Two named Windows mutexes are used:
-- **Popup mutex** — `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`
+- **Popup mutex** - `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`
   ensures only one Popup is visible per user session (user/session isolation
   prevents cross-user DoS). Exposed at runtime as `$script:PopupMutexName`.
-- **Config lock** — `Global\DailyMotivationPopupConfigLock` serializes writes to
+- **Config lock** - `Global\DailyMotivationPopupConfigLock` serializes writes to
   `popup_config.json` in `Set-PopupConfig`.
 _Avoid_: Lock, Guard, Semaphore
 
@@ -313,7 +313,7 @@ codebase, file-scoped `BeforeAll` blocks perform dot-sourcing, redirect
 `$env:APPDATA` to a temp directory, call `Initialize-AppData`, and define Mocks.
 File-scoped `AfterAll` blocks restore `$env:APPDATA` and clean up temp
 directories. This file-scope placement of `Mock` inside `BeforeAll` is a
-**Pester v5 feature** — in Pester v4, Mocks must be inside a `Describe` or
+**Pester v5 feature** - in Pester v4, Mocks must be inside a `Describe` or
 `Context` block.
 _Avoid_: Setup block, Fixture (use BeforeAll/AfterAll/BeforeEach/AfterEach)
 
@@ -321,7 +321,7 @@ _Avoid_: Setup block, Fixture (use BeforeAll/AfterAll/BeforeEach/AfterEach)
 The Pester v5 `-ForEach` parameter on `It` blocks, used to run the same
 assertion against multiple inputs. Example from `SingleFile.Tests.ps1`:
 `It "Function '<_>' should be defined" -ForEach $requiredFunctions { ... }`.
-This is a **Pester v5 feature** — in Pester v4 the equivalent is `-TestCases`.
+This is a **Pester v5 feature** - in Pester v4 the equivalent is `-TestCases`.
 _Avoid_: TestCases (v4 term), parameterised tests
 
 **Invoke-Tests.ps1**:
@@ -353,7 +353,7 @@ _Avoid_: Test script, Run script
 - **Dismiss** removes all PENDING **MotivationTasks** for the same FolderPath
   and writes `Dismissed` to the **Outcome Log**
 - The **Context Menu Verb** is registered on every successful **Schedule** in
-  main mode (idempotent); setfolder mode does not re-register it — the verb is
+  main mode (idempotent); setfolder mode does not re-register it - the verb is
   already installed from the prior main mode Schedule that made the menu entry
   available in the first place
 - All persistent state lives in the **AppData Dir**: `config.json` (**AppConfig**),
@@ -367,19 +367,19 @@ _Avoid_: Test script, Run script
 ## Example dialogue
 
 > **Dev:** "I want to add a way for users to change the trigger hour."
-> **Domain expert:** "That's an **AppConfig** change — update `default_trigger_hour` in `config.json`. The user sees a time picker in **main mode**. When they **Schedule**, the new value is used as the **TriggerTime**."
+> **Domain expert:** "That's an **AppConfig** change - update `default_trigger_hour` in `config.json`. The user sees a time picker in **main mode**. When they **Schedule**, the new value is used as the **TriggerTime**."
 
 > **Dev:** "What happens if the user schedules the same folder twice?"
-> **Domain expert:** "It's a **Duplicate** — blocked by default. The UI shows a confirmation dialog. If the user says yes, we **Force Schedule**, which creates a second **MotivationTask** with a different **TaskId** for the same folder and date."
+> **Domain expert:** "It's a **Duplicate** - blocked by default. The UI shows a confirmation dialog. If the user says yes, we **Force Schedule**, which creates a second **MotivationTask** with a different **TaskId** for the same folder and date."
 
 > **Dev:** "When the popup fires and the folder is gone, what state are we in?"
 > **Domain expert:** "**Path Missing**. The Popup shows the path-missing panel instead of the normal **Message** + **Open Folder** flow. If the user closes without re-picking, the **Outcome** written to the log is `PathMissing`."
 
 > **Dev:** "How does the popup know which folder to open if main mode already closed?"
-> **Domain expert:** "That's the **Handoff**. main mode (or setfolder mode) writes the **PopupConfig** at **Schedule** time. popup mode reads it at **TriggerTime**. The two modes never run concurrently — the **Handoff** is the only bridge."
+> **Domain expert:** "That's the **Handoff**. main mode (or setfolder mode) writes the **PopupConfig** at **Schedule** time. popup mode reads it at **TriggerTime**. The two modes never run concurrently - the **Handoff** is the only bridge."
 
 > **Dev:** "Should I delete the MotivationTask when the user clicks Open Folder?"
-> **Domain expert:** "No. **Open Folder** writes `Opened` to the **Outcome Log** and closes the **Popup**. The **MotivationTask** record stays in `tasks.json` — it's history. The **OS Task** in Task Scheduler is a one-shot trigger; it's gone after firing."
+> **Domain expert:** "No. **Open Folder** writes `Opened` to the **Outcome Log** and closes the **Popup**. The **MotivationTask** record stays in `tasks.json` - it's history. The **OS Task** in Task Scheduler is a one-shot trigger; it's gone after firing."
 
 > **Dev:** "How do I wire up the right-click to set a folder?"
 > **Domain expert:** "Register the **Context Menu Verb**. That calls the **App** in **setfolder mode** with the folder path. setfolder mode creates a new **MotivationTask** for tomorrow at the default trigger hour, writes the **PopupConfig**, shows a confirmation MessageBox, then exits."
@@ -391,33 +391,33 @@ _Avoid_: Test script, Run script
 
 ## Flagged ambiguities
 
-- **"Config"** — Used alone, this is ambiguous. `config.json` is **AppConfig**;
+- **"Config"** - Used alone, this is ambiguous. `config.json` is **AppConfig**;
   `popup_config.json` is **PopupConfig**. Always use the qualified form.
-- **"Task"** — Overloaded. A **MotivationTask** is the domain record in
+- **"Task"** - Overloaded. A **MotivationTask** is the domain record in
   `tasks.json`. An **OS Task** is the Windows Task Scheduler entry. Never use
   "task" alone when the distinction matters.
-- **"Scheduled task"** — Forbidden unqualified. Use **MotivationTask** for the
+- **"Scheduled task"** - Forbidden unqualified. Use **MotivationTask** for the
   domain entity or **OS Task** for the Windows scheduler entry.
-- **"Dismiss"** and **"Undo"** — Both close UI without opening Explorer, but
+- **"Dismiss"** and **"Undo"** - Both close UI without opening Explorer, but
   they are different. **Dismiss** ends a **Popup** session (removes matching
   PENDING MotivationTasks, logs `Dismissed`). **Undo** cancels a
   freshly-created **MotivationTask** from the main window (no log entry; task is
   deleted). Dismiss is scoped to the popup; Undo is scoped to the main window.
-- **"Status = DELETED"** — This is a runtime annotation applied during
+- **"Status = DELETED"** - This is a runtime annotation applied during
   `Get-MotivationTasks` when the **OS Task** is missing, not a user-initiated
   delete. A user-initiated remove is `Remove-MotivationTask`, not a status flip.
-- **"Snooze"** — In the Popup it is an action (user defers). In the
-  `MotivationTask` record, `snooze_count` is always `0` — the running count is
+- **"Snooze"** - In the Popup it is an action (user defers). In the
+  `MotivationTask` record, `snooze_count` is always `0` - the running count is
   tracked in the popup-session variable `$script:snoozeCount` and written only to
   the **Outcome Log**. Keep the verb sense and the record field distinct.
-- **"Mode values"** — When checking `$Mode` in code, always use the
+- **"Mode values"** - When checking `$Mode` in code, always use the
   slash-prefixed strings `"/popup"` and `"/setfolder"`. The bare strings
   `"popup"` and `"setfolder"` will never match because ps2exe passes CLI
   arguments with their leading slash intact.
-- **"Pester"** — Always specify the version. The codebase requires **Pester
+- **"Pester"** - Always specify the version. The codebase requires **Pester
   v5.x**. Pester v4 will silently fail because file-scoped `BeforeAll` Mocks
   and the `-ForEach` parameter on `It` blocks are Pester v5 features.
-- **"FolderPath in PopupConfig"** — The JSON key for the folder path in
+- **"FolderPath in PopupConfig"** - The JSON key for the folder path in
   `popup_config.json` is `explorer_path`, not `folder_path` or `FolderPath`.
   Reading `$config.FolderPath` or `$config.folder_path` returns `$null`.
 
