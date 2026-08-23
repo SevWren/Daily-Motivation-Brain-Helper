@@ -91,9 +91,10 @@ Used as the key for Task Scheduler's task name and for Outcome Log entries.
 _Avoid_: ID, GUID, Identifier, Task name
 
 **TriggerTime**:
-The ISO 8601 datetime (`scheduled_time` field) at which Task Scheduler fires the
-popup for a MotivationTask.
-_Avoid_: Scheduled time, Fire time, Run time, Alarm time
+The datetime at which Task Scheduler fires the popup for a MotivationTask. Stored
+as ISO 8601 (`scheduled_time` field); invalid stored values are silently skipped
+during duplicate detection.
+_Avoid_: Scheduled time, Fire time, Run time, Alarm time, Execution time
 
 **Schedule** (verb):
 The user action of creating a MotivationTask. Involves: picking a folder,
@@ -107,23 +108,23 @@ The Windows Task Scheduler entry registered for a MotivationTask. Named
 _Avoid_: Scheduled task (ambiguous), Windows task, Cron job
 
 **Duplicate**:
-A MotivationTask that has the same FolderPath (case-insensitive) and same
-calendar date as an existing MotivationTask. Blocked by default; allowed via the
-`-Force` flag.
-_Avoid_: Conflict, Clash, Double-booking
+A PENDING MotivationTask that has the same FolderPath (case-insensitive) and same
+calendar date as another existing PENDING MotivationTask. Blocked by default;
+allowed via the `-Force` flag.
+_Avoid_: Conflict, Clash, Double-booking, Collision
 
 **Force Schedule**:
-Creating a MotivationTask despite a Duplicate being detected. Enabled by passing
-`-Force` to `New-MotivationTask`.
+Creating a MotivationTask despite a Duplicate being detected. Code-level concept
+only; the UI shows "Already Scheduled" and asks "Schedule again anyway?" before
+passing `-Force` to the scheduling function.
 _Avoid_: Override, Bypass duplicate check
 
 **Status**:
-The lifecycle state of a MotivationTask. Canonical values in
-`$script:ValidTaskStatuses`: `PENDING` (created, not yet triggered), `DELETED`
-(OS Task was removed or not found at refresh time), `COMPLETED` (terminal success
-annotation), and `FAILED` (terminal failure annotation). Values outside this set
-are normalized to `UNKNOWN` when tasks are loaded. Duplicate detection only
-considers `PENDING` tasks.
+The lifecycle state of a MotivationTask. At runtime only `PENDING` (created, not
+yet triggered) and `DELETED` (OS Task missing or removed at reconciliation time)
+are assigned. `COMPLETED` and `FAILED` are reserved for future use and are never
+set by current code. Values outside the canonical set are normalized to `UNKNOWN`
+at load time. Duplicate detection only considers `PENDING` tasks.
 _Avoid_: State, Phase, Flag
 
 **Network Path**:
@@ -133,6 +134,25 @@ scheduling to alert the user the path may be unreachable at trigger time. The
 warning is shown only in main mode; setfolder mode does not display a Network
 Path warning.
 _Avoid_: Remote path, UNC path (UNC is a sub-type, not a synonym)
+
+**Today / Tomorrow Selector**:
+The RadioButton group in main mode that determines the calendar date of a
+MotivationTask's TriggerTime. "Today" fires at the default trigger hour on the
+current day; "Tomorrow" fires at the default trigger hour the following day. The
+Today option is hidden after the default trigger hour passes on the current day.
+_Avoid_: Date picker, Time picker, Toggle
+
+**Task List**:
+The scrollable panel in main mode displaying all non-DELETED MotivationTasks with
+their FolderNames, scheduled TriggerTimes, and Statuses. The primary surface for
+viewing and removing pending reminders.
+_Avoid_: Task view, Task panel, Reminder list
+
+**History Panel**:
+The collapsible section in main mode displaying the most recent 30 entries from
+the Outcome Log, showing timestamps, FolderNames, and Outcomes. Toggled via a
+"View History" / "Hide History" button.
+_Avoid_: Log viewer, Activity panel, Recent activity
 
 ---
 
@@ -158,6 +178,13 @@ A 20-second auto-open timer shown in the Popup. When it reaches zero, the App
 behaves as if the user clicked Open Folder.
 _Avoid_: Auto-open timer, Timer, Clock
 
+**Pause**:
+A Countdown pause/resume toggle in the Popup. The button label alternates between
+"Pause" (timer running) and "Resume" (timer stopped). Available only in the
+normal Popup state, not when Path Missing is displayed. Paused state is not
+preserved across a Snooze.
+_Avoid_: Freeze, Halt, Stop
+
 **Open Folder** (primary Popup action):
 The primary Popup action. UI label is `Open Folder →` on button `LetsGoBtn`.
 Opens Explorer at the FolderPath, writes `Opened` to the Outcome Log, and closes
@@ -166,9 +193,9 @@ the Popup. Historical domain name "Let's Go" refers to the same action - prefer
 _Avoid_: Let's Go (legacy term), Confirm, Go button, Launch
 
 **Snooze**:
-Defers the Popup by N minutes (5, 15, 30, or 60). Increments the SnoozeCount.
-Schedules a new OS Task; the current Popup closes.
-_Avoid_: Delay, Postpone, Remind me later
+Creates a new MotivationTask scheduled N minutes in the future (5, 15, 30, or 60),
+replacing the original after the Popup closes. Increments the SnoozeCount.
+_Avoid_: Delay, Postpone, Defer, Remind me later
 
 **Dismiss**:
 The "Dismiss for Today" Popup action. Removes all PENDING MotivationTasks whose
@@ -230,12 +257,14 @@ _Avoid_: Data pass, State share, IPC
 
 **AppConfig**:
 The JSON file (`config.json`) storing persistent app-level settings:
-`default_trigger_hour` and `task_warning_threshold`. Never read by popup mode.
+`default_trigger_hour` (0-23, default 14) and `task_warning_threshold`
+(non-negative integer, default 5). `task_warning_threshold` is reserved for
+future use and is not read at runtime. Never read by popup mode.
 _Avoid_: Config (ambiguous - see PopupConfig), Settings, Preferences
 
 **AppData Dir**:
 The directory `%APPDATA%\DailyMotivationBrainHelper\`. All persistent state lives
-here. Resolved at call time by `Initialize-AppData` to support test redirects.
+here.
 _Avoid_: App folder, Data directory, Config directory
 
 **Outcome Log**:
@@ -243,7 +272,7 @@ The file `popup_log.txt` in AppData Dir. Pipe-delimited records:
 `[timestamp] | TaskId | FolderName | HASH:{sha256} | Outcome | SnoozeCount`.
 The folder path is **not** stored in plaintext - only a SHA-256 hex digest
 prefixed with `HASH:` (or `HASH:NO_PATH` when empty). Append-only, with rotation
-when the file exceeds 1MB (archives older than 30 days are deleted).
+at 1 MB and 30-day archive retention (see ADR-010).
 _Avoid_: Log file, History, Activity log
 
 ---
@@ -348,10 +377,17 @@ _Avoid_: Test script, Run script
   Schedule time
 - The user's action in the **Popup** produces exactly one **Outcome** per session:
   `Opened`, `Snoozed`, `Dismissed`, or `PathMissing`
-- Each **Snooze** increments the popup-session **SnoozeCount** and schedules a
-  new **OS Task**; only the final session action is written to the **Outcome Log**
+- Each **Snooze** creates a new **MotivationTask** scheduled N minutes later
+  (removing the original after the Popup closes) and increments the popup-session
+  **SnoozeCount**; only the final session action is written to the **Outcome Log**
 - **Dismiss** removes all PENDING **MotivationTasks** for the same FolderPath
   and writes `Dismissed` to the **Outcome Log**
+- **Re-Pick Folder** opens a new folder picker, substitutes the path in the
+  PopupConfig, opens Explorer, and logs `Opened` (not `PathMissing`)
+- **Undo** removes the just-created **MotivationTask** and cancels its **OS
+  Task** without writing to the **Outcome Log**
+- **Pause** is scoped to the current **Popup** session; paused state is not
+  preserved when the user **Snoozes** (a new Popup session begins)
 - The **Context Menu Verb** is registered on every successful **Schedule** in
   main mode (idempotent); setfolder mode does not re-register it - the verb is
   already installed from the prior main mode Schedule that made the menu entry
@@ -384,6 +420,12 @@ _Avoid_: Test script, Run script
 > **Dev:** "How do I wire up the right-click to set a folder?"
 > **Domain expert:** "Register the **Context Menu Verb**. That calls the **App** in **setfolder mode** with the folder path. setfolder mode creates a new **MotivationTask** for tomorrow at the default trigger hour, writes the **PopupConfig**, shows a confirmation MessageBox, then exits."
 
+> **Dev:** "What happens if the user pauses the Countdown and then clicks Snooze?"
+> **Domain expert:** "The **Pause** state is scoped to the current **Popup** session. When the user clicks **Snooze**, a new **MotivationTask** is created and a fresh **Popup** opens at the snoozed time with the **Countdown** running from the start. Paused state does not carry over."
+
+> **Dev:** "What is the difference between **Re-Pick Folder** and just dismissing?"
+> **Domain expert:** "**Re-Pick Folder** is available only when **Path Missing** is detected. It opens a picker, updates the **PopupConfig** in-session, opens Explorer at the new path, and logs `Opened` - not `PathMissing`. **Dismiss** removes all PENDING **MotivationTasks** for that folder and logs `Dismissed` without opening anything."
+
 > **Dev:** "Why does my `if ($Mode -eq \"popup\")` branch never fire?"
 > **Domain expert:** "Because ps2exe binds the CLI argument `/popup` as the string `\"/popup\"` (with the leading slash) to `$Mode`. The switch statement matches on `\"/popup\"`, not `\"popup\"`. Always use the slash-prefixed form in any code that inspects `$Mode`."
 
@@ -403,13 +445,18 @@ _Avoid_: Test script, Run script
   PENDING MotivationTasks, logs `Dismissed`). **Undo** cancels a
   freshly-created **MotivationTask** from the main window (no log entry; task is
   deleted). Dismiss is scoped to the popup; Undo is scoped to the main window.
+  "Dismiss" also appears on the path-missing panel ("Close" button, logs
+  `PathMissing`, removes nothing) and on the last-folder banner in the Main
+  Window (hides the banner only, no task removal, no log entry). Always specify
+  which dismiss action you mean.
 - **"Status = DELETED"** - This is a runtime annotation applied during
   `Get-MotivationTasks` when the **OS Task** is missing, not a user-initiated
   delete. A user-initiated remove is `Remove-MotivationTask`, not a status flip.
-- **"Snooze"** - In the Popup it is an action (user defers). In the
-  `MotivationTask` record, `snooze_count` is always `0` - the running count is
-  tracked in the popup-session variable `$script:snoozeCount` and written only to
-  the **Outcome Log**. Keep the verb sense and the record field distinct.
+- **"Snooze"** - In the Popup it is an action (creates a new MotivationTask).
+  In the `MotivationTask` record, `snooze_count` is always `0` - the running
+  count is tracked in the popup-session variable `$script:snoozeCount` and
+  written only to the **Outcome Log**. Keep the verb sense and the record field
+  distinct.
 - **"Mode values"** - When checking `$Mode` in code, always use the
   slash-prefixed strings `"/popup"` and `"/setfolder"`. The bare strings
   `"popup"` and `"setfolder"` will never match because ps2exe passes CLI
@@ -420,7 +467,16 @@ _Avoid_: Test script, Run script
 - **"FolderPath in PopupConfig"** - The JSON key for the folder path in
   `popup_config.json` is `explorer_path`, not `folder_path` or `FolderPath`.
   Reading `$config.FolderPath` or `$config.folder_path` returns `$null`.
+- **"Re-Pick Folder" vs "Selected Folder"** - **Selected Folder** is the
+  user's in-progress choice in the main window before scheduling. **Re-Pick
+  Folder** is the path-missing Popup action that substitutes a new path for the
+  current session only. One is main mode pre-schedule state; the other is popup
+  mode recovery.
+- **"Schedule" (verb)** - Ambiguous in code. The user action is **Schedule**
+  (pick folder, click button, create MotivationTask). The OS call is
+  `Register-ScheduledTask`. Keep them distinct: say "the user schedules" vs
+  "the OS Task is registered."
 
 ---
 
-_Last updated: 2026-07-23_
+_Last updated: 2026-08-23_

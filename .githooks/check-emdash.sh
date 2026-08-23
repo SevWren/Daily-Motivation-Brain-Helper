@@ -146,22 +146,31 @@ elif [ "$MODE" = "files" ]; then
     check_file "$file"
   done
 elif [ "$MODE" = "range" ]; then
+  _files_tmp=$(mktemp)
+  git diff --name-only --diff-filter=ACM "$COMMIT_RANGE" 2>/dev/null > "$_files_tmp"
   while IFS= read -r file; do
     if [ -n "$file" ] && [ -f "$file" ]; then
       check_file "$file"
     fi
-  done < <(git diff --name-only --diff-filter=ACM "$COMMIT_RANGE" 2>/dev/null)
+  done < "$_files_tmp"
+  rm -f "$_files_tmp"
 elif [ "$MODE" = "all" ]; then
+  _files_tmp=$(mktemp)
+  (git ls-files 2>/dev/null || find . -type f -not -path '*/.*/*') > "$_files_tmp"
   while IFS= read -r file; do
     check_file "$file"
-  done < <(git ls-files 2>/dev/null || find . -type f -not -path '*/.*/*')
+  done < "$_files_tmp"
+  rm -f "$_files_tmp"
 else
   # Inspect staged files (added, copied, modified)
+  _files_tmp=$(mktemp)
+  git diff --cached --name-only --diff-filter=ACM 2>/dev/null > "$_files_tmp"
   while IFS= read -r file; do
     if [ -n "$file" ] && [ -f "$file" ]; then
       check_file "$file"
     fi
-  done < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)
+  done < "$_files_tmp"
+  rm -f "$_files_tmp"
 fi
 
 # If violations exist, output complete diagnostic mandate and halt git operation
