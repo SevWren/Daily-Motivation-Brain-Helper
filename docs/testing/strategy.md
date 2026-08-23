@@ -280,12 +280,14 @@ Coverage is collected for `DailyMotivation.ps1` and output as `coverage.xml` (Ja
 
 ## Known test defects
 
-### `UIDisposal.Tests.ps1` — AG6-004 asserts incorrect behavior
+### `UIDisposal.Tests.ps1` — AG6-004 / BUG-2 ✓ resolved
 
-The `AG6-004: Window Disposal After ShowDialog` tests assert that `$window.Dispose()` must exist in both `Show-MainWindow` and `Show-PopupWindow`, with the `-Because` message "WPF Window implements IDisposable and must be disposed."
+**Fixed in commit `e0e0da6`** ("fix(ui): close WPF windows without Dispose; switch task LogonType to Interactive").
 
-This assertion is **incorrect**. Per the CLAUDE.md MANDATE:
+The incorrect `AG6-004: Window Disposal After ShowDialog` Describe block (which asserted `$window.Dispose()` must exist) was removed. It was replaced by two `BUG-2` regression-guard Describes that correctly assert:
 
-> `System.Windows.Window` does not implement `System.IDisposable`. Calling `.Dispose()` on it throws: `Method invocation failed because [System.Windows.Window] does not contain a method named 'Dispose'.`
+- `$window.Dispose()` must **not** exist in `Show-MainWindow` or `Show-PopupWindow` — `System.Windows.Window` does not implement `IDisposable`.
+- `$window.Close()` must be present in both functions.
+- A file-wide guard: zero calls to `$window.Dispose()` anywhere in `DailyMotivation.ps1`.
 
-The correct pattern is `$window.Close()`. If the source code correctly uses `.Close()`, these two AG6-004 tests will fail. The tests need to be updated to assert `.Close()` instead of `.Dispose()`, and the `-Because` message corrected to reflect that `System.Windows.Window` does not implement `IDisposable`.
+The source code uses `$window.Close()` throughout. No further action required.
