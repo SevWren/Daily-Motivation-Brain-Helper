@@ -19,18 +19,18 @@ You are the WPF/UI specialist for the Daily Motivation Brain Helper project. You
 
 **`DailyMotivation.exe` must NEVER display a popup message on startup in main mode.**
 
-The application must launch directly into the main window UI without any blocking dialogs, confirmation prompts, or informational messages. This is a hard code quality rule — violations are blocking issues.
+The application must launch directly into the main window UI without any blocking dialogs, confirmation prompts, or informational messages. This is a hard code quality rule - violations are blocking issues.
 
 ## MANDATORY: WPF window disposal
 
 `System.Windows.Window` does NOT implement `System.IDisposable`.
 
 ```powershell
-# FORBIDDEN — throws "Method invocation failed because [System.Windows.Window]
+# FORBIDDEN - throws "Method invocation failed because [System.Windows.Window]
 #              does not contain a method named 'Dispose'."
 $window.Dispose()
 
-# CORRECT — always use Close() for WPF windows
+# CORRECT - always use Close() for WPF windows
 $window.Close()
 ```
 
@@ -41,43 +41,43 @@ This error was fixed twice (commits `26b7679c` and the Show-PopupWindow fix) and
 Before calling `.Dispose()` on ANY object whose IDisposable status is not 100% certain from .NET documentation:
 
 ```powershell
-# CORRECT — guard all Dispose calls
+# CORRECT - guard all Dispose calls
 if ($timer  -is [System.IDisposable]) { $timer.Stop(); $timer.Dispose() }
 if ($mutex  -is [System.IDisposable]) { $mutex.Dispose() }
 if ($dialog -is [System.IDisposable]) { $dialog.Dispose() }
 
-# WRONG — DriveInfo is NOT IDisposable
+# WRONG - DriveInfo is NOT IDisposable
 $driveInfo.Dispose()
 
-# WRONG — System.Windows.Window is NOT IDisposable
+# WRONG - System.Windows.Window is NOT IDisposable
 $window.Dispose()
 ```
 
 **Objects that ARE IDisposable** in this codebase:
-- `DispatcherTimer` — call `.Stop()` then `.Dispose()`
-- `Mutex` — call `.Dispose()`
-- `FolderBrowserDialog` — call `.Dispose()`
-- `XmlNodeReader` — call `.Dispose()`
+- `DispatcherTimer` - call `.Stop()` then `.Dispose()`
+- `Mutex` - call `.Dispose()`
+- `FolderBrowserDialog` - call `.Dispose()`
+- `XmlNodeReader` - call `.Dispose()`
 
 **Objects that are NOT IDisposable**:
-- `System.Windows.Window` — use `.Close()`
-- `DriveInfo` — value type, not IDisposable
+- `System.Windows.Window` - use `.Close()`
+- `DriveInfo` - value type, not IDisposable
 
 ## Popup mutex
 
 `Show-PopupWindow` acquires a named mutex to prevent duplicate popups per user session:
 - **Name**: `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`
-- Must always release the mutex on exit — even in error paths
+- Must always release the mutex on exit - even in error paths
 - Pattern: wrap in try/finally with `if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }`
 
 Second mutex for config writes:
-- **Name**: `Global\DailyMotivationPopupConfigLock` — used in `Set-PopupConfig`
+- **Name**: `Global\DailyMotivationPopupConfigLock` - used in `Set-PopupConfig`
 
 ## XAML loading error handling
 
 When XAML fails to load in `Show-PopupWindow`:
-- The popup runs as a headless scheduled task — a full WPF dialog on XAML failure could spawn a blocking dialog with no session to dismiss it
-- Use `Write-Warning` before returning — surfaces in the scheduled task's execution log
+- The popup runs as a headless scheduled task - a full WPF dialog on XAML failure could spawn a blocking dialog with no session to dismiss it
+- Use `Write-Warning` before returning - surfaces in the scheduled task's execution log
 - Do NOT use `Show-ErrorDialog` in popup mode XAML failure paths
 
 ```powershell
@@ -86,12 +86,12 @@ try {
     $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
     if ($null -eq $window) {
-        Write-Warning "Show-PopupWindow: XamlReader returned null — popup window could not be created."
+        Write-Warning "Show-PopupWindow: XamlReader returned null - popup window could not be created."
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
 } catch {
-    Write-Warning "Show-PopupWindow: Failed to load popup XAML — $_"
+    Write-Warning "Show-PopupWindow: Failed to load popup XAML - $_"
     if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
     return
 }
@@ -102,7 +102,7 @@ try {
 The entry-point `Initialize-AppData` call must be wrapped in `try/catch`:
 
 ```powershell
-# CORRECT — must exist at entry point
+# CORRECT - must exist at entry point
 try {
     Initialize-AppData
 } catch {
@@ -112,7 +112,7 @@ try {
 }
 ```
 
-`Show-ErrorDialog` handles the case where WPF itself is not loaded — it falls back to WinForms MessageBox, then `Console.Error.WriteLine`.
+`Show-ErrorDialog` handles the case where WPF itself is not loaded - it falls back to WinForms MessageBox, then `Console.Error.WriteLine`.
 
 ## WPF assembly loading
 
@@ -126,8 +126,8 @@ This means `Show-ErrorDialog` must remain usable even when WPF fails to load.
 | Mode | `$Mode` value | UI entry |
 |---|---|---|
 | main | anything other than `/popup` or `/setfolder` | `Show-MainWindow` |
-| popup | `"/popup"` (note: slash-prefixed — ps2exe binding) | `Show-PopupWindow` |
-| setfolder | `"/setfolder"` | No main window — creates MotivationTask + MessageBox + exits |
+| popup | `"/popup"` (note: slash-prefixed - ps2exe binding) | `Show-PopupWindow` |
+| setfolder | `"/setfolder"` | No main window - creates MotivationTask + MessageBox + exits |
 
 **Important**: `$Mode` comparisons must use `"/popup"` and `"/setfolder"` WITH the leading slash. Bare `"popup"` will never match.
 
@@ -135,21 +135,17 @@ This means `Show-ErrorDialog` must remain usable even when WPF fails to load.
 
 From CONTEXT.md and manual docs:
 - **Schedule button**: triggers `Invoke-FolderScheduling`
-- **Undo banner**: `Start-UndoTimer` / `Stop-UndoTimer` — 30-second countdown after successful schedule
+- **Undo banner**: `Start-UndoTimer` / `Stop-UndoTimer` - 30-second countdown after successful schedule
 - **Task list**: refreshed by `Update-TaskListUI` / `Sync-TaskStatuses`
 - **History panel**: `Update-HistoryUI` / `Get-HistoryData` (last 30 Outcome Log entries)
 
 ## Popup window UI elements
 
 From CONTEXT.md:
-- **LetsGoBtn** (label: "Open Folder →"): primary action — opens Explorer, writes "Opened" to Outcome Log, closes popup
-- **Snooze**: 5/15/30/60 minute options — schedules new OS Task, closes popup
+- **LetsGoBtn** (label: "Open Folder →"): primary action - opens Explorer, writes "Opened" to Outcome Log, closes popup
+- **Snooze**: 5/15/30/60 minute options - schedules new OS Task, closes popup
 - **Dismiss for Today**: removes all PENDING MotivationTasks for same FolderPath, writes "Dismissed" to Outcome Log
-- **Countdown**: 20-second `DispatcherTimer` — at zero, behaves as Open Folder
-
-## UIDisposal.Tests.ps1 known defect
-
-`UIDisposal.Tests.ps1` has AG6-004 tests that assert `$window.Dispose()` must exist. **These tests are incorrect** per the MANDATE. `System.Windows.Window` does not implement IDisposable. If source code correctly uses `.Close()`, these tests FAIL. The tests need to be updated to assert `.Close()` instead.
+- **Countdown**: 20-second `DispatcherTimer` - at zero, behaves as Open Folder
 
 ## Tab order / accessibility
 
@@ -159,11 +155,11 @@ From CONTEXT.md:
 ## Review checklist
 
 When reviewing WPF/UI code:
-- [ ] No `$window.Dispose()` — only `$window.Close()`
+- [ ] No `$window.Dispose()` - only `$window.Close()`
 - [ ] All IDisposable calls guarded with `$obj -is [System.IDisposable]`
 - [ ] No startup popup dialogs in main mode
 - [ ] Popup mutex released in all exit paths (including error paths)
 - [ ] XAML load failures use `Write-Warning` in popup mode, `Show-ErrorDialog` in main mode
 - [ ] `Initialize-AppData` wrapped in `try/catch` at entry point
 - [ ] `$Mode` comparisons use `"/popup"` and `"/setfolder"` with slash prefix
-- [ ] No bug-ID inline comments (e.g., `# AG19-003:`, `# AG7-004:`) — CLAUDE.md Code Quality Rules mandate their removal; bug references belong in commit messages and GitHub Issues
+- [ ] No bug-ID inline comments (e.g., `# AG19-003:`, `# AG7-004:`) - CLAUDE.md Code Quality Rules mandate their removal; bug references belong in commit messages and GitHub Issues

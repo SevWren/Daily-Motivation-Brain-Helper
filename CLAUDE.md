@@ -1,4 +1,4 @@
-# CLAUDE.md — Daily Motivation Brain Helper
+# CLAUDE.md - Daily Motivation Brain Helper
 
 ## CRITICAL: Testing Environment
 
@@ -6,7 +6,7 @@ This app targets **Windows 10/11** (WPF, Task Scheduler, registry). Tests run in
 
 | Environment | Valid for |
 |-------------|-----------|
-| Windows 10/11 PowerShell 7 | All tests — PRIMARY |
+| Windows 10/11 PowerShell 7 | All tests - PRIMARY |
 | Linux PowerShell 7 | Platform-abstraction tests only |
 
 **Linux-safe** (HeadlessPlatform injection): `Config.Platform.Tests.ps1`, `TaskScheduler.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, `FolderScheduling.Tests.ps1`
@@ -23,17 +23,18 @@ This app targets **Windows 10/11** (WPF, Task Scheduler, registry). Tests run in
 > WPF and resource cleanup rules: `.claude/rules/dailymotivation-script.md` (loads when editing `DailyMotivation.ps1`)
 > Pester mock rules: `.claude/rules/pester-tests.md` (loads when editing `Tests/**/*.ps1`)
 
-### WRONG 1 — Fix declared verified from Linux CI or mocked tests alone
+### WRONG 1 - Fix declared verified from Linux CI or mocked tests alone
+<!-- WRONG 2 and WRONG 3 are in .claude/rules/dailymotivation-script.md (loads when editing DailyMotivation.ps1) -->
 
 **Rule:** Never close or declare resolved any bug involving `Register-ScheduledTask`, task principal configuration, or context-menu invocation without a live test on a real Windows 10/11 machine.
 
 **Exception:** `Tests/Integration/TaskScheduler.Real.Integration.Tests.ps1` uses real cmdlets (no mocks), is `-Skip:(-not $IsWindows)`, and is the mandated gate test.
 
-### WRONG 4 — Error messages sanitized to `[PATH]` without naming the operation
+### WRONG 4 - Error messages sanitized to `[PATH]` without naming the operation
 
 **Rule:** Path sanitization to `[PATH]` is correct for privacy. Every error message must also name the failing operation (e.g., "OS task registration failed") and include the Windows error code where possible.
 
-### WRONG 5 — Narrow `catch` pattern missing real Task Scheduler errors
+### WRONG 5 - Narrow `catch` pattern missing real Task Scheduler errors
 
 | Windows condition | Error string |
 |---|---|
@@ -45,19 +46,19 @@ This app targets **Windows 10/11** (WPF, Task Scheduler, registry). Tests run in
 
 **Rule:** Cover all five cases in the `catch` block using `switch -Regex` on `$_.Exception.Message` + `$_.Exception.HResult` for the default. A `Register-ScheduledTask` failure must never surface as "Invalid Folder".
 
-**Open violation:** Current `New-MotivationTask` catch block (~line 801) handles only `already exists` and `Access Denied|not have permission` — four cases are unhandled.
+**Open violation:** Current `New-MotivationTask` catch block (~line 801) handles only `already exists` and `Access Denied|not have permission` - four cases are unhandled.
 
-### WRONG 6 — Task principal configuration changed without a live Windows test
+### WRONG 6 - Task principal configuration changed without a live Windows test
 
 **Rule:** Any change to `New-ScheduledTaskPrincipal` parameters (`UserId`, `LogonType`, `RunLevel`) requires a live Windows 10/11 test or a `-Skip:(-not $IsWindows)` integration test against the real `Register-ScheduledTask`.
 
-### CORRECT 1 — Task principal (validated — do not change without live Windows test)
+### CORRECT 1 - Task principal (validated - do not change without live Windows test)
 
 ```powershell
 New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 ```
 
-`LogonType Interactive` — required so the popup fires on the user's active desktop. `S4U` fails with "Access is denied" for non-elevated users and cannot host UI (session-less). `RunLevel Limited` — `Highest` requires elevation. See [ADR-005](docs/architecture/adr-005-mandate-history.md).
+`LogonType Interactive` - required so the popup fires on the user's active desktop. `S4U` fails with "Access is denied" for non-elevated users and cannot host UI (session-less). `RunLevel Limited` - `Highest` requires elevation. See [ADR-005](docs/architecture/adr-005-mandate-history.md).
 
 ---
 
@@ -65,10 +66,10 @@ New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLeve
 
 > Binding on all agents. Full rules load automatically when editing `Tests/**/*.ps1` from `.claude/rules/pester-tests.md`.
 
-- **WRONG 7:** Never put common params (`ErrorAction`, etc.) in a splatted hashtable passed to a mock — double-bind produces a silent terminating exception masking the real failure
-- **WRONG 8:** Never mock `New-ScheduledTaskAction/Trigger/Settings/Principal` — only mock `Register/Get/Unregister-ScheduledTask`; `PSCustomObject` fails CimInstance type constraints
-- **WRONG 9:** Module-qualified calls (`ScheduledTasks\Cmdlet`) don't escape Pester — causes infinite recursion
-- **WRONG 10:** No `<token>` in test names unless a `-ForEach` data key — aborts describe block under `Set-StrictMode -Version Latest`
+- **WRONG 7:** Never put common params (`ErrorAction`, etc.) in a splatted hashtable passed to a mock - double-bind produces a silent terminating exception masking the real failure
+- **WRONG 8:** Never mock `New-ScheduledTaskAction/Trigger/Settings/Principal` - only mock `Register/Get/Unregister-ScheduledTask`; `PSCustomObject` fails CimInstance type constraints
+- **WRONG 9:** Module-qualified calls (`ScheduledTasks\Cmdlet`) don't escape Pester - causes infinite recursion
+- **WRONG 10:** No `<token>` in test names unless a `-ForEach` data key - aborts describe block under `Set-StrictMode -Version Latest`
 
 ---
 
@@ -78,7 +79,7 @@ New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLeve
 
 **Any issue whose resolution includes `-Skip:(-not $IsWindows)` tests may not be closed until a passing Windows 10/11 run is posted as an issue comment.**
 
-Accepted proof: full `.\Invoke-Tests.ps1` terminal output from Windows PS7, a CI Windows runner link, or a screenshot — showing 0 failures for the affected tests. Linux CI, code review, or platform-abstraction-only results do not count.
+Accepted proof: full `.\Invoke-Tests.ps1` terminal output from Windows PS7, a CI Windows runner link, or a screenshot - showing 0 failures for the affected tests. Linux CI, code review, or platform-abstraction-only results do not count.
 
 If closed prematurely: reopen, comment which tests are unvalidated, do not re-close until proof is attached.
 
@@ -96,15 +97,15 @@ If closed prematurely: reopen, comment which tests are unvalidated, do not re-cl
 
 Pester 5.x required: `Install-Module -Name Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck`
 
-Tests dot-source `DailyMotivation.ps1 -NoRun` — no exe required. CI runs on `windows-latest`; PS7-syntax gate blocks `??`, `?.`, `Join-String`, `ForEach-Object -Parallel` in runtime code paths.
+Tests dot-source `DailyMotivation.ps1 -NoRun` - no exe required. CI runs on `windows-latest`; PS7-syntax gate blocks `??`, `?.`, `Join-String`, `ForEach-Object -Parallel` in runtime code paths.
 
 ## Key Design Constraints
 
-- `/popup` and `/setfolder` switch cases require **leading slashes** — `$Mode -eq "/popup"` not `"popup"`
+- `/popup` and `/setfolder` switch cases require **leading slashes** - `$Mode -eq "/popup"` not `"popup"`
 - `$script:ExePath` is `$null` under `-NoRun`; tests must assign it before calling `New-MotivationTask`
-- `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time — enables test redirects
+- `Initialize-AppData` re-resolves all paths from `$env:APPDATA` at call time - enables test redirects
 - Valid task statuses: `PENDING`, `DELETED`, `COMPLETED`, `FAILED`; unrecognised values normalise to `UNKNOWN`
-- `Get-MotivationTasks` is plural — `Get-MotivationTask` (singular) throws `CommandNotFoundException`
+- `Get-MotivationTasks` is plural - `Get-MotivationTask` (singular) throws `CommandNotFoundException`
 - Outcome log stores SHA-256 path hashes (`HASH:{hex}`), not plaintext paths
 
 ## Code Quality
