@@ -129,7 +129,9 @@ _Avoid_: State, Phase, Flag
 **Network Path**:
 A FolderPath that begins with `\\` (UNC) or is a mapped drive. Scheduled
 normally, but a warning dialog is shown in the Main Window immediately after
-scheduling to alert the user the path may be unreachable at trigger time.
+scheduling to alert the user the path may be unreachable at trigger time. The
+warning is shown only in main mode; setfolder mode does not display a Network
+Path warning.
 _Avoid_: Remote path, UNC path (UNC is a sub-type, not a synonym)
 
 ---
@@ -171,8 +173,19 @@ _Avoid_: Delay, Postpone, Remind me later
 **Dismiss**:
 The "Dismiss for Today" Popup action. Removes all PENDING MotivationTasks whose
 FolderPath matches the current popup's folder. Writes `Dismissed` to the Outcome
-Log and closes the Popup without opening Explorer.
+Log and closes the Popup without opening Explorer. Scoped to the Popup only —
+the dismiss button on the last-folder banner in the Main Window
+(`LastFolderDismissBtn`) hides the banner only and does not remove any
+MotivationTask or write to the Outcome Log.
 _Avoid_: Cancel, Close, Ignore, Skip
+
+**Re-Pick Folder** (Popup action):
+The "Choose new location" action available in the path-missing panel. Opens a
+folder picker allowing the user to substitute a new FolderPath for the current
+popup session. Updates the PopupConfig with the new path, opens Explorer at the
+new location, and closes the Popup. Writes `Opened` to the Outcome Log — not
+`PathMissing`.
+_Avoid_: Browse, Change path, Select folder, Retry
 
 **Outcome**:
 What the user did when the Popup appeared. One of: `Opened`, `Snoozed`,
@@ -190,8 +203,11 @@ _Avoid_: Snooze number, Delay count
 
 **Path Missing**:
 The error state when the FolderPath stored in the PopupConfig no longer exists on
-disk at the time the Popup appears. Shows the path-missing panel instead of the
-normal Popup content.
+disk at the time the Popup appears. Detected at trigger time only — scheduling
+always succeeds regardless of path availability at Schedule time. Shows the
+path-missing panel instead of normal Popup content. The user can close the Popup
+(logging `PathMissing` as the Outcome) or use **Re-Pick Folder** to substitute a
+new path (logging `Opened` instead).
 _Avoid_: Folder not found, Missing folder, Invalid path
 
 ---
@@ -336,8 +352,10 @@ _Avoid_: Test script, Run script
   new **OS Task**; only the final session action is written to the **Outcome Log**
 - **Dismiss** removes all PENDING **MotivationTasks** for the same FolderPath
   and writes `Dismissed` to the **Outcome Log**
-- The **Context Menu Verb** is registered on every successful **Schedule**
-  (idempotent); it is not limited to the first Schedule
+- The **Context Menu Verb** is registered on every successful **Schedule** in
+  main mode (idempotent); setfolder mode does not re-register it — the verb is
+  already installed from the prior main mode Schedule that made the menu entry
+  available in the first place
 - All persistent state lives in the **AppData Dir**: `config.json` (**AppConfig**),
   `popup_config.json` (**PopupConfig**), `tasks.json` (**MotivationTask** list),
   `popup_log.txt` (**Outcome Log**)
