@@ -278,16 +278,3 @@ Coverage is collected for `DailyMotivation.ps1` and output as `coverage.xml` (Ja
 
 ---
 
-## Known test defects
-
-### `UIDisposal.Tests.ps1` — AG6-004 / BUG-2 ✓ resolved
-
-**Fixed in commit `e0e0da6`** ("fix(ui): close WPF windows without Dispose; switch task LogonType to Interactive").
-
-The incorrect `AG6-004: Window Disposal After ShowDialog` Describe block (which asserted `$window.Dispose()` must exist) was removed. It was replaced by two `BUG-2` regression-guard Describes that correctly assert:
-
-- `$window.Dispose()` must **not** exist in `Show-MainWindow` or `Show-PopupWindow` — `System.Windows.Window` does not implement `IDisposable`.
-- `$window.Close()` must be present in both functions.
-- A file-wide guard: zero calls to `$window.Dispose()` anywhere in `DailyMotivation.ps1`.
-
-The source code uses `$window.Close()` throughout. No further action required.
