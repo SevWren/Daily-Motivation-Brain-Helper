@@ -52,7 +52,7 @@ epics:
         notes: "Replace leading ~ with $env:HOME/$env:USERPROFILE/$env:TEMP. Linux-safe."
       - id: "story-1-7"
         title: "Clean Up PENDING Tasks When Task Scheduler Service Stops"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 34
         severity: "Medium"
         windows_only: true
@@ -66,35 +66,35 @@ epics:
     stories:
       - id: "story-2-1"
         title: "Add PresentationFramework Pre-Check to All XamlReader Call Sites"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 96
         severity: "Critical"
         windows_only: true
         notes: "Test-WpfAvailable guard before XamlReader::Load in Show-MainWindow, Show-PopupWindow, Show-ErrorDialog. Windows live test required."
       - id: "story-2-2"
         title: "Guard Assembly Load in /setfolder Mode Before MessageBox"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 38
         severity: "High"
         windows_only: true
         notes: "Load WPF assemblies at top of /setfolder block before any dialog call. Windows live test required."
       - id: "story-2-3"
         title: "Set Window.Owner Before ShowDialog"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 37
         severity: "Medium"
         windows_only: true
         notes: "Confirm/set Topmost and Owner for popup; set Owner for main window child dialogs. Windows live test required."
       - id: "story-2-4"
         title: "Unregister Event Handlers on Window Close"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 36
         severity: "Medium"
         windows_only: true
         notes: "Null button references in Closing handler to release WPF GC roots. Windows live test required."
       - id: "story-2-5"
         title: "Add MinWidth and MinHeight to Popup Window XAML"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 35
         severity: "Medium"
         windows_only: true
