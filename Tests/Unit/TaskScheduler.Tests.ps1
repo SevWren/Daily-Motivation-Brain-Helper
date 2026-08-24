@@ -504,7 +504,10 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         }
 
         It 'Should pass StartBoundary matching TriggerTime to Register-ScheduledTask' {
-            $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            # [datetime]::new() produces exact second-boundary values (no sub-second ticks).
+            # Get-Date -Second 0 retains sub-second ticks from the current clock, which
+            # would cause a mismatch because StartBoundary is second-precision only.
+            $triggerTime = [datetime]::new(2026, 12, 25, 14, 0, 0)
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
 
@@ -512,10 +515,9 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
             $capturedTrigger | Should -Not -BeNullOrEmpty
 
-            # New-ScheduledTaskTrigger stores StartBoundary as an ISO 8601 string.
-            # The value may be in local time ('2026-12-25T14:00:00') or UTC
-            # ('2026-12-25T20:00:00Z') depending on the machine's timezone.
-            # Parse and normalise to UTC before comparing.
+            # New-ScheduledTaskTrigger stores StartBoundary as ISO 8601, either in
+            # local time ('2026-12-25T14:00:00') or UTC ('2026-12-25T20:00:00Z').
+            # Parse with RoundtripKind and normalise both sides to UTC before comparing.
             $stored = [datetime]::Parse(
                 $capturedTrigger.StartBoundary,
                 [System.Globalization.CultureInfo]::InvariantCulture,
@@ -526,9 +528,8 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         }
 
         It 'Should set EndBoundary 31 minutes after TriggerTime' {
-            # EndBoundary = TriggerTime + 30 min (ExecutionTimeLimit) + 1 min buffer.
-            # Apply the same timezone-aware parse as StartBoundary.
-            $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            # [datetime]::new() avoids sub-second tick mismatch (see StartBoundary test).
+            $triggerTime = [datetime]::new(2026, 12, 25, 14, 0, 0)
 
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
