@@ -1,0 +1,117 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint2-data-integrity-logging.md
+last_updated: 2026-08-24T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Data Integrity and Write Safety"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Fix Snooze Handler Race Condition (Zombie Tasks)"
+        status: "ready-for-dev"
+        github_issue: 142
+        severity: "Critical"
+        windows_only: true
+        notes: "Verify originating task still exists before creating snooze task. Windows live test required before closing (snooze path touches Register-ScheduledTask)."
+      - id: "story-1-2"
+        title: "Add Write Mutex to Save-TasksJson and Save-Config"
+        status: "ready-for-dev"
+        github_issue: 148
+        severity: "Medium"
+        windows_only: false
+        notes: "Pattern: Global\\DailyMotivationTasksLock and Global\\DailyMotivationConfigLock. Reference: Set-PopupConfig mutex pattern. Pester tests verifiable on Linux."
+      - id: "story-1-3"
+        title: "Filter Invalid Tasks on Load"
+        status: "ready-for-dev"
+        github_issue: 147
+        severity: "Medium"
+        windows_only: false
+        notes: "Filter tasks with empty task_id and UNKNOWN status in Get-TasksJson / Get-MotivationTasks. Linux-safe."
+      - id: "story-1-4"
+        title: "Strip Null Elements Before Serialising Tasks"
+        status: "ready-for-dev"
+        github_issue: 143
+        severity: "Medium"
+        windows_only: false
+        notes: "Filter $null from $Tasks array in Save-TasksJson before ConvertTo-Json. Also strip on read in Get-TasksJson. Linux-safe."
+      - id: "story-1-5"
+        title: "Strip BOM Before Parsing Config File"
+        status: "ready-for-dev"
+        github_issue: 136
+        severity: "High"
+        windows_only: false
+        notes: "Trim U+FEFF from raw config string before ConvertFrom-Json. Linux-safe."
+      - id: "story-1-6"
+        title: "Sort Task List by Scheduled Time"
+        status: "ready-for-dev"
+        github_issue: 141
+        severity: "Medium"
+        windows_only: false
+        notes: "Add Sort-Object { [datetime]$_.scheduled_time } to Update-TaskListUI. Linux-safe."
+      - id: "story-1-7"
+        title: "Store Scheduled Time with UTC Offset"
+        status: "ready-for-dev"
+        github_issue: 146
+        severity: "High"
+        windows_only: false
+        notes: "Change format string to yyyy-MM-ddTHH:mm:ssK. Update AG8-027 raw-JSON test to match new format. Linux-safe."
+      - id: "story-1-8"
+        title: "Add Upper Bound to task_warning_threshold"
+        status: "ready-for-dev"
+        github_issue: 149
+        severity: "Low"
+        windows_only: false
+        notes: "Add -gt 100 guard alongside existing -lt 0 guard in Get-Config. Linux-safe."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "Logging and Observability"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Ensure Log Directory Exists Before Writing"
+        status: "ready-for-dev"
+        github_issue: 115
+        severity: "Medium"
+        windows_only: false
+        notes: "New-Item -Force guard before Add-Content in Write-OutcomeLog. Linux-safe."
+      - id: "story-2-2"
+        title: "Make Log Writes Atomic"
+        status: "ready-for-dev"
+        github_issue: 114
+        severity: "Medium"
+        windows_only: false
+        notes: "Acquire Global\\DailyMotivationLogLock before Add-Content. Timeout 2000ms; best-effort on timeout. Linux-safe."
+      - id: "story-2-3"
+        title: "Add Millisecond Precision to Outcome Log Timestamps"
+        status: "ready-for-dev"
+        github_issue: 116
+        severity: "Medium"
+        windows_only: false
+        notes: "Change format to yyyy-MM-dd HH:mm:ss.fff. Verify History Panel handles new format. Linux-safe."
+      - id: "story-2-4"
+        title: "Log Popup Config Parse Failures"
+        status: "ready-for-dev"
+        github_issue: 117
+        severity: "Medium"
+        windows_only: false
+        notes: "Replace catch {} with Add-Content to popup_debug.txt. Linux-safe."
+      - id: "story-2-5"
+        title: "Escape Pipe Characters in Log Entries"
+        status: "ready-for-dev"
+        github_issue: 118
+        severity: "Medium"
+        windows_only: false
+        notes: "Replace | with [PIPE] in FolderName before building log entry. Linux-safe."
+      - id: "story-2-6"
+        title: "Route All User-Facing Errors Through Get-SafeErrorMessage"
+        status: "ready-for-dev"
+        github_issue: 150
+        severity: "Medium"
+        windows_only: false
+        notes: "Single-line fix in Do-Schedule: wrap $result.Error with Get-SafeErrorMessage. Linux-safe."
+    retrospective:
+      status: "not-started"
