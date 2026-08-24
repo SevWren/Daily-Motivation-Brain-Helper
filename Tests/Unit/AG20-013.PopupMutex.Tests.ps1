@@ -75,13 +75,18 @@ Describe 'Show-PopupWindow mutex lifecycle (AG20-013)' -Skip:(-not $IsWindows) {
 
     It 'Should set PopupMutexName to a string containing the current username' {
         Show-PopupWindow
-        $script:PopupMutexName | Should -Match [regex]::Escape($env:USERNAME)
+        # Assign to variable first: [regex]::Escape() is a static method call that
+        # must be in expression mode; passing it bare after -Match causes PowerShell
+        # to parse it as a bareword string, not a method invocation.
+        $pattern = [regex]::Escape($env:USERNAME)
+        $script:PopupMutexName | Should -Match $pattern
     }
 
     It 'Should set PopupMutexName to include the process session ID' {
         Show-PopupWindow
         $sessionId = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
-        $script:PopupMutexName | Should -Match [regex]::Escape("_$sessionId")
+        $pattern   = [regex]::Escape("_$sessionId")
+        $script:PopupMutexName | Should -Match $pattern
     }
 
     It 'Should release the mutex even when popup_config.json is missing entirely' {

@@ -508,24 +508,41 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
 
-            # Inspect the captured trigger object from the mock
-            $taskName = "DailyMotivation_$($result.TaskId)"
+            $taskName        = "DailyMotivation_$($result.TaskId)"
             $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
             $capturedTrigger | Should -Not -BeNullOrEmpty
-            $capturedTrigger.StartBoundary | Should -Match '2026-12-25T14:00:00'
+
+            # New-ScheduledTaskTrigger stores StartBoundary as an ISO 8601 string.
+            # The value may be in local time ('2026-12-25T14:00:00') or UTC
+            # ('2026-12-25T20:00:00Z') depending on the machine's timezone.
+            # Parse and normalise to UTC before comparing.
+            $stored = [datetime]::Parse(
+                $capturedTrigger.StartBoundary,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::RoundtripKind)
+            $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
+            $expectedUtc = $triggerTime.ToUniversalTime()
+            $storedUtc | Should -Be $expectedUtc
         }
 
         It 'Should set EndBoundary 31 minutes after TriggerTime' {
-            # EndBoundary = TriggerTime + 30 min (ExecutionTimeLimit) + 1 min buffer
+            # EndBoundary = TriggerTime + 30 min (ExecutionTimeLimit) + 1 min buffer.
+            # Apply the same timezone-aware parse as StartBoundary.
             $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
-            $expected    = $triggerTime.AddMinutes(31).ToString('yyyy-MM-ddTHH:mm:ss')
 
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
 
             $taskName        = "DailyMotivation_$($result.TaskId)"
             $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
-            $capturedTrigger.EndBoundary | Should -Be $expected
+
+            $stored = [datetime]::Parse(
+                $capturedTrigger.EndBoundary,
+                [System.Globalization.CultureInfo]::InvariantCulture,
+                [System.Globalization.DateTimeStyles]::RoundtripKind)
+            $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
+            $expectedUtc = $triggerTime.AddMinutes(31).ToUniversalTime()
+            $storedUtc | Should -Be $expectedUtc
         }
 
         It 'Should pass a non-null Settings object to Register-ScheduledTask' {
