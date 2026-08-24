@@ -875,20 +875,20 @@ function New-MotivationTask {
     }
 
     # Persist to tasks.json - atomic: rollback OS task if JSON save fails
+    # AG18-024: K specifier emits UTC offset for Local/Utc but empty string for Unspecified.
+    # Pre-compute a normalised trigger so callers using [datetime]::new() (Unspecified)
+    # get the same local-offset behaviour as production Get-Date calls (Local).
+    $triggerForStorage = if ($TriggerTime.Kind -eq [System.DateTimeKind]::Unspecified) {
+        [DateTime]::SpecifyKind($TriggerTime, [System.DateTimeKind]::Local)
+    } else { $TriggerTime }
+
     $tasks   = @(Get-TasksJson)
     $newTask = [PSCustomObject]@{
         task_id        = $taskId
         task_name      = $taskName
         folder_path    = $FolderPath
         folder_name    = if ($FolderPath) { $leaf = Split-Path -Leaf $FolderPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
-        # AG18-024: K specifier emits UTC offset for Local/Utc DateTimeKind.
-        # Treat Unspecified as Local (SpecifyKind) so K never produces an empty suffix --
-        # Unspecified datetimes arise from direct [datetime]::new() calls in tests/callers.
-        scheduled_time = ([DateTime]::SpecifyKind(
-            $TriggerTime,
-            if ($TriggerTime.Kind -ne [System.DateTimeKind]::Utc) { [System.DateTimeKind]::Local }
-            else { [System.DateTimeKind]::Utc }
-        )).ToString("yyyy-MM-ddTHH:mm:ssK")
+        scheduled_time = $triggerForStorage.ToString("yyyy-MM-ddTHH:mm:ssK")
         created_at     = (Get-Date -Format "o")
         status         = "PENDING"
         snooze_count   = 0
