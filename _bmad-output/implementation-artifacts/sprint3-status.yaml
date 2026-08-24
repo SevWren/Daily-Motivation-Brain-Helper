@@ -10,42 +10,42 @@ epics:
     stories:
       - id: "story-1-1"
         title: "Fill Missing Config Properties from ConfigDefaults"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 42
         severity: "High"
         windows_only: false
         notes: "Merge $script:ConfigDefaults into Get-Config result for any missing property. Linux-safe."
       - id: "story-1-2"
         title: "Persist Fallback AppData Path Across Restarts"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 45
         severity: "Critical"
         windows_only: false
         notes: "Write marker file to $env:TEMP on fallback. Read on next launch. Linux-safe."
       - id: "story-1-3"
         title: "Write and Check Config Schema Version"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 41
         severity: "Critical"
         windows_only: false
         notes: "schemaVersion=1 on creation. Treat missing as v0. Linux-safe."
       - id: "story-1-4"
         title: "Add Config Migration Entry Point"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 46
         severity: "High"
         windows_only: false
         notes: "Invoke-ConfigMigration function for v0->v1. Linux-safe."
       - id: "story-1-5"
         title: "Check Directory Write-Access Before Config and Tasks Writes"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 43
         severity: "High"
         windows_only: false
         notes: "Test-DirectoryWritable helper with probe file. Linux-safe."
       - id: "story-1-6"
         title: "Expand Tilde in Fallback AppData Path"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 44
         severity: "High"
         windows_only: false
