@@ -203,7 +203,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
                 param($config)
                 $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
                 $taskName = "DailyMotivation_$taskId"
-                # Directly insert into MockedTasks — ScriptMethods bypass Pester mock scope
+                # Directly insert into MockedTasks  -  ScriptMethods bypass Pester mock scope
                 # so calling Register-ScheduledTask here would invoke the real cmdlet.
                 $script:MockedTasks[$taskName] = [PSCustomObject]@{
                     TaskName = $taskName
@@ -341,7 +341,7 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             Mock Get-ScheduledTask {
                 $script:callCount++
                 if ($script:callCount -eq 1) {
-                    # Simulate collision — task already exists
+                    # Simulate collision  -  task already exists
                     return [PSCustomObject]@{ TaskName = 'DailyMotivation_collision' }
                 }
                 return $null  # Second call: no collision, new ID is unique
@@ -472,6 +472,77 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             }
         }
     }
+
+    Context 'Trigger timing parameters passed to Register-ScheduledTask (AG20-011)' {
+        # Override the global mock to also capture $Settings for inspection.
+        BeforeAll {
+            $script:CapturedSettings = $null
+            Mock Register-ScheduledTask -Verifiable {
+                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+                $script:MockedTasks[$TaskName] = [PSCustomObject]@{
+                    TaskName = $TaskName
+                    State    = [PSCustomObject]@{ State = 'Ready' }
+                    Triggers = @($Trigger)
+                    Settings = $Settings
+                }
+                $script:CapturedSettings = $Settings
+                return $null
+            }
+        }
+
+        AfterAll {
+            # Restore the global mock
+            Mock Register-ScheduledTask -Verifiable {
+                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+                $script:MockedTasks[$TaskName] = [PSCustomObject]@{
+                    TaskName = $TaskName
+                    State    = [PSCustomObject]@{ State = 'Ready' }
+                    Triggers = @($Trigger)
+                }
+                return $null
+            }
+        }
+
+        It 'Should pass StartBoundary matching TriggerTime to Register-ScheduledTask' {
+            $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
+            $result.Success | Should -Be $true
+
+            # Inspect the captured trigger object from the mock
+            $taskName = "DailyMotivation_$($result.TaskId)"
+            $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
+            $capturedTrigger | Should -Not -BeNullOrEmpty
+            $capturedTrigger.StartBoundary | Should -Match '2026-12-25T14:00:00'
+        }
+
+        It 'Should set EndBoundary 31 minutes after TriggerTime' {
+            # EndBoundary = TriggerTime + 30 min (ExecutionTimeLimit) + 1 min buffer
+            $triggerTime = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+            $expected    = $triggerTime.AddMinutes(31).ToString('yyyy-MM-ddTHH:mm:ss')
+
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
+            $result.Success | Should -Be $true
+
+            $taskName        = "DailyMotivation_$($result.TaskId)"
+            $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
+            $capturedTrigger.EndBoundary | Should -Be $expected
+        }
+
+        It 'Should pass a non-null Settings object to Register-ScheduledTask' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            $script:CapturedSettings | Should -Not -BeNullOrEmpty
+        }
+
+        It 'Should pass StartWhenAvailable=true in task settings' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            # Inspect via Register-ScheduledTask -ParameterFilter
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                $Settings.StartWhenAvailable -eq $true
+            }
+        }
+    }
 }
 
 Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
@@ -490,7 +561,7 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
             param($config)
             $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
             $taskName = "DailyMotivation_$taskId"
-            # Directly insert into MockedTasks — ScriptMethods bypass Pester mock scope.
+            # Directly insert into MockedTasks  -  ScriptMethods bypass Pester mock scope.
             $script:MockedTasks[$taskName] = [PSCustomObject]@{
                 TaskName = $taskName
                 State    = [PSCustomObject]@{ State = 'Ready' }

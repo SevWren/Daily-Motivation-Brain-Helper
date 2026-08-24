@@ -31,7 +31,7 @@ epics:
         notes: "Add to AfterAll in SingleFile.Tests.ps1 and any integration test file. Must be -Skip:(-not $IsWindows). Safety net - clean and warn, do not hard-fail suite."
       - id: "story-1-4"
         title: "Trigger Timing Parameter Assertions"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 166
         severity: "Medium"
         windows_only: false
@@ -45,7 +45,7 @@ epics:
         notes: "Use [System.Threading.Mutex] directly in test. WPF tests must run STA (-RunType sta in PesterConfiguration). Can run on Linux if no WPF involved."
       - id: "story-1-6"
         title: "DST Transition Edge Case"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 161
         severity: "Medium"
         windows_only: false
@@ -59,7 +59,7 @@ epics:
         notes: "Add to AfterAll in SingleFile.Tests.ps1. Can be combined with Story 1.3 if convenient. Low-priority polish."
       - id: "story-1-8"
         title: "Graceful Shutdown Finally-Block Coverage"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 168
         severity: "Low"
         windows_only: false
@@ -129,7 +129,7 @@ epics:
         notes: "Add on: schedule: - cron: '0 3 * * *' to test.yml. YAML-only change with no code impact."
       - id: "story-2-9"
         title: "Changelog Generation on Build"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 123
         severity: "Low"
         windows_only: false
