@@ -6,25 +6,25 @@ last_updated: 2026-08-24T00:00:00Z
 epics:
   - id: "epic-1"
     title: "Task Scheduler Integration Test Coverage"
-    status: "ready-for-dev"
+    status: "done"
     stories:
       - id: "story-1-1"
         title: "Multi-Folder Scheduling Integration Tests"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 158
         severity: "Critical"
         windows_only: true
         notes: "Must use -Skip:(-not $IsWindows). No mocks of New-ScheduledTaskAction/Trigger/Settings/Principal. Requires live Windows 10/11 validation before closing."
       - id: "story-1-2"
         title: "SYSTEM Account Identity Constraint Tests"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 159
         severity: "Critical"
         windows_only: true
         notes: "Must be -Skip:(-not $IsWindows). Redirect $env:APPDATA in BeforeAll. Requires live Windows 10/11 validation before closing."
       - id: "story-1-3"
         title: "Post-Run Task Cleanup Safety Sweep"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 170
         severity: "High"
         windows_only: true
@@ -38,7 +38,7 @@ epics:
         notes: "Assertions can run on Linux (mock-only). Windows live test still required for any Register-ScheduledTask fix per CLAUDE.md mandate."
       - id: "story-1-5"
         title: "Mutex Mutual-Exclusion Tests"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 163
         severity: "Medium"
         windows_only: false
@@ -52,7 +52,7 @@ epics:
         notes: "Can run on Linux (pure .NET, no Task Scheduler calls). Mock Get-Date to return DateTime near known DST transition. Use [System.TimeZoneInfo]."
       - id: "story-1-7"
         title: "Teardown State Verification"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 169
         severity: "Low"
         windows_only: true
