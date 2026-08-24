@@ -1,0 +1,10 @@
+# _bmad/custom/bmad-agent-dev.toml
+# Team override for Amelia (bmad-agent-dev).
+# Appends project-specific facts to persistent_facts on every activation.
+
+[agent]
+persistent_facts = [
+  "This project uses Pester v5. Do NOT mock New-ScheduledTaskAction, New-ScheduledTaskTrigger, New-ScheduledTaskSettings, or New-ScheduledTaskPrincipal. Only mock Register-ScheduledTask, Get-ScheduledTask, and Unregister-ScheduledTask.",
+  "Never declare a bug fix complete based on Linux CI results alone. Windows 10/11 live testing is required for any fix involving Register-ScheduledTask.",
+  "file:{project-root}/CLAUDE.md",
+]
