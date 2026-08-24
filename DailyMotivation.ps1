@@ -2593,12 +2593,6 @@ function Get-PopupOutcome {
 }
 
 function Show-PopupWindow {
-    # AG13-007: guard against missing WPF assembly before any XamlReader call
-    if (-not ((Get-Variable -Name 'WpfLoaded' -Scope Script -ErrorAction SilentlyContinue) -and $script:WpfLoaded)) {
-        [Console]::Error.WriteLine("Show-PopupWindow: WPF assemblies not loaded. Popup cannot be displayed.")
-        return
-    }
-
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time, with user and session isolation to prevent DoS between users
@@ -2663,6 +2657,16 @@ function Show-PopupWindow {
     }
 
     $script:pathMissing = -not (Test-Path $config.explorer_path -PathType Container)
+
+    # AG13-007: guard against missing WPF assembly before XamlReader::Load.
+    # Placed here (after mutex acquisition and config load) so $script:PopupMutexName
+    # is still set for test observability and the mutex is properly released on exit.
+    if (-not ((Get-Variable -Name 'WpfLoaded' -Scope Script -ErrorAction SilentlyContinue) -and $script:WpfLoaded)) {
+        if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
+        if ($mutex) { $mutex.Dispose() }
+        [Console]::Error.WriteLine("Show-PopupWindow: WPF assemblies not loaded. Popup cannot be displayed.")
+        return
+    }
 
     # Build popup window
     $reader = $null
