@@ -57,11 +57,11 @@ Describe 'tasks.json schema contract  -  malformed entries' {
             $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
-            # @() wrapper prevents PowerShell empty-array-to-null unrolling.
-            # AG18-010 filter: entries with null task_id are now filtered out;
-            # the result is an empty array, not the entry.
+            # AG18-010: entries with null task_id are filtered out; the result is an
+            # empty collection. Assert on .Count rather than piping to Should -- an empty
+            # array @() sends nothing through the pipeline so Should receives $null.
             $result = @(Get-TasksJson)
-            $result | Should -Not -Be $null
+            $result.Count | Should -Be 0
         }
     }
 
