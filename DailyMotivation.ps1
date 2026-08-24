@@ -881,7 +881,14 @@ function New-MotivationTask {
         task_name      = $taskName
         folder_path    = $FolderPath
         folder_name    = if ($FolderPath) { $leaf = Split-Path -Leaf $FolderPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
-        scheduled_time = $TriggerTime.ToString("yyyy-MM-ddTHH:mm:ssK")  # AG18-024: K emits UTC offset
+        # AG18-024: K specifier emits UTC offset for Local/Utc DateTimeKind.
+        # Treat Unspecified as Local (SpecifyKind) so K never produces an empty suffix --
+        # Unspecified datetimes arise from direct [datetime]::new() calls in tests/callers.
+        scheduled_time = ([DateTime]::SpecifyKind(
+            $TriggerTime,
+            if ($TriggerTime.Kind -ne [System.DateTimeKind]::Utc) { [System.DateTimeKind]::Local }
+            else { [System.DateTimeKind]::Utc }
+        )).ToString("yyyy-MM-ddTHH:mm:ssK")
         created_at     = (Get-Date -Format "o")
         status         = "PENDING"
         snooze_count   = 0
