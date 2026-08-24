@@ -545,7 +545,13 @@ function Write-OutcomeLog {
         if (-not (Test-Path $logDir)) {
             New-Item -ItemType Directory -Path $logDir -Force -ErrorAction SilentlyContinue | Out-Null
         }
-        Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+        # AG1-016: catch write failures so they are visible rather than silently discarded
+        try {
+            Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Write-OutcomeLog: failed to write entry to '$script:LogPath': $($_.Exception.Message)"
+        }
     }
     finally {
         if ($logAcquired -and $logMutex) { try { $logMutex.ReleaseMutex() } catch {} }
@@ -961,14 +967,36 @@ function New-MotivationTask {
         }
         catch {
             $errorMsg = $_.Exception.Message
-            if ($errorMsg -match 'already exists') {
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Task name collision: $errorMsg" }
-            }
-            elseif ($errorMsg -match 'Access Denied|not have permission') {
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Access denied: $errorMsg" }
-            }
-            else {
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = $errorMsg }
+            $hResult  = $_.Exception.HResult
+            switch -Regex ($errorMsg) {
+                'Access is denied\.' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (access denied). [0x{0:X8}]" -f $hResult) }
+                }
+                'requested operation requires elevation' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (elevation required). [0x{0:X8}]" -f $hResult) }
+                }
+                'logon session does not exist' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (S4U unavailable - use Interactive). [0x{0:X8}]" -f $hResult) }
+                }
+                'Task Scheduler service is not available' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (scheduler service unavailable). [0x{0:X8}]" -f $hResult) }
+                }
+                'cannot find the file specified' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (exe path not found - ExePath=[PATH]). [0x{0:X8}]" -f $hResult) }
+                }
+                'already exists' {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = "Task name collision: $errorMsg" }
+                }
+                default {
+                    return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                              Error = ("OS task registration failed (HResult 0x{0:X8}): $errorMsg" -f $hResult) }
+                }
             }
         }
     }
@@ -1044,7 +1072,15 @@ function Sync-TaskStatuses {
                 [void](Get-ScheduledTask -TaskName $t.task_name -ErrorAction Stop)
             }
             catch [Microsoft.PowerShell.Cmdletization.Cim.CimJobException] {
-                $t.status = "DELETED"   # task genuinely gone
+                $t.status = "DELETED"   # task genuinely gone (PS 7 / CIM path)
+                $changed = $true
+            }
+            catch [System.InvalidOperationException] {
+                $t.status = "DELETED"   # task genuinely gone (PS 5.1 path)
+                $changed = $true
+            }
+            catch [System.Management.ManagementException] {
+                $t.status = "DELETED"   # task genuinely gone (WMI path)
                 $changed = $true
             }
             catch [System.UnauthorizedAccessException] {
@@ -1212,18 +1248,23 @@ function Update-TaskListUI {
         Sort-Object { try { [datetime]$_.scheduled_time } catch { [datetime]::MinValue } })
     $displayTasks = @($pending | ForEach-Object {
         $t = $_
-        $displayTime = $t.scheduled_time
-        try { $displayTime = ([datetime]$t.scheduled_time).ToString("ddd, MMM d 'at' h:mm tt") } catch {}
-        $displayName = if ($t.folder_name) {
+        # AG2-017: guard property access - task objects from Sync-TaskStatuses may be missing fields
+        $rawTime    = if ($t.PSObject.Properties['scheduled_time']) { $t.scheduled_time } else { '' }
+        $rawName    = if ($t.PSObject.Properties['folder_name'])    { $t.folder_name }    else { '' }
+        $rawTaskId  = if ($t.PSObject.Properties['task_id'])        { $t.task_id }        else { '' }
+        $rawStatus  = if ($t.PSObject.Properties['status'])         { $t.status }         else { 'UNKNOWN' }
+        $displayTime = $rawTime
+        try { $displayTime = ([datetime]$rawTime).ToString("ddd, MMM d 'at' h:mm tt") } catch {}
+        $displayName = if ($rawName) {
             # Replace hyphens/underscores with spaces and title-case
-            $n = ($t.folder_name -replace '[-_]', ' ')
+            $n = ($rawName -replace '[-_]', ' ')
             [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.ToTitleCase($n.ToLower())
         } else { '' }
         [PSCustomObject]@{
-            task_id      = $t.task_id
+            task_id      = $rawTaskId
             folder_name  = $displayName
             display_time = $displayTime
-            status       = $t.status
+            status       = $rawStatus
         }
     })
     $TaskListControl.ItemsSource          = $displayTasks
@@ -3169,13 +3210,21 @@ function Show-PopupWindow {
     # Post-close: open Explorer (REQ-009)
     $effectivePath = if ($script:newExplorerPath) { $script:newExplorerPath } else { $config.explorer_path }
     if ($script:openExplorer -and $effectivePath) {
-        try {
-            Start-Process -FilePath "explorer.exe" -ArgumentList "`"$effectivePath`"" -ErrorAction Stop
-        }
-        catch {
+        # AG1-012: pre-validate path exists before launching Explorer
+        if (-not (Test-Path -LiteralPath $effectivePath -PathType Container)) {
             [void][System.Windows.MessageBox]::Show(
-                "Could not open the folder:`n$effectivePath`n`n$($_.Exception.Message)",
-                "Error Opening Folder", "OK", "Error")
+                "The folder could not be found:`n$effectivePath",
+                "Folder Not Found", "OK", "Warning")
+        }
+        else {
+            try {
+                Start-Process -FilePath "explorer.exe" -ArgumentList "`"$effectivePath`"" -ErrorAction Stop
+            }
+            catch {
+                [void][System.Windows.MessageBox]::Show(
+                    "Could not open the folder:`n$effectivePath`n`n$($_.Exception.Message)",
+                    "Error Opening Folder", "OK", "Error")
+            }
         }
     }
 

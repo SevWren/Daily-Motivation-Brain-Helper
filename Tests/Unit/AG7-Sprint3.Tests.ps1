@@ -178,3 +178,27 @@ Describe 'Initialize-AppData - fallback marker persistence (AG7-021)' {
         }
     }
 }
+
+Describe 'AG2-017: Update-TaskListUI property existence guards' {
+    It 'Update-TaskListUI uses PSObject.Properties checks before accessing task fields' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function Update-TaskListUI')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match "PSObject\.Properties\[.scheduled_time.\]" | Should -Be $true -Because 'AG2-017: scheduled_time must be guarded with PSObject.Properties check'
+    }
+    It 'Update-TaskListUI guards folder_name with PSObject.Properties' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function Update-TaskListUI')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match "PSObject\.Properties\[.folder_name.\]" | Should -Be $true -Because 'AG2-017: folder_name must be guarded with PSObject.Properties check'
+    }
+    It 'Update-TaskListUI guards task_id with PSObject.Properties' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function Update-TaskListUI')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match "PSObject\.Properties\[.task_id.\]" | Should -Be $true -Because 'AG2-017: task_id must be guarded with PSObject.Properties check'
+    }
+}

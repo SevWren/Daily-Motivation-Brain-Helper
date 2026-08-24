@@ -96,3 +96,22 @@ Describe 'AG2-004: Unvalidated array index access on $FolderPath' -Skip:(-not $I
         { $result = New-MotivationTask -FolderPath 'X' -TriggerTime ((Get-Date).AddHours(2)) } | Should -Not -Throw
     }
 }
+
+Describe 'BUG-1 Structural Guard: openExplorer reset removed from Show-PopupWindow finally block' {
+    It 'DailyMotivation.ps1 contains no openExplorer assignment in Show-PopupWindow finally block' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $finallyMatch  = [regex]::Match($functionBody, 'finally\s*\{(.+?)\}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $finallyContent = $finallyMatch.Groups[1].Value
+        $finallyContent -match '\$script:openExplorer\s*=' | Should -Be $false -Because 'BUG-1 fix: finally block must not reset openExplorer state'
+    }
+    It 'openExplorer state initialization before ShowDialog is preserved' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$script:openExplorer\s*=\s*\$true' | Should -Be $true -Because 'Popup must initialize openExplorer=true before showing window'
+    }
+}

@@ -698,3 +698,41 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     }
 }
 
+Describe 'WRONG-5: Register-ScheduledTask catch block covers all five error conditions' {
+    It 'New-MotivationTask catch block uses switch -Regex covering elevation condition' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function New-MotivationTask')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match 'requested operation requires elevation' | Should -Be $true -Because 'WRONG-5: elevation error case must be handled explicitly'
+    }
+    It 'New-MotivationTask catch block covers S4U logon failure condition' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function New-MotivationTask')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match 'logon session does not exist' | Should -Be $true -Because 'WRONG-5: S4U logon failure must be handled explicitly'
+    }
+    It 'New-MotivationTask catch block covers Task Scheduler service unavailable condition' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function New-MotivationTask')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match 'Task Scheduler service is not available' | Should -Be $true -Because 'WRONG-5: scheduler service unavailable must be handled explicitly'
+    }
+    It 'New-MotivationTask catch block covers exe path not found condition' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function New-MotivationTask')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match 'cannot find the file specified' | Should -Be $true -Because 'WRONG-5: exe path not found must be handled explicitly'
+    }
+    It 'New-MotivationTask catch block uses switch -Regex (not if/elseif)' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function New-MotivationTask')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match 'switch\s+-Regex' | Should -Be $true -Because 'WRONG-5: catch block must use switch -Regex pattern'
+    }
+}
+

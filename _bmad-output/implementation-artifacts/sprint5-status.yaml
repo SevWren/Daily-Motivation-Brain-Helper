@@ -1,0 +1,61 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint5-popup-robustness.md
+last_updated: 2026-08-24T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Bug Closure and Mandate Fix"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Add BUG-1 Regression Tests for #183"
+        status: "done"
+        github_issue: 183
+        severity: "Critical"
+        windows_only: false
+        notes: "Code fixes (BUG-1 and BUG-2) were already applied in Sprint 4. Added Describe blocks to FolderScheduling.Tests.ps1, InputValidation.Tests.ps1, and PopupOutcome.Tests.ps1 (which already had partial coverage). UIDisposal.Tests.ps1 BUG-2 tests were already present. Linux-safe."
+      - id: "story-1-2"
+        title: "Fix Register-ScheduledTask Catch Block (WRONG 5 Open Violation)"
+        status: "done"
+        github_issue: null
+        severity: "High"
+        windows_only: false
+        notes: "Replaced if/elseif/else at New-MotivationTask catch (~line 962) with switch -Regex covering all 5 Windows error conditions with HResult. Added 5 static-analysis tests to TaskScheduler.Tests.ps1. Linux-safe test."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "Popup and Scheduling Robustness"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Explorer Launch Path Pre-Validation"
+        status: "done"
+        github_issue: 14
+        severity: "Medium"
+        windows_only: false
+        notes: "Added Test-Path -LiteralPath -PathType Container guard before Start-Process explorer.exe in Show-PopupWindow post-close block. Shows MessageBox if path missing. Added static-analysis tests to PopupOutcome.Tests.ps1. Linux-safe."
+      - id: "story-2-2"
+        title: "Harden Write-OutcomeLog Error Handling"
+        status: "done"
+        github_issue: 15
+        severity: "Medium"
+        windows_only: false
+        notes: "Wrapped Add-Content in try/catch with Write-Warning fallback. Removed bare -ErrorAction SilentlyContinue. Added static-analysis tests to AG15-Sprint2.Tests.ps1. Linux-safe."
+      - id: "story-2-3"
+        title: "Update-TaskListUI Property Existence Guards"
+        status: "done"
+        github_issue: 19
+        severity: "High"
+        windows_only: false
+        notes: "Added PSObject.Properties checks for scheduled_time, folder_name, task_id, status in Update-TaskListUI. Added static-analysis tests to AG7-Sprint3.Tests.ps1. Linux-safe."
+      - id: "story-2-4"
+        title: "Sync-TaskStatuses Explicit Exception Types"
+        status: "done"
+        github_issue: 102
+        severity: "Medium"
+        windows_only: false
+        notes: "Added explicit catch [System.InvalidOperationException] and catch [System.Management.ManagementException] before the generic catch in Sync-TaskStatuses. Added static-analysis tests to SyncTaskStatuses.Tests.ps1. Linux-safe."
+    retrospective:
+      status: "not-started"

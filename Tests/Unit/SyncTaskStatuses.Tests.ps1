@@ -63,7 +63,7 @@ Describe 'Sync-TaskStatuses' -Skip:(-not $IsWindows) {
 
     Context 'When a PENDING task is missing from OS Task Scheduler (Direction 1: JSON → OS)' {
         It 'Should mark the task status as DELETED when the OS task is gone' {
-            # AG8-019: Direction 1 — task in tasks.json but not in OS scheduler
+            # AG8-019: Direction 1  -  task in tasks.json but not in OS scheduler
             Mock Get-ScheduledTask {
                 param($TaskName)
                 # Throw CimJobException when looking up a specific task name (task not found)
@@ -92,7 +92,7 @@ Describe 'Sync-TaskStatuses' -Skip:(-not $IsWindows) {
 
     Context 'When an OS task is orphaned (not in tasks.json) (Direction 2: OS → JSON)' {
         It 'Should recover the orphaned OS task into tasks.json' {
-            # AG8-019: Direction 2 — task in OS scheduler but missing from tasks.json
+            # AG8-019: Direction 2  -  task in OS scheduler but missing from tasks.json
             # Start with empty tasks.json
             $orphanTaskName = 'DailyMotivation_orphan001'
             Mock Get-ScheduledTask {
@@ -157,5 +157,22 @@ Describe 'Sync-TaskStatuses' -Skip:(-not $IsWindows) {
                 $script:Platform = $null
             }
         }
+    }
+}
+
+Describe 'AG13-015: Sync-TaskStatuses catches InvalidOperationException and ManagementException' {
+    It 'Sync-TaskStatuses catch block includes System.InvalidOperationException' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function Sync-TaskStatuses')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match '\[System\.InvalidOperationException\]' | Should -Be $true -Because 'AG13-015: PS 5.1 throws InvalidOperationException for missing scheduled task'
+    }
+    It 'Sync-TaskStatuses catch block includes System.Management.ManagementException' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $fnStart = $src.IndexOf('function Sync-TaskStatuses')
+        $fnEnd   = $src.IndexOf("`nfunction ", $fnStart + 25)
+        $fnBody  = if ($fnEnd -gt $fnStart) { $src.Substring($fnStart, $fnEnd - $fnStart) } else { $src.Substring($fnStart) }
+        $fnBody -match '\[System\.Management\.ManagementException\]' | Should -Be $true -Because 'AG13-015: WMI path throws ManagementException for missing scheduled task'
     }
 }

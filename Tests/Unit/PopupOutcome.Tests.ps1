@@ -17,8 +17,8 @@
     actively wrong.
 
     Coverage in this file (cross-platform, no WPF needed):
-      1. Get-PopupOutcome — the pure state-to-outcome mapping (deterministic).
-      2. Show-PopupWindow cleanup-region guard — the region between ShowDialog()
+      1. Get-PopupOutcome  -  the pure state-to-outcome mapping (deterministic).
+      2. Show-PopupWindow cleanup-region guard  -  the region between ShowDialog()
          and the post-close logic must NOT reassign any outcome-determining
          state variable (the exact BUG-1 regression).
 #>
@@ -27,7 +27,7 @@ BeforeAll {
     . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 }
 
-Describe 'Get-PopupOutcome — state to outcome mapping' {
+Describe 'Get-PopupOutcome  -  state to outcome mapping' {
     BeforeAll {
         # Stored in BeforeAll, not the Describe body: Pester 5 runs Describe-body
         # statements only during discovery, so a plain assignment there is invisible
@@ -36,7 +36,7 @@ Describe 'Get-PopupOutcome — state to outcome mapping' {
         $script:cases = @(
             # Open Folder button, countdown auto-open, or RePick success
             @{ Name = 'open folder / countdown / re-pick';     PathMissing = $false; OpenExplorer = $true;  SnoozeCount = 0; Expected = 'Opened'      },
-            # Dismiss for Today / Exit item — closed without opening
+            # Dismiss for Today / Exit item  -  closed without opening
             @{ Name = 'dismiss / exit (no open)';              PathMissing = $false; OpenExplorer = $false; SnoozeCount = 0; Expected = 'Dismissed'   },
             # Snooze once (or more) then close
             @{ Name = 'snooze once then close';                PathMissing = $false; OpenExplorer = $false; SnoozeCount = 1; Expected = 'Snoozed'    },
@@ -61,7 +61,7 @@ Describe 'Get-PopupOutcome — state to outcome mapping' {
     }
 }
 
-Describe 'BUG-1 regression — Show-PopupWindow cleanup must not clobber outcome state' {
+Describe 'BUG-1 regression  -  Show-PopupWindow cleanup must not clobber outcome state' {
     BeforeAll {
         $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
         $functionStart = $src.IndexOf('function Show-PopupWindow')
@@ -69,7 +69,7 @@ Describe 'BUG-1 regression — Show-PopupWindow cleanup must not clobber outcome
         $script:popupBody = $src.Substring($functionStart, $functionEnd - $functionStart)
 
         # The cleanup region is everything between the window's ShowDialog() call
-        # and the post-close comment — i.e. the try/catch/finally wrapper around
+        # and the post-close comment  -  i.e. the try/catch/finally wrapper around
         # the modal dialog. Anchor on $window.ShowDialog() specifically (the RePick
         # folder handler calls a different $dialog.ShowDialog() earlier).
         $showDialogIdx = $script:popupBody.IndexOf('$window.ShowDialog()')
@@ -100,5 +100,24 @@ Describe 'BUG-1 regression — Show-PopupWindow cleanup must not clobber outcome
         $postCloseIdx = $script:popupBody.IndexOf('# Post-close')
         $tail = $script:popupBody.Substring($postCloseIdx)
         $tail -match 'Get-PopupOutcome' | Should -Be $true -Because 'post-close logic should call Get-PopupOutcome so the mapping is unit-tested'
+    }
+}
+
+Describe 'AG1-012: Explorer launch includes Test-Path pre-validation' {
+    It 'Show-PopupWindow post-close block uses Test-Path before Start-Process explorer' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $postCloseIdx = $src.IndexOf('# Post-close: open Explorer')
+        $postCloseEnd = $src.IndexOf('# Log outcome', $postCloseIdx)
+        $explorerBlock = $src.Substring($postCloseIdx, $postCloseEnd - $postCloseIdx)
+        $explorerBlock -match 'Test-Path' | Should -Be $true -Because 'AG1-012: must validate path exists before launching Explorer'
+    }
+    It 'Test-Path check precedes Start-Process in the explorer launch block' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $postCloseIdx = $src.IndexOf('# Post-close: open Explorer')
+        $postCloseEnd = $src.IndexOf('# Log outcome', $postCloseIdx)
+        $explorerBlock = $src.Substring($postCloseIdx, $postCloseEnd - $postCloseIdx)
+        $testPathPos   = $explorerBlock.IndexOf('Test-Path')
+        $startProcPos  = $explorerBlock.IndexOf('Start-Process')
+        $testPathPos   | Should -BeLessThan $startProcPos -Because 'Test-Path guard must come before Start-Process'
     }
 }

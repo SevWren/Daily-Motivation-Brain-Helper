@@ -241,3 +241,47 @@ Describe 'BUG-3: Do-Schedule error dialog title for scheduling failures' {
         $functionBody -match '"Invalid Folder"' | Should -Be $true
     }
 }
+
+Describe 'BUG-1: Show-PopupWindow openExplorer state preservation' {
+    It 'Show-PopupWindow finally block does not reset openExplorer' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $finallyMatch  = [regex]::Match($functionBody, 'finally\s*\{(.+?)\}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $finallyContent = $finallyMatch.Groups[1].Value
+        $finallyContent -match '\$script:openExplorer\s*=' | Should -Be $false -Because 'finally block must not reset openExplorer; user button choice must be preserved (BUG-1 fix)'
+    }
+    It 'Show-PopupWindow initializes openExplorer=true before ShowDialog' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$script:openExplorer\s*=\s*\$true' | Should -Be $true -Because 'Popup must initialize openExplorer=true before showing window'
+    }
+    It 'Open Folder button sets openExplorer=true' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match 'letsGoBtn.*Add_Click' | Should -Be $true
+        $openBlock = [regex]::Match($functionBody, '\$letsGoBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $openBlock.Value -match '\$script:openExplorer\s*=\s*\$true' | Should -Be $true -Because 'Open Folder button must set openExplorer=true'
+    }
+    It 'Dismiss button sets openExplorer=false' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $dismissBlock = [regex]::Match($functionBody, '\$dismissBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $dismissBlock.Value -match '\$script:openExplorer\s*=\s*\$false' | Should -Be $true -Because 'Dismiss button must set openExplorer=false'
+    }
+    It 'Snooze button sets openExplorer=false' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $snoozeBlock = [regex]::Match($functionBody, '\$snoozeBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $snoozeBlock.Value -match '\$script:openExplorer\s*=\s*\$false' | Should -Be $true -Because 'Snooze button must set openExplorer=false'
+    }
+}
