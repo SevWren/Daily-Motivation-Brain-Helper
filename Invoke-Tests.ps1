@@ -54,6 +54,19 @@ try {
 
     Import-Module Pester -MinimumVersion 5.0 -ErrorAction Stop
 
+    # Story 2.3: Parse DailyMotivation.ps1 for syntax errors before running Pester.
+    # A syntax error produces an opaque Pester crash without this check.
+    $scriptPath = Join-Path $RepoRoot 'DailyMotivation.ps1'
+    $parseErrors = $null
+    $null = [System.Management.Automation.Language.Parser]::ParseFile(
+        $scriptPath, [ref]$null, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        Write-Host "SYNTAX ERROR in DailyMotivation.ps1:" -ForegroundColor Red
+        $parseErrors | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        exit 1
+    }
+    Write-Host "DailyMotivation.ps1 syntax OK" -ForegroundColor Green
+
     $config = New-PesterConfiguration
     $config.Run.Path    = Join-Path $RepoRoot 'Tests'
     $config.Run.PassThru = $true
@@ -82,6 +95,20 @@ try {
     Write-Host "=====================================================================" -ForegroundColor Cyan
     Write-Host " Results: Passed=$($result.PassedCount)  Failed=$($result.FailedCount)  Skipped=$($result.SkippedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { 'Red' } else { 'Green' })
     Write-Host "=====================================================================" -ForegroundColor Cyan
+
+    # Story 2.4: Enforce coverage threshold in CI mode.
+    # $CoverageThreshold aligned with the 70% minimum in the CI coverage-gate job.
+    $CoverageThreshold = 70
+    if ($CI -and $Coverage -and $null -ne $result.CodeCoverage) {
+        $pct = [math]::Round($result.CodeCoverage.CoveragePercent, 1)
+        Write-Host ""
+        Write-Host "Code coverage: $pct% (threshold: $CoverageThreshold%)" -ForegroundColor $(
+            if ($pct -lt $CoverageThreshold) { 'Red' } else { 'Green' })
+        if ($pct -lt $CoverageThreshold) {
+            Write-Host "COVERAGE BELOW THRESHOLD: $pct% < $CoverageThreshold%" -ForegroundColor Red
+            exit 1
+        }
+    }
 
     if ($result.FailedCount -gt 0) {
         Write-Host "TESTS FAILED" -ForegroundColor Red

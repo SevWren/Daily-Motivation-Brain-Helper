@@ -6,15 +6,21 @@ on:
   pull_request:
     branches: [ main, develop, project-restart-pwsh7 ]
   workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'  # Nightly at 03:00 UTC (Story 2.8)
 
 jobs:
   test:
-    name: Run Tests
-    runs-on: windows-latest
+    name: Run Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30  # Timeout prevents hung runners from blocking the queue
     permissions:
       checks: write
       pull-requests: write
+    strategy:                        # Story 2.1: cross-platform matrix
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+      fail-fast: false               # let both platforms report independently
 
     steps:
       - name: Checkout code
@@ -32,29 +38,58 @@ jobs:
         run: |
           Write-Host "PowerShell $($PSVersionTable.PSVersion)"
           Write-Host "Pester $((Get-Module -ListAvailable Pester | Select-Object -First 1).Version)"
+          Write-Host "OS: $env:RUNNER_OS"
 
       - name: Run tests with coverage
         shell: pwsh
         run: |
-          .\Invoke-Tests.ps1 -CI -Coverage $true
+          # Coverage only on Windows: Linux runs platform-abstraction tests only,
+          # which represent a subset of the codebase -- measuring partial coverage
+          # against the full source gives a misleadingly low number.
+          $runCoverage = $env:RUNNER_OS -eq 'Windows'
+          .\Invoke-Tests.ps1 -CI -Coverage $runCoverage
 
       - name: Upload test results
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: test-results
+          name: test-results-${{ matrix.os }}  # per-OS to avoid matrix name collision
           path: |
             TestResults.xml
             coverage.xml
+          retention-days: 30                    # Story 2.7
 
       - name: Publish test results
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
         if: always()
         with:
           files: TestResults.xml
-          check_name: Test Results
+          check_name: Test Results (${{ matrix.os }})
 
-      # CodeCoverageSummary is a container action (Linux-only); skipped on windows-latest runner.
+  coverage-gate:
+    name: Coverage Gate
+    runs-on: ubuntu-latest          # CodeCoverageSummary is a container action (Linux-only)
+    needs: test
+    if: ${{ !cancelled() }}         # run even if test had failures; gate is independent
+
+    steps:
+      - name: Download Windows coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-windows-latest
+
+      - name: Check coverage threshold
+        uses: irongut/CodeCoverageSummary@v1.3.0
+        with:
+          filename: coverage.xml
+          badge: true
+          format: markdown
+          hide_branch_rate: false
+          hide_complexity: true
+          indicators: true
+          output: both
+          thresholds: '70 80'       # warn at 70%, fail below 70% (Story 2.5)
+          fail_below_min: true
 
   analyze:
     name: Static Analysis
@@ -75,7 +110,7 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: pwsh
         run: |
-          # Fail fast on any analyzer violation — do not suppress warnings
+          # Fail fast on any analyzer violation - do not suppress warnings
           $results = Invoke-ScriptAnalyzer -Path DailyMotivation.ps1 `
             -Settings .PSScriptAnalyzerSettings.psd1 `
             -Severity Warning,Error
@@ -100,20 +135,20 @@ jobs:
           $violations = @()
           foreach ($desc in $patterns.Keys) {
             if ($content -match $patterns[$desc]) {
-              $violations += "FAIL: $desc — pattern: $($patterns[$desc])"
+              $violations += "FAIL: $desc - pattern: $($patterns[$desc])"
             }
           }
           if ($violations) {
             $violations | ForEach-Object { Write-Host "::error::$_" }
             throw "PS7+ syntax incompatible with ps2exe .NET Framework 4.x found in DailyMotivation.ps1"
           }
-          Write-Host "PS7+ syntax gate passed — no ps2exe-incompatible patterns detected"
+          Write-Host "PS7+ syntax gate passed - no ps2exe-incompatible patterns detected"
 
   build:
     name: Build EXE
     runs-on: windows-latest
-    # Build only when tests and static analysis both pass
-    needs: [test, analyze]
+    # Build only when tests, coverage gate, and static analysis all pass
+    needs: [test, coverage-gate, analyze]
     timeout-minutes: 15  # Timeout prevents hung runners from blocking the queue
 
     steps:
@@ -136,7 +171,7 @@ jobs:
         run: |
           .\build.ps1
 
-      # Validate exe size before upload — corrupted builds are silently small
+      # Validate exe size before upload - corrupted builds are silently small
       - name: Validate executable (smoke test)
         shell: powershell
         run: |
@@ -154,3 +189,4 @@ jobs:
         with:
           name: DailyMotivation-exe
           path: DailyMotivation.exe
+          retention-days: 30  # Story 2.7
