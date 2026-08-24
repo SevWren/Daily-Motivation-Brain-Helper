@@ -258,13 +258,16 @@ function Get-Config {
         if (Test-Path $script:ConfigPath) {
             $fileSize = (Get-Item $script:ConfigPath).Length
             if ($fileSize -gt 50KB) {
-                # File exceeds size limit — return schema-only defaults as hashtable.
+                # File exceeds size limit  -  return schema-only defaults as hashtable.
                 # Hashtable allows $cfg.unknownKey to return $null (not throw under StrictMode).
                 return @{ default_trigger_hour = 14; task_warning_threshold = 5 }
             }
         }
 
-        $cfg = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+        # AG18-005: strip Unicode BOM (U+FEFF) that some editors prepend to UTF-8 files
+        $raw = Get-Content -Path "$script:ConfigPath" -Raw -Encoding UTF8
+        $raw = $raw.TrimStart([char]0xFEFF)
+        $cfg = $raw | ConvertFrom-Json
 
         # Ensure both schema fields exist on the PSCustomObject before accessing them.
         # ConvertFrom-Json omits keys that were absent in the file; accessing missing properties
@@ -285,7 +288,8 @@ function Get-Config {
         }
         if ($null -eq $cfg.task_warning_threshold -or
             -not ($cfg.task_warning_threshold -is [int] -or $cfg.task_warning_threshold -is [long] -or $cfg.task_warning_threshold -is [double]) -or
-            [int]$cfg.task_warning_threshold -lt 0) {
+            [int]$cfg.task_warning_threshold -lt 0 -or
+            [int]$cfg.task_warning_threshold -gt 100) {  # AG18-025: upper bound
             $cfg.task_warning_threshold = 5
         }
 
@@ -319,7 +323,15 @@ function Save-Config {
         }
         $Config = $existing
     }
-    $tempPath = $script:ConfigPath + ".tmp"
+    $tempPath  = $script:ConfigPath + ".tmp"
+    # AG18-012: mutex prevents concurrent writes from two scheduling processes
+    $cfgMutex     = $null
+    $cfgAcquired  = $false
+    try {
+        $cfgMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationConfigLock")
+        $cfgAcquired = $cfgMutex.WaitOne(5000)
+    }
+    catch {}
     try {
         $Config | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:ConfigPath -Force -ErrorAction Stop
@@ -330,6 +342,10 @@ function Save-Config {
     catch {
         if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
         throw
+    }
+    finally {
+        if ($cfgAcquired -and $cfgMutex) { try { $cfgMutex.ReleaseMutex() } catch {} }
+        if ($cfgMutex) { $cfgMutex.Dispose() }
     }
 }
 
@@ -429,7 +445,8 @@ function Write-OutcomeLog {
         [string]$Outcome,
         [int]$SnoozeCount = 0
     )
-    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    # AG15-013: millisecond precision so rapid snooze cycles are distinguishable
+    $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss.fff"
 
     # Hash folder path instead of storing plaintext
     $pathHash = if ($FolderPath) {
@@ -440,9 +457,33 @@ function Write-OutcomeLog {
         "NO_PATH"
     }
 
+    # AG15-017: escape pipe characters so folder names don't corrupt the delimited format
+    $safeFolderName = $FolderName -replace '\|', '[PIPE]'
+
     # Store only hash in log, not full path
-    $entry = "[$ts] | $TaskId | $FolderName | HASH:$pathHash | $Outcome | $SnoozeCount"
-    Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+    $entry = "[$ts] | $TaskId | $safeFolderName | HASH:$pathHash | $Outcome | $SnoozeCount"
+
+    # AG15-006: acquire mutex before appending to prevent interleaved entries from concurrent runs
+    $logMutex     = $null
+    $logAcquired  = $false
+    try {
+        $logMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationLogLock")
+        $logAcquired = $logMutex.WaitOne(2000)
+    }
+    catch {}
+
+    try {
+        # AG15-007: create log directory if missing (Initialize-AppData may have failed)
+        $logDir = Split-Path $script:LogPath -Parent
+        if (-not (Test-Path $logDir)) {
+            New-Item -ItemType Directory -Path $logDir -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        Add-Content -Path "$script:LogPath" -Value $entry -Encoding UTF8 -ErrorAction SilentlyContinue
+    }
+    finally {
+        if ($logAcquired -and $logMutex) { try { $logMutex.ReleaseMutex() } catch {} }
+        if ($logMutex) { $logMutex.Dispose() }
+    }
 
     # Implement log rotation to prevent indefinite accumulation
     if (Test-Path $script:LogPath) {
@@ -571,15 +612,22 @@ function Get-TasksJson {
         # Ensure consistent array handling for empty JSON arrays
         if ($null -eq $result) { return @() }
 
+        # AG18-018: strip null elements that may survive a corrupt or partial load
+        $tasks = @($result | Where-Object { $null -ne $_ })
+
         # Validate and normalize task status values
-        $tasks = @($result)
         foreach ($task in $tasks) {
-            if ($null -ne $task -and $task.PSObject.Properties['status']) {
+            if ($task.PSObject.Properties['status']) {
                 if ($task.status -notin $script:ValidTaskStatuses) {
                     $task.status = 'UNKNOWN'
                 }
             }
         }
+
+        # AG18-010: filter out tasks missing task_id (corrupt entries) and UNKNOWN status
+        $tasks = @($tasks | Where-Object {
+            -not [string]::IsNullOrEmpty($_.task_id) -and $_.status -ne 'UNKNOWN'
+        })
 
         return $tasks
     }
@@ -590,8 +638,18 @@ function Save-TasksJson {
     param([object[]]$Tasks)
     $path     = $script:TasksPath
     $tempPath = $path + ".tmp"
+    # AG18-018: strip nulls before serialising so JSON never contains a null literal
+    $Tasks = @($Tasks | Where-Object { $null -ne $_ })
+    # AG18-012: mutex prevents concurrent writes from two scheduling processes
+    $tasksMutex     = $null
+    $tasksAcquired  = $false
     try {
-        if ($null -eq $Tasks -or $Tasks.Count -eq 0) {
+        $tasksMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationTasksLock")
+        $tasksAcquired = $tasksMutex.WaitOne(5000)
+    }
+    catch {}
+    try {
+        if ($Tasks.Count -eq 0) {
             Set-Content -Path $tempPath -Value '[]' -Encoding UTF8 -NoNewline -ErrorAction Stop
         }
         else {
@@ -602,6 +660,10 @@ function Save-TasksJson {
     catch {
         if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
         throw
+    }
+    finally {
+        if ($tasksAcquired -and $tasksMutex) { try { $tasksMutex.ReleaseMutex() } catch {} }
+        if ($tasksMutex) { $tasksMutex.Dispose() }
     }
 }
 
@@ -658,7 +720,7 @@ function New-MotivationTask {
         }
     }
 
-    # Compute sanitized description (SHA-256 hash of path) — used in both Platform and Windows paths.
+    # Compute sanitized description (SHA-256 hash of path)  -  used in both Platform and Windows paths.
     $descHashParts = [System.Security.Cryptography.SHA256]::Create().ComputeHash(
         [Text.Encoding]::UTF8.GetBytes($FolderPath)) | ForEach-Object { $_.ToString("X2") }
     $safeDescription = "Daily Motivation Brain Helper - Task $(($descHashParts -join '').Substring(0, 16))"
@@ -724,7 +786,7 @@ function New-MotivationTask {
                 $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
             }
             catch {
-                # Any exception means task not found — no collision
+                # Any exception means task not found  -  no collision
                 $existingTask = $null
             }
 
@@ -733,7 +795,7 @@ function New-MotivationTask {
                 break
             }
 
-            # Collision — back off and retry
+            # Collision  -  back off and retry
             Start-Sleep -Milliseconds $backoffMs
             $backoffMs = [Math]::Min($backoffMs * 2, 5000)
         }
@@ -819,7 +881,7 @@ function New-MotivationTask {
         task_name      = $taskName
         folder_path    = $FolderPath
         folder_name    = if ($FolderPath) { $leaf = Split-Path -Leaf $FolderPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
-        scheduled_time = $TriggerTime.ToString("yyyy-MM-ddTHH:mm:ss")
+        scheduled_time = $TriggerTime.ToString("yyyy-MM-ddTHH:mm:ssK")  # AG18-024: K emits UTC offset
         created_at     = (Get-Date -Format "o")
         status         = "PENDING"
         snooze_count   = 0
@@ -855,7 +917,7 @@ function Sync-TaskStatuses {
     $tasks = @(Get-TasksJson)
     $changed = $false
 
-    # Direction 1: JSON → OS Scheduler — mark tasks DELETED if OS task is gone
+    # Direction 1: JSON → OS Scheduler  -  mark tasks DELETED if OS task is gone
     foreach ($t in $tasks) {
         if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
         if ($t.status -eq "PENDING") {
@@ -884,7 +946,7 @@ function Sync-TaskStatuses {
         }
     }
 
-    # Direction 2: OS Scheduler → JSON — recover orphaned OS tasks missing from tasks.json
+    # Direction 2: OS Scheduler → JSON  -  recover orphaned OS tasks missing from tasks.json
     # This handles the case where Register-ScheduledTask succeeded but Save-TasksJson failed,
     # leaving an OS task with no corresponding record in tasks.json.
     $knownNames = @($tasks | Where-Object { $null -ne $_ -and $_.PSObject.Properties['task_name'] } | ForEach-Object { $_.task_name })
@@ -967,7 +1029,7 @@ function Remove-MotivationTask {
             # Don't remove from tasks.json if unregister failed (maintain consistency)
             return $false
         }
-        # Verify task was actually removed — use its own try/catch because
+        # Verify task was actually removed  -  use its own try/catch because
         # Get-ScheduledTask throws for not-found tasks (which is the success case).
         $stillExists = $null
         try {
@@ -1009,7 +1071,9 @@ function Update-TaskListUI {
         [object]$NoTasksLabelControl
     )
     $tasks   = Get-MotivationTasks | Where-Object { $_.status -ne "DELETED" }
-    $pending = @($tasks | Where-Object { $_.status -eq "PENDING" })
+    # AG18-016: sort ascending by scheduled_time for consistent display order
+    $pending = @($tasks | Where-Object { $_.status -eq "PENDING" } |
+        Sort-Object { try { [datetime]$_.scheduled_time } catch { [datetime]::MinValue } })
     $displayTasks = @($pending | ForEach-Object {
         $t = $_
         $displayTime = $t.scheduled_time
@@ -1319,7 +1383,7 @@ function Unregister-ContextMenu {
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Name="MainWin"
-    Title="Daily Motivation Brain Helper — Folder Scheduler"
+    Title="Daily Motivation Brain Helper  -  Folder Scheduler"
     Width="520" SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
     ResizeMode="CanMinimize"
@@ -1385,7 +1449,7 @@ function Unregister-ContextMenu {
                 </Setter.Value>
             </Setter>
         </Style>
-        <!-- Dark-aware RadioButton — replaces system BulletChrome -->
+        <!-- Dark-aware RadioButton  -  replaces system BulletChrome -->
         <Style TargetType="RadioButton">
             <Setter Property="Foreground"       Value="#E8E8F4"/>
             <Setter Property="FontSize"         Value="12"/>
@@ -1419,10 +1483,10 @@ function Unregister-ContextMenu {
     <Border Background="#0D1117" Padding="28,0,28,24">
         <StackPanel>
 
-            <!-- Header accent bar — edge-to-edge, no top dead zone -->
+            <!-- Header accent bar  -  edge-to-edge, no top dead zone -->
             <Border Background="#00BCD4" Height="3" Margin="-28,0,-28,16"/>
 
-            <!-- Context label — replaces duplicated OS title -->
+            <!-- Context label  -  replaces duplicated OS title -->
             <TextBlock Text="Schedule a Folder Reminder"
                        FontSize="15" FontWeight="SemiBold" Foreground="#C8C8E8"
                        Margin="0,16,0,16"/>
@@ -1787,7 +1851,7 @@ function Show-MainWindow {
                 "Getting Started:`n" +
                 "  1. Drop a folder into the zone, or click Select Folder`n" +
                 "  2. Choose Today or Tomorrow as the schedule time`n" +
-                "  3. Click Schedule Reminder — a popup will open the folder at that time`n`n" +
+                "  3. Click Schedule Reminder  -  a popup will open the folder at that time`n`n" +
                 "Keyboard Shortcuts:`n" +
                 "  Enter       Schedule the selected folder`n" +
                 "  Escape      Close this window`n" +
@@ -1797,7 +1861,7 @@ function Show-MainWindow {
                 "  Trigger hour and thresholds are configured in:`n" +
                 "  $cfgDir\config.json`n" +
                 "  Changes take effect the next time you open this window.",
-                "Welcome! — Daily Motivation Brain Helper", "OK", "Information")
+                "Welcome!  -  Daily Motivation Brain Helper", "OK", "Information")
             Set-Content -Path $firstRunPath -Value (Get-Date -Format "yyyy-MM-dd") -Encoding UTF8 -ErrorAction SilentlyContinue
         }
         catch {}
@@ -1851,7 +1915,7 @@ function Show-MainWindow {
         if (-not $result.Success -and -not $result.IsDuplicate) {
             if ($result.Error) {
                 [void][System.Windows.MessageBox]::Show(
-                    "Could not schedule reminder for this folder.`n`n$($result.Error)",
+                    "Could not schedule reminder for this folder.`n`n$(Get-SafeErrorMessage $result.Error)",
                     "Schedule Failed", "OK", "Warning")
             }
             else {
@@ -1871,7 +1935,7 @@ function Show-MainWindow {
             # Force scheduling despite duplicate
             $result = Invoke-FolderScheduling -FolderPath $FolderPath -TriggerTime $triggerTime -Force
             if (-not $result.Success) {
-                Show-ErrorDialog "Could not create the scheduled task.`n$($result.Error)"
+                Show-ErrorDialog "Could not create the scheduled task.`n$(Get-SafeErrorMessage $result.Error)"
                 return
             }
         }
@@ -2072,7 +2136,7 @@ function Show-MainWindow {
                     "  F1       Show this help`n" +
                     "  H        Toggle history panel`n`n" +
                     "Settings file: $($script:AppDataDir)\config.json",
-                    "Help — Keyboard Shortcuts", "OK", "Information")
+                    "Help  -  Keyboard Shortcuts", "OK", "Information")
                 $ke.Handled = $true
             }
             ([System.Windows.Input.Key]::H) {
@@ -2297,7 +2361,7 @@ function Show-MainWindow {
                             </Button.ContextMenu>
                         </Button>
                     </StackPanel>
-                    <!-- Open Folder — TabIndex=0 (primary action) -->
+                    <!-- Open Folder  -  TabIndex=0 (primary action) -->
                     <Button x:Name="LetsGoBtn" Content="Open Folder &#x2192;" Width="150" Height="36"
                             Foreground="#0D1117" FontSize="13" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand" TabIndex="0"
@@ -2473,7 +2537,13 @@ function Show-PopupWindow {
         try {
             $config = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
         }
-        catch {}
+        catch {
+            # Log parse failure; do not swallow silently (AG15-014)
+            $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
+            Add-Content -Path $debugLog `
+                -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] popup_config.json parse failed: $($_.Exception.Message)" `
+                -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
     }
 
     # Exit silently if no folder has been configured
@@ -2490,13 +2560,13 @@ function Show-PopupWindow {
         $reader = [System.Xml.XmlNodeReader]::new($PopupXaml)
         $window = [Windows.Markup.XamlReader]::Load($reader)
         if ($null -eq $window) {
-            Write-Warning "Show-PopupWindow: XamlReader returned null — popup window could not be created."
+            Write-Warning "Show-PopupWindow: XamlReader returned null  -  popup window could not be created."
             if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
             return
         }
     }
     catch {
-        Write-Warning "Show-PopupWindow: Failed to load popup XAML — $_"
+        Write-Warning "Show-PopupWindow: Failed to load popup XAML  -  $_"
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
@@ -2695,6 +2765,19 @@ function Show-PopupWindow {
                     "Invalid Snooze", "OK", "Error")
                 return
             }
+            # AG18-017: verify originating task still exists before creating snooze replacement.
+            # Another process may have removed the task between popup-load and snooze-click.
+            if (-not [string]::IsNullOrEmpty($config.task_id)) {
+                $originTask = Get-MotivationTasks | Where-Object {
+                    $_.task_id -eq $config.task_id -and $_.status -eq 'PENDING'
+                }
+                if (-not $originTask) {
+                    $script:openExplorer = $false
+                    $script:windowClosed = $true
+                    $window.Close()
+                    return
+                }
+            }
             # If system processing takes time, this ensures TriggerTime validation won't fail
             $bufferMinutes = 1
             $snoozeTime = (Get-Date).AddMinutes($script:snoozeMinutes + $bufferMinutes)
@@ -2887,7 +2970,7 @@ function Show-PopupWindow {
 
     # Post-close: remove the originating task from Task Scheduler and tasks.json.
     # This must happen for ALL outcomes (Open, Countdown, Snooze, Dismiss, PathMissing).
-    # Cannot rely on DeleteExpiredTaskAfter alone — it only fires when the scheduled
+    # Cannot rely on DeleteExpiredTaskAfter alone  -  it only fires when the scheduled
     # trigger expires naturally; manually-run tasks are never considered "expired".
     if ($config.task_id) {
         Remove-MotivationTask -TaskId $config.task_id | Out-Null
@@ -3111,7 +3194,7 @@ if (-not $NoRun) {
                     Show-InfoDialog -Message "'$FolderPath' is already scheduled for tomorrow." -Title "Already Scheduled"
                 }
                 else {
-                    Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$($result.Error)" -Title "Schedule Failed"
+                    Show-ErrorDialog -Message "Could not schedule '$FolderPath'.`n`n$(Get-SafeErrorMessage $result.Error)" -Title "Schedule Failed"
                 }
             }
         }

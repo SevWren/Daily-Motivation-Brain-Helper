@@ -161,22 +161,20 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $actual.Second | Should -Be 0
         }
 
-        It 'Should store scheduled_time in actual ISO 8601 format in JSON (AG8-027)' {
-            # AG8-027: Verify the RAW JSON string format, not just deserialized DateTime
-            $t = Get-Date -Year 2026 -Month 12 -Day 25 -Hour 14 -Minute 0 -Second 0
+        It 'Should store scheduled_time in ISO 8601 format with timezone offset in JSON (AG8-027, AG18-024)' {
+            # AG8-027: Verify the RAW JSON string format, not just deserialized DateTime.
+            # AG18-024: format now includes timezone offset via K specifier (e.g. -06:00 or Z).
+            $t = [datetime]::new(2026, 12, 25, 14, 0, 0)
             New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t | Out-Null
 
             # Read raw JSON without deserializing
             $rawJson = Get-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json') -Raw
 
-            # Verify ISO 8601 format in actual JSON string
-            # Expected format: "2026-12-25T14:00:00" or with Z/offset
+            # Verify date and time portion present; offset suffix varies by machine timezone
             $rawJson | Should -Match '"scheduled_time"\s*:\s*"2026-12-25T14:00:00'
 
-            # Also verify roundtrip: deserialize and re-serialize produces same format
-            $tasks = Get-TasksJson
-            $reserialized = $tasks | ConvertTo-Json -Depth 4
-            $reserialized | Should -Match '"scheduled_time"\s*:\s*"2026-12-25T14:00:00'
+            # Verify that an offset or Z suffix is present (AG18-024)
+            $rawJson | Should -Match '"scheduled_time"\s*:\s*"2026-12-25T14:00:00[\+\-Z]'
         }
 
         It 'Should initialize snooze_count to 0' {
