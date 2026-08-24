@@ -1,0 +1,138 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-missing-test-coverage.md
+last_updated: 2026-08-24T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Task Scheduler Integration Test Coverage"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Multi-Folder Scheduling Integration Tests"
+        status: "ready-for-dev"
+        github_issue: 158
+        severity: "Critical"
+        windows_only: true
+        notes: "Must use -Skip:(-not $IsWindows). No mocks of New-ScheduledTaskAction/Trigger/Settings/Principal. Requires live Windows 10/11 validation before closing."
+      - id: "story-1-2"
+        title: "SYSTEM Account Identity Constraint Tests"
+        status: "ready-for-dev"
+        github_issue: 159
+        severity: "Critical"
+        windows_only: true
+        notes: "Must be -Skip:(-not $IsWindows). Redirect $env:APPDATA in BeforeAll. Requires live Windows 10/11 validation before closing."
+      - id: "story-1-3"
+        title: "Post-Run Task Cleanup Safety Sweep"
+        status: "ready-for-dev"
+        github_issue: 170
+        severity: "High"
+        windows_only: true
+        notes: "Add to AfterAll in SingleFile.Tests.ps1 and any integration test file. Must be -Skip:(-not $IsWindows). Safety net - clean and warn, do not hard-fail suite."
+      - id: "story-1-4"
+        title: "Trigger Timing Parameter Assertions"
+        status: "ready-for-dev"
+        github_issue: 166
+        severity: "Medium"
+        windows_only: false
+        notes: "Assertions can run on Linux (mock-only). Windows live test still required for any Register-ScheduledTask fix per CLAUDE.md mandate."
+      - id: "story-1-5"
+        title: "Mutex Mutual-Exclusion Tests"
+        status: "ready-for-dev"
+        github_issue: 163
+        severity: "Medium"
+        windows_only: false
+        notes: "Use [System.Threading.Mutex] directly in test. WPF tests must run STA (-RunType sta in PesterConfiguration). Can run on Linux if no WPF involved."
+      - id: "story-1-6"
+        title: "DST Transition Edge Case"
+        status: "ready-for-dev"
+        github_issue: 161
+        severity: "Medium"
+        windows_only: false
+        notes: "Can run on Linux (pure .NET, no Task Scheduler calls). Mock Get-Date to return DateTime near known DST transition. Use [System.TimeZoneInfo]."
+      - id: "story-1-7"
+        title: "Teardown State Verification"
+        status: "ready-for-dev"
+        github_issue: 169
+        severity: "Low"
+        windows_only: true
+        notes: "Add to AfterAll in SingleFile.Tests.ps1. Can be combined with Story 1.3 if convenient. Low-priority polish."
+      - id: "story-1-8"
+        title: "Graceful Shutdown Finally-Block Coverage"
+        status: "ready-for-dev"
+        github_issue: 168
+        severity: "Low"
+        windows_only: false
+        notes: "WPF mock requires STA. Low priority - defer until higher-severity stories in Epic 1 are complete. Can run on Linux if WPF is mocked."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "CI Pipeline and Quality Gate Improvements"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Cross-Platform CI Matrix"
+        status: "ready-for-dev"
+        github_issue: 119
+        severity: "Critical"
+        windows_only: false
+        notes: "Modify .github/workflows/test.yml. Add strategy.matrix.os: [windows-latest, ubuntu-latest]. Confirm pwsh is available on ubuntu-latest."
+      - id: "story-2-2"
+        title: "PSScriptAnalyzerSettings File at Repo Root"
+        status: "ready-for-dev"
+        github_issue: 124
+        severity: "High"
+        windows_only: false
+        notes: "Copy from Archive/.PSScriptAnalyzerSettings.psd1 or create new. Review and remove overly noisy rules before placing at root."
+      - id: "story-2-3"
+        title: "Pre-Test Syntax Validation in Invoke-Tests.ps1"
+        status: "ready-for-dev"
+        github_issue: 126
+        severity: "High"
+        windows_only: false
+        notes: "Add Parser::ParseFile call before Invoke-Pester. Exit 1 if parseErrors.Count > 0. Can be verified on Linux."
+      - id: "story-2-4"
+        title: "Coverage Threshold Enforcement in Invoke-Tests.ps1"
+        status: "ready-for-dev"
+        github_issue: 127
+        severity: "High"
+        windows_only: false
+        notes: "Read CoveragePercent after Invoke-Pester. Define $CoverageThreshold = 70. Only enforce when -CI flag is passed. Coordinate threshold with Story 2.5."
+      - id: "story-2-5"
+        title: "Coverage Quality Gate in CI Workflow"
+        status: "ready-for-dev"
+        github_issue: 122
+        severity: "High"
+        windows_only: false
+        notes: "Add fail_below_min: true and minimum_coverage: 70 to irongut/CodeCoverageSummary step in test.yml. Align threshold with Story 2.4."
+      - id: "story-2-6"
+        title: "PowerShell Version Matrix in CI"
+        status: "ready-for-dev"
+        github_issue: 120
+        severity: "High"
+        windows_only: false
+        notes: "Add pwsh-version to strategy matrix in test.yml. Verify or add PSScriptAnalyzer rule for PS7-syntax gate (blocks ??, ?., Join-String, ForEach-Object -Parallel)."
+      - id: "story-2-7"
+        title: "Artifact Retention Policy"
+        status: "ready-for-dev"
+        github_issue: 121
+        severity: "Medium"
+        windows_only: false
+        notes: "Audit all upload-artifact steps in test.yml. Add retention-days: 30 to each. YAML-only change."
+      - id: "story-2-8"
+        title: "Scheduled Nightly CI Runs"
+        status: "ready-for-dev"
+        github_issue: 125
+        severity: "Medium"
+        windows_only: false
+        notes: "Add on: schedule: - cron: '0 3 * * *' to test.yml. YAML-only change with no code impact."
+      - id: "story-2-9"
+        title: "Changelog Generation on Build"
+        status: "ready-for-dev"
+        github_issue: 123
+        severity: "Low"
+        windows_only: false
+        notes: "Lowest-priority story. Consider softprops/action-gh-release with generate_release_notes: true. Decide approach before implementing. Release-only trigger."
+    retrospective:
+      status: "not-started"
