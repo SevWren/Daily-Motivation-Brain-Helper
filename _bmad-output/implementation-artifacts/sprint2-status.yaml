@@ -6,11 +6,11 @@ last_updated: 2026-08-24T00:00:00Z
 epics:
   - id: "epic-1"
     title: "Data Integrity and Write Safety"
-    status: "ready-for-dev"
+    status: "done"
     stories:
       - id: "story-1-1"
         title: "Fix Snooze Handler Race Condition (Zombie Tasks)"
-        status: "ready-for-dev"
+        status: "done"
         github_issue: 142
         severity: "Critical"
         windows_only: true
