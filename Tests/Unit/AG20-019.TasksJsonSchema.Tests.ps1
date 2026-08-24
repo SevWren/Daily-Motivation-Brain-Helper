@@ -38,7 +38,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'tasks.json schema contract — malformed entries' {
+Describe 'tasks.json schema contract  -  malformed entries' {
 
     BeforeEach {
         # Reset tasks.json to empty before each test
@@ -53,12 +53,14 @@ Describe 'tasks.json schema contract — malformed entries' {
             { Get-TasksJson } | Should -Not -Throw
         }
 
-        It 'returns the entry (or skips it) without throwing — either behavior is acceptable' {
+        It 'returns the entry (or skips it) without throwing  -  either behavior is acceptable' {
             $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
-            $result = Get-TasksJson
-            # Must not throw; result is either an array containing the entry or an empty array
+            # @() wrapper prevents PowerShell empty-array-to-null unrolling.
+            # AG18-010 filter: entries with null task_id are now filtered out;
+            # the result is an empty array, not the entry.
+            $result = @(Get-TasksJson)
             $result | Should -Not -Be $null
         }
     }
