@@ -56,6 +56,22 @@ $script:ConfigDefaults = [PSCustomObject]@{
     task_warning_threshold = 5
 }
 
+# AG7-003: current config schema version. Increment when new properties are added.
+$script:ConfigSchemaVersion = 1
+
+# AG7-022: migrate config from an older schema version to current.
+# Does NOT write to disk; caller must save if persistence is needed.
+function Invoke-ConfigMigration {
+    param([PSCustomObject]$cfg, [int]$fromVersion)
+    # v0 -> v1: fill any missing property from ConfigDefaults
+    foreach ($prop in $script:ConfigDefaults.PSObject.Properties) {
+        if ($cfg.PSObject.Properties.Match($prop.Name).Count -eq 0) {
+            $cfg | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value
+        }
+    }
+    return $cfg
+}
+
 # Assembly loading (deferred - only when NOT dot-sourcing with -NoRun)
 $script:AssembliesLoaded = $false
 
@@ -166,8 +182,19 @@ function Initialize-AppData {
         }
     }
     else {
-        $baseDir = if ($env:HOME) { $env:HOME } else { "~" }
-        $script:AppDataDir = Join-Path $baseDir ".local/share/DailyMotivationBrainHelper"
+        # AG7-021: Check for a persisted fallback marker before recalculating from scratch.
+        $fallbackMarker = Join-Path ([System.IO.Path]::GetTempPath()) 'DailyMotivation_appdata_fallback.txt'
+        if (Test-Path $fallbackMarker) {
+            $saved = (Get-Content $fallbackMarker -Raw -ErrorAction SilentlyContinue).Trim()
+            if ($saved -and -not [string]::IsNullOrEmpty($saved)) {
+                $script:AppDataDir = $saved
+            }
+        }
+        if (-not $script:AppDataDir) {
+            # AG7-014: expand tilde -- never store a literal '~' path
+            $homeDir = if ($env:HOME) { $env:HOME } elseif ($env:USERPROFILE) { $env:USERPROFILE } else { [System.IO.Path]::GetTempPath() }
+            $script:AppDataDir = Join-Path $homeDir ".local/share/DailyMotivationBrainHelper"
+        }
     }
     $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
     $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
@@ -182,13 +209,15 @@ function Initialize-AppData {
             $fallback = Join-Path $script:TempDir "DailyMotivationBrainHelper"
             Write-Warning "Initialize-AppData: Could not create '$script:AppDataDir'. Falling back to '$fallback'."
             try {
-
                 [void](New-Item -ItemType Directory -Path $fallback -Force -ErrorAction Stop)
                 $script:AppDataDir   = $fallback
                 $script:ConfigPath   = Join-Path $script:AppDataDir "config.json"
                 $script:PopupCfgPath = Join-Path $script:AppDataDir "popup_config.json"
                 $script:TasksPath    = Join-Path $script:AppDataDir "tasks.json"
                 $script:LogPath      = Join-Path $script:AppDataDir "popup_log.txt"
+                # AG7-021: persist the fallback path so the next launch uses the same directory
+                $markerPath = Join-Path ([System.IO.Path]::GetTempPath()) 'DailyMotivation_appdata_fallback.txt'
+                Set-Content -Path $markerPath -Value $script:AppDataDir -Encoding UTF8 -ErrorAction SilentlyContinue
             }
             catch {
                 Write-Error "Initialize-AppData: Cannot create fallback directory '$fallback': $($_.Exception.Message)"
@@ -220,7 +249,9 @@ function Initialize-AppData {
     }
 
     if (-not (Test-Path $script:ConfigPath)) {
+        # AG7-003: write schemaVersion so Get-Config can detect and migrate old files
         [ordered]@{
+            schemaVersion          = $script:ConfigSchemaVersion
             default_trigger_hour   = 14
             task_warning_threshold = 5
         } | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding UTF8
@@ -280,6 +311,20 @@ function Get-Config {
             $cfg | Add-Member -NotePropertyName 'task_warning_threshold' -NotePropertyValue $null
         }
 
+        # AG7-003: check schema version; run migration if file is from an older version
+        $fileVersion = if ($cfg.PSObject.Properties.Match('schemaVersion').Count -gt 0 -and
+            $cfg.schemaVersion -is [int]) { [int]$cfg.schemaVersion } else { 0 }
+        if ($fileVersion -lt $script:ConfigSchemaVersion) {
+            $cfg = Invoke-ConfigMigration -cfg $cfg -fromVersion $fileVersion
+        }
+
+        # AG7-007: fill any still-missing property from ConfigDefaults (forward-compat)
+        foreach ($prop in $script:ConfigDefaults.PSObject.Properties) {
+            if ($cfg.PSObject.Properties.Match($prop.Name).Count -eq 0) {
+                $cfg | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value
+            }
+        }
+
         # Validate config properties to prevent downstream errors
         if ($null -eq $cfg.default_trigger_hour -or
             -not ($cfg.default_trigger_hour -is [int] -or $cfg.default_trigger_hour -is [long] -or $cfg.default_trigger_hour -is [double]) -or
@@ -305,6 +350,19 @@ function Get-Config {
     }
 }
 
+# AG7-011: check whether a directory accepts writes without relying on ACL inspection
+function Test-DirectoryWritable {
+    param([string]$Path)
+    if (-not (Test-Path $Path -PathType Container)) { return $false }
+    $probe = Join-Path $Path ".dmwrite_$([System.Guid]::NewGuid().ToString('N').Substring(0,8))"
+    try {
+        [System.IO.File]::WriteAllText($probe, '')
+        Remove-Item $probe -Force -ErrorAction SilentlyContinue
+        return $true
+    }
+    catch { return $false }
+}
+
 function Save-Config {
     [CmdletBinding()]
     param(
@@ -324,6 +382,11 @@ function Save-Config {
         $Config = $existing
     }
     $tempPath  = $script:ConfigPath + ".tmp"
+    # AG7-011: verify directory is writable before attempting write
+    $configDir = Split-Path $script:ConfigPath -Parent
+    if (-not (Test-DirectoryWritable $configDir)) {
+        throw "Cannot write config: directory '$configDir' is not writable"
+    }
     # AG18-012: mutex prevents concurrent writes from two scheduling processes
     $cfgMutex     = $null
     $cfgAcquired  = $false
@@ -583,18 +646,22 @@ function Show-InfoDialog {
         [Parameter(Mandatory)][string]$Message,
         [string]$Title = "Daily Motivation Brain Helper"
     )
-    try {
-
-        [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information")
-    }
-    catch {
+    # AG6-019 / AG13-007: check WPF availability before calling MessageBox
+    $wpfAvailable = (Get-Variable -Name 'WpfLoaded' -Scope Script -ErrorAction SilentlyContinue) -and $script:WpfLoaded
+    if ($wpfAvailable) {
         try {
-            [void][System.Windows.Forms.MessageBox]::Show($Message, $Title,
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Information)
+            [void][System.Windows.MessageBox]::Show($Message, $Title, "OK", "Information")
+            return
         }
-        catch { [Console]::Out.WriteLine("INFO [$Title]: $Message") }
+        catch {}
     }
+    # Fallback to WinForms, then console
+    try {
+        [void][System.Windows.Forms.MessageBox]::Show($Message, $Title,
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information)
+    }
+    catch { [Console]::Out.WriteLine("INFO [$Title]: $Message") }
 }
 
 # ============================================================
@@ -640,6 +707,11 @@ function Save-TasksJson {
     $tempPath = $path + ".tmp"
     # AG18-018: strip nulls before serialising so JSON never contains a null literal
     $Tasks = @($Tasks | Where-Object { $null -ne $_ })
+    # AG7-011: verify directory is writable before attempting write
+    $tasksDir = Split-Path $path -Parent
+    if (-not (Test-DirectoryWritable $tasksDir)) {
+        throw "Cannot write tasks: directory '$tasksDir' is not writable"
+    }
     # AG18-012: mutex prevents concurrent writes from two scheduling processes
     $tasksMutex     = $null
     $tasksAcquired  = $false
@@ -1796,7 +1868,20 @@ function Show-MainWindow {
                 return
             }
         }
-        else { return }
+        else {
+            # AG5-019: mark all PENDING tasks as DELETED so they are not displayed
+            # as active after the app exits without a functioning scheduler
+            try {
+                $staleTasks = @(Get-TasksJson)
+                $changed = $false
+                foreach ($t in $staleTasks) {
+                    if ($t.status -eq 'PENDING') { $t.status = 'DELETED'; $changed = $true }
+                }
+                if ($changed) { Save-TasksJson $staleTasks }
+            }
+            catch {}
+            return
+        }
     }
 
     # Build window from inline XAML
@@ -2200,6 +2285,16 @@ function Show-MainWindow {
     })
     $initSyncTimer.Start()
 
+    # AG6-011: release WPF GC roots on close by nulling all button/control references.
+    # PowerShell scriptblock delegates cannot be removed via -= but setting the variable
+    # to $null allows the GC to collect the window after ShowDialog returns.
+    $window.Add_Closed({
+        $scheduleBtn = $null; $undoBtn = $null; $historyBtn = $null
+        $dismissLastBtn = $null; $dropZone = $null; $folderPathBox = $null
+        $taskList = $null; $noTasksLabel = $null; $taskLoadingLabel = $null
+        $scheduleHintLabel = $null; $initSyncTimer = $null
+    })
+
     try {
 
         [void]$window.ShowDialog()
@@ -2222,6 +2317,8 @@ function Show-MainWindow {
     AllowsTransparency="True"
     Background="Transparent"
     Width="500"
+    MinWidth="400"
+    MinHeight="200"
     SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
     Topmost="True"
@@ -2496,6 +2593,12 @@ function Get-PopupOutcome {
 }
 
 function Show-PopupWindow {
+    # AG13-007: guard against missing WPF assembly before any XamlReader call
+    if (-not ((Get-Variable -Name 'WpfLoaded' -Scope Script -ErrorAction SilentlyContinue) -and $script:WpfLoaded)) {
+        [Console]::Error.WriteLine("Show-PopupWindow: WPF assemblies not loaded. Popup cannot be displayed.")
+        return
+    }
+
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time, with user and session isolation to prevent DoS between users
@@ -2929,6 +3032,11 @@ function Show-PopupWindow {
                     -Encoding UTF8 -ErrorAction SilentlyContinue
     }
     catch {}
+
+    # AG6-013: enforce Topmost in code-behind (XAML attribute may not survive certain WPF
+    # activation sequences) and Activate to raise above the current foreground window
+    $window.Topmost = $true
+    $window.Activate() | Out-Null
 
     # Show popup
     try {

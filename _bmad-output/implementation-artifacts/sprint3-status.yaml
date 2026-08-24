@@ -1,0 +1,103 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint3-config-wfp-safety.md
+last_updated: 2026-08-24T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "AppData and Config Robustness"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Fill Missing Config Properties from ConfigDefaults"
+        status: "ready-for-dev"
+        github_issue: 42
+        severity: "High"
+        windows_only: false
+        notes: "Merge $script:ConfigDefaults into Get-Config result for any missing property. Linux-safe."
+      - id: "story-1-2"
+        title: "Persist Fallback AppData Path Across Restarts"
+        status: "ready-for-dev"
+        github_issue: 45
+        severity: "Critical"
+        windows_only: false
+        notes: "Write marker file to $env:TEMP on fallback. Read on next launch. Linux-safe."
+      - id: "story-1-3"
+        title: "Write and Check Config Schema Version"
+        status: "ready-for-dev"
+        github_issue: 41
+        severity: "Critical"
+        windows_only: false
+        notes: "schemaVersion=1 on creation. Treat missing as v0. Linux-safe."
+      - id: "story-1-4"
+        title: "Add Config Migration Entry Point"
+        status: "ready-for-dev"
+        github_issue: 46
+        severity: "High"
+        windows_only: false
+        notes: "Invoke-ConfigMigration function for v0->v1. Linux-safe."
+      - id: "story-1-5"
+        title: "Check Directory Write-Access Before Config and Tasks Writes"
+        status: "ready-for-dev"
+        github_issue: 43
+        severity: "High"
+        windows_only: false
+        notes: "Test-DirectoryWritable helper with probe file. Linux-safe."
+      - id: "story-1-6"
+        title: "Expand Tilde in Fallback AppData Path"
+        status: "ready-for-dev"
+        github_issue: 44
+        severity: "High"
+        windows_only: false
+        notes: "Replace leading ~ with $env:HOME/$env:USERPROFILE/$env:TEMP. Linux-safe."
+      - id: "story-1-7"
+        title: "Clean Up PENDING Tasks When Task Scheduler Service Stops"
+        status: "ready-for-dev"
+        github_issue: 34
+        severity: "Medium"
+        windows_only: true
+        notes: "Mark PENDING tasks DELETED before exiting service-unavailable path. Windows live test required."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "WPF Assembly Safety and Window Fixes"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Add PresentationFramework Pre-Check to All XamlReader Call Sites"
+        status: "ready-for-dev"
+        github_issue: 96
+        severity: "Critical"
+        windows_only: true
+        notes: "Test-WpfAvailable guard before XamlReader::Load in Show-MainWindow, Show-PopupWindow, Show-ErrorDialog. Windows live test required."
+      - id: "story-2-2"
+        title: "Guard Assembly Load in /setfolder Mode Before MessageBox"
+        status: "ready-for-dev"
+        github_issue: 38
+        severity: "High"
+        windows_only: true
+        notes: "Load WPF assemblies at top of /setfolder block before any dialog call. Windows live test required."
+      - id: "story-2-3"
+        title: "Set Window.Owner Before ShowDialog"
+        status: "ready-for-dev"
+        github_issue: 37
+        severity: "Medium"
+        windows_only: true
+        notes: "Confirm/set Topmost and Owner for popup; set Owner for main window child dialogs. Windows live test required."
+      - id: "story-2-4"
+        title: "Unregister Event Handlers on Window Close"
+        status: "ready-for-dev"
+        github_issue: 36
+        severity: "Medium"
+        windows_only: true
+        notes: "Null button references in Closing handler to release WPF GC roots. Windows live test required."
+      - id: "story-2-5"
+        title: "Add MinWidth and MinHeight to Popup Window XAML"
+        status: "ready-for-dev"
+        github_issue: 35
+        severity: "Medium"
+        windows_only: true
+        notes: "Add MinWidth=400 MinHeight=200 to popup Window XAML element. Windows live test required."
+    retrospective:
+      status: "not-started"
