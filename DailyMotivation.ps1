@@ -34,7 +34,11 @@ param(
 # SECTION 2: Platform detection
 # ============================================================
 # Cross-platform temp directory resolution
-$script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { "/tmp" }
+# AG4-003: validate TempDir exists after resolution; fall back to .NET GetTempPath()
+$script:TempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar) }
+if (-not (Test-Path $script:TempDir -PathType Container -ErrorAction SilentlyContinue)) {
+    $script:TempDir = [System.IO.Path]::GetTempPath().TrimEnd([System.IO.Path]::DirectorySeparatorChar)
+}
 
 # Platform detection
 # PowerShell 7+ has $IsWindows variable; compiled exe always runs on Windows
@@ -772,6 +776,19 @@ function New-MotivationTask {
         return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "Invalid path format: $_" }
     }
 
+    # AG5-016 / AG3-010: acquire outer ScheduleLock before duplicate check so the entire
+    # read-duplicate-check-register-save cycle is atomic across concurrent processes.
+    # This lock is distinct from DailyMotivationTasksLock (used inside Save-TasksJson)
+    # so there is no deadlock when Save-TasksJson is called from within this section.
+    $nmtSchedLock     = $null
+    $nmtSchedAcquired = $false
+    try {
+        $nmtSchedLock     = [System.Threading.Mutex]::new($false, "Global\DailyMotivationScheduleLock")
+        $nmtSchedAcquired = $nmtSchedLock.WaitOne(10000)
+    } catch {}
+
+    try {
+
     # Duplicate check - case-insensitive path, same date
     # Read tasks directly from JSON WITHOUT syncing first to avoid false positives
     # where Sync-TaskStatuses marks tasks as DELETED due to temporary lookup failures
@@ -894,13 +911,17 @@ function New-MotivationTask {
             ExecutionTimeLimit      = $executionTimeLimit
             MultipleInstances       = 'IgnoreNew'
             DeleteExpiredTaskAfter  = New-TimeSpan -Seconds 30
+            RestartCount            = 1                          # AG5-011: retry once on failure
+            RestartInterval         = New-TimeSpan -Minutes 1   # AG5-011: wait 1 minute before retry
         }
         $settings = New-ScheduledTaskSettingsSet @settingsParams
 
         # Network path detection
-        $isUncPath     = $FolderPath -match '^\\\\[^\\]'
+        # AG5-009: also match extended-length UNC (\\?\UNC\server\share)
+        $isUncPath     = $FolderPath -match '^\\\\[^\\]|^\\\\\?\\UNC\\'
         $isMappedDrive = $false
-        if ($FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        # AG5-009: DriveInfo.DriveType returns Unknown on Linux; guard with $IsWindows
+        if ($IsWindows -and $FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
             try {
                 $driveInfo     = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
@@ -931,6 +952,12 @@ function New-MotivationTask {
                 Force       = $true
             }
             Register-ScheduledTask @registerParams -ErrorAction Stop | Out-Null
+            # AG5-001: verify the task was actually created in the OS
+            $verifiedTask = $null
+            try { $verifiedTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop } catch {}
+            if (-not $verifiedTask) {
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "OS task registration reported success but task '$taskName' not found (silent failure)" }
+            }
         }
         catch {
             $errorMsg = $_.Exception.Message
@@ -985,6 +1012,11 @@ function New-MotivationTask {
     }
 
     return @{ Success = $true; TaskId = $taskId; IsDuplicate = $false; IsNetworkPath = $isNetworkPath }
+
+    } finally {
+        if ($nmtSchedAcquired -and $nmtSchedLock) { try { $nmtSchedLock.ReleaseMutex() } catch {} }
+        if ($nmtSchedLock) { $nmtSchedLock.Dispose() }
+    }
 }
 
 function Sync-TaskStatuses {
@@ -992,6 +1024,13 @@ function Sync-TaskStatuses {
     # Call this function when you need up-to-date status from the OS
     # Skip reconciliation if platform adapter is active (tests/headless mode)
     if ($script:Platform) { return }
+
+    # AG3-021: outer ScheduleLock makes the full read-modify-save atomic
+    $syncSchedLock = $null; $syncSchedAcquired = $false
+    try {
+        $syncSchedLock    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationScheduleLock")
+        $syncSchedAcquired = $syncSchedLock.WaitOne(5000)
+    } catch {}
 
     $tasks = @(Get-TasksJson)
     $changed = $false
@@ -1060,7 +1099,9 @@ function Sync-TaskStatuses {
             task_id        = $recoveredId
             task_name      = $osTask.TaskName
             folder_path    = $folderPath
-            folder_name    = if ($folderPath) { Split-Path -Leaf $folderPath } else { '' }
+            # AG4-023: Split-Path -Leaf returns empty for UNC roots (\\server with no sub-path);
+            # fall back to the full path as display name
+            folder_name    = if ($folderPath) { $leaf = Split-Path -Leaf $folderPath; if ($leaf) { $leaf } else { $folderPath } } else { '' }
             scheduled_time = $scheduledTime
             created_at     = (Get-Date -Format "o")
             status         = "PENDING"
@@ -1073,6 +1114,9 @@ function Sync-TaskStatuses {
     if ($changed) {
         Save-TasksJson $tasks
     }
+
+    if ($syncSchedAcquired -and $syncSchedLock) { try { $syncSchedLock.ReleaseMutex() } catch {} }
+    if ($syncSchedLock) { $syncSchedLock.Dispose() }
 }
 
 function Get-MotivationTasks {
@@ -1082,6 +1126,14 @@ function Get-MotivationTasks {
 
 function Remove-MotivationTask {
     param([Parameter(Mandatory)][string]$TaskId)
+
+    # AG3-010: outer ScheduleLock makes the read-filter-save atomic
+    $rmtSchedLock = $null; $rmtSchedAcquired = $false
+    try {
+        $rmtSchedLock    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationScheduleLock")
+        $rmtSchedAcquired = $rmtSchedLock.WaitOne(10000)
+    } catch {}
+    try {
 
     $tasks  = Get-TasksJson
     $target = $tasks | Where-Object { $_.task_id -eq $TaskId }
@@ -1123,6 +1175,11 @@ function Remove-MotivationTask {
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
     Save-TasksJson $tasks
     return $true
+
+    } finally {
+        if ($rmtSchedAcquired -and $rmtSchedLock) { try { $rmtSchedLock.ReleaseMutex() } catch {} }
+        if ($rmtSchedLock) { $rmtSchedLock.Dispose() }
+    }
 }
 
 # ============================================================================
@@ -1413,6 +1470,10 @@ function Invoke-FolderScheduling {
 
 function Register-ContextMenu {
     param([string]$ExePath)
+    # AG4-021: context menu uses HKCU: registry -- Windows only
+    if (-not $IsWindows) {
+        return @{ Success = $false; Reason = "Registry not available on this platform" }
+    }
     # Guard: only register when invoked from a compiled .exe, not the source .ps1.
     # If the script is run directly (pwsh .\DailyMotivation.ps1), $MyInvocation.MyCommand.Path
     # is the .ps1 path. Storing that in the registry causes "This app can't run on your PC"
@@ -2188,7 +2249,7 @@ function Show-MainWindow {
                 "Clear all history entries? This cannot be undone.",
                 "Clear History", "YesNo", "Question")
             if ($confirm -eq "Yes") {
-                if (Test-Path -Path "$script:LogPath" -PathType Leaf) { Clear-Content $script:LogPath }
+                if (Test-Path -Path "$script:LogPath" -PathType Leaf) { Clear-Content -Path $script:LogPath }  # AG4-016
                 Update-HistoryUI -HistoryListControl $historyList -SortOrder $script:historySortOrder
             }
         })
@@ -2593,6 +2654,16 @@ function Get-PopupOutcome {
 }
 
 function Show-PopupWindow {
+    # AG3-019: reset all session-scoped script state at function entry so a second
+    # popup invocation (e.g. after a snooze) never inherits stale values.
+    $script:openExplorer    = $true
+    $script:windowClosed    = $false
+    $script:snoozeCount     = 0
+    $script:snoozeMinutes   = 5
+    $script:remaining       = 20
+    $script:timerPaused     = $false
+    $script:newExplorerPath = ""
+
     $configPath = $script:PopupCfgPath
 
     # Named mutex - one popup at a time, with user and session isolation to prevent DoS between users

@@ -1,0 +1,103 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint4-concurrency-registration.md
+last_updated: 2026-08-24T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Concurrency Fixes"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Atomic RMW in New-MotivationTask and Remove-MotivationTask"
+        status: "done"
+        github_issue: 33
+        severity: "Critical"
+        windows_only: false
+        notes: "Global\\DailyMotivationScheduleLock wraps duplicate-check through Save-TasksJson. Distinct from TasksLock so no deadlock. Linux-safe."
+      - id: "story-1-1b"
+        title: "tasks.json Read-Modify-Write Race in Remove-MotivationTask"
+        status: "done"
+        github_issue: 22
+        severity: "High"
+        windows_only: false
+        notes: "Covered by same ScheduleLock in story-1-1. Linux-safe."
+      - id: "story-1-2"
+        title: "Sync-TaskStatuses Race Condition"
+        status: "done"
+        github_issue: 24
+        severity: "High"
+        windows_only: false
+        notes: "ScheduleLock wraps Get-TasksJson through Save-TasksJson in Sync-TaskStatuses. Linux-safe."
+      - id: "story-1-3"
+        title: "Reset Popup State Flags at Entry"
+        status: "done"
+        github_issue: 23
+        severity: "Medium"
+        windows_only: false
+        notes: "All session state reset at top of Show-PopupWindow before mutex. Linux-safe."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "Task Registration and Defensive Coding"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Verify Task Exists After Register-ScheduledTask"
+        status: "done"
+        github_issue: 29
+        severity: "High"
+        windows_only: true
+        notes: "Get-ScheduledTask after Register; returns error if not found. Windows live test required."
+      - id: "story-2-1b"
+        title: "No Verification Task Actually Fires"
+        status: "done"
+        github_issue: 30
+        severity: "High"
+        windows_only: true
+        notes: "Covered by story-2-1 verification. RestartCount added in story-2-2."
+      - id: "story-2-2"
+        title: "Add Restart Settings to Task"
+        status: "done"
+        github_issue: 32
+        severity: "High"
+        windows_only: true
+        notes: "RestartCount=1, RestartInterval=1min added to settingsParams. Windows live test required."
+      - id: "story-2-3"
+        title: "Fix UNC Regex and Guard DriveType"
+        status: "done"
+        github_issue: 31
+        severity: "Medium"
+        windows_only: false
+        notes: "Extended UNC regex. $IsWindows guard on DriveInfo. Linux-safe."
+      - id: "story-2-4"
+        title: "Guard Split-Path Leaf for Empty"
+        status: "done"
+        github_issue: 28
+        severity: "Medium"
+        windows_only: false
+        notes: "Fall back to full path when leaf is empty. Linux-safe."
+      - id: "story-2-5"
+        title: "Windows Platform Check in Register-ContextMenu"
+        status: "done"
+        github_issue: 27
+        severity: "Medium"
+        windows_only: false
+        notes: "if (-not $IsWindows) early return. Linux-safe."
+      - id: "story-2-6"
+        title: "Add -Path to Clear-Content"
+        status: "done"
+        github_issue: 26
+        severity: "Medium"
+        windows_only: false
+        notes: "Added explicit -Path parameter. Linux-safe."
+      - id: "story-2-7"
+        title: "Validate TempDir After Initialization"
+        status: "done"
+        github_issue: 25
+        severity: "Medium"
+        windows_only: false
+        notes: "Fall back to GetTempPath() if TempDir does not exist. Linux-safe."
+    retrospective:
+      status: "not-started"
