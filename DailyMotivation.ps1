@@ -56,8 +56,9 @@ $script:ConfigCache = $null
 $script:ConfigCacheMTime = $null
 
 $script:ConfigDefaults = [PSCustomObject]@{
-    default_trigger_hour   = 14
-    task_warning_threshold = 5
+    default_trigger_hour      = 14
+    task_warning_threshold    = 5
+    snooze_duration_minutes   = 5    # AG11-017: persisted snooze preference
 }
 
 # AG7-003: current config schema version. Increment when new properties are added.
@@ -340,6 +341,12 @@ function Get-Config {
             [int]$cfg.task_warning_threshold -lt 0 -or
             [int]$cfg.task_warning_threshold -gt 100) {  # AG18-025: upper bound
             $cfg.task_warning_threshold = 5
+        }
+
+        # AG11-017: validate snooze_duration_minutes; only 5/15/30/60 are valid
+        if ($cfg.PSObject.Properties['snooze_duration_minutes'] -and
+            $cfg.snooze_duration_minutes -notin @(5, 15, 30, 60)) {
+            $cfg.snooze_duration_minutes = 5
         }
 
         $script:ConfigCache = $cfg
@@ -1419,6 +1426,12 @@ function Set-SnoozeDuration {
     } else {
         $SnoozeBtnControl.Content = "Snooze 1h"
     }
+    # AG11-017: persist preference so it survives popup restart
+    try {
+        $snoozePersistedCfg = Get-Config
+        $snoozePersistedCfg.snooze_duration_minutes = $Minutes
+        Save-Config $snoozePersistedCfg
+    } catch {}
 }
 
 function Invoke-FolderScheduling {
@@ -2934,7 +2947,11 @@ function Show-PopupWindow {
     # State
     $script:openExplorer    = $true
     $script:remaining       = 20
-    $script:snoozeMinutes   = 5
+    # AG11-017: restore persisted snooze preference
+    try {
+        $snoozeCfg = Get-Config
+        $script:snoozeMinutes = if ($snoozeCfg.snooze_duration_minutes -in @(5,15,30,60)) { $snoozeCfg.snooze_duration_minutes } else { 5 }
+    } catch { $script:snoozeMinutes = 5 }
     $script:snoozeCount     = 0
     $script:newExplorerPath = ""
     $script:windowClosed    = $false   # Guard against queued dispatcher tick
@@ -3066,8 +3083,14 @@ function Show-PopupWindow {
         }
     }
 
-    # AG17-014: show a checkmark on the active snooze duration; default is 5 minutes
-    $snooze5.IsChecked = $true
+    # AG17-014: show a checkmark on the active snooze duration (loaded from persisted config)
+    $snooze5.IsChecked  = ($script:snoozeMinutes -eq 5)
+    $snooze15.IsChecked = ($script:snoozeMinutes -eq 15)
+    $snooze30.IsChecked = ($script:snoozeMinutes -eq 30)
+    $snooze60.IsChecked = ($script:snoozeMinutes -eq 60)
+    if ($null -ne $snoozeBtn) {
+        if ($script:snoozeMinutes -lt 60) { $snoozeBtn.Content = "Snooze $($script:snoozeMinutes)m" } else { $snoozeBtn.Content = "Snooze 1h" }
+    }
     $snooze5.Add_Click({
         Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn
         $snooze5.IsChecked=$true; $snooze15.IsChecked=$false; $snooze30.IsChecked=$false; $snooze60.IsChecked=$false
@@ -3498,6 +3521,10 @@ function Strip-MarkupText {
     return $result
 }
 function Get-RandomMessage {
+    # AG12-010: guard against empty Messages array
+    if ($null -eq $Messages -or $Messages.Count -eq 0) {
+        return [PSCustomObject]@{ Glyph = "[+]"; Title = "Time to focus"; Body = "Open the folder and get to work." }
+    }
     # AG12-012: use cryptographic RNG so concurrent popup calls within the same
     # millisecond don't receive the same message due to identical Get-Random seeds.
     $bytes = New-Object byte[] 4
