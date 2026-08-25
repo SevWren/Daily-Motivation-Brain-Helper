@@ -1,0 +1,35 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: inline
+last_updated: 2026-08-25T00:00:00Z
+
+closed_without_code:
+  - "85: Get-PopupConfig catch already returns safe fallback object"
+  - "77: Add_Loaded fallback timer forces Opacity=1 after 500ms"
+  - "84: $window.Topmost=$true set in code before ShowDialog (Sprint 4)"
+  - "82: PreviewMouseDown + click timer.Stop() double-stop is safe"
+  - "76: Glyph through Escape-XmlText + AG12-023 null fallback (Sprint 10)"
+  - "86: window.Close() terminates all animations; no explicit cancel needed"
+  - "87: DND/Focus Assist registry check out of scope for this sprint"
+
+epics:
+  - id: "epic-1"
+    title: "Popup Display Hardening"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Long Folder Path Truncation in Popup"
+        status: "done"
+        github_issue: 83
+        severity: "Medium"
+        windows_only: false
+        notes: "Added MaxWidth=380 and TextTrimming=CharacterEllipsis to FolderNameText TextBlock. Changed TextWrapping=NoWrap so ellipsis fires correctly. Linux-safe XAML change."
+      - id: "story-1-2"
+        title: "Crypto RNG for Get-RandomMessage"
+        status: "done"
+        github_issue: 80
+        severity: "Low"
+        windows_only: false
+        notes: "Replaced Get-Random with RNGCryptoServiceProvider-seeded index calculation. Prevents same message on concurrent popup calls within the same millisecond. .NET 4.x compatible. Linux-safe."
+    retrospective:
+      status: "not-started"

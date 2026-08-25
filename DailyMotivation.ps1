@@ -2510,8 +2510,10 @@ function Show-MainWindow {
                 </StackPanel>
                 <TextBlock x:Name="BodyText" FontSize="14" Foreground="#8888A8" MaxWidth="400" MaxHeight="150"
                            TextWrapping="Wrap" LineHeight="23" Margin="0,0,0,6"/>
+                <!-- AG12-017: MaxWidth + TextTrimming prevents very long UNC paths from overflowing -->
                 <TextBlock x:Name="FolderNameText" FontSize="12" Foreground="#8888A8"
-                           TextWrapping="Wrap" Margin="0,0,0,22" Visibility="Collapsed"/>
+                           MaxWidth="380" TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap" Margin="0,0,0,22" Visibility="Collapsed"/>
                 <Border Background="#303050" Height="1" Margin="0,0,0,18"/>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,22" VerticalAlignment="Center">
                     <TextBlock Text="Auto-opening in " FontSize="12" Foreground="#8888A8" VerticalAlignment="Center"/>
@@ -3496,7 +3498,16 @@ function Strip-MarkupText {
     return $result
 }
 function Get-RandomMessage {
-    return $Messages | Get-Random
+    # AG12-012: use cryptographic RNG so concurrent popup calls within the same
+    # millisecond don't receive the same message due to identical Get-Random seeds.
+    $bytes = New-Object byte[] 4
+    try {
+        $rng = [System.Security.Cryptography.RNGCryptoServiceProvider]::new()
+        $rng.GetBytes($bytes)
+        $rng.Dispose()
+    } catch {}
+    $index = [Math]::Abs([BitConverter]::ToInt32($bytes, 0)) % $Messages.Count
+    return $Messages[$index]
 }
 
 # ============================================================
