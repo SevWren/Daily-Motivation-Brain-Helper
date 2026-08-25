@@ -1164,7 +1164,10 @@ function Sync-TaskStatuses {
                 ).ToString("yyyy-MM-ddTHH:mm:ss")
             }
         }
-        catch {}
+        catch {
+            # AG1-004: log parse failure so StartBoundary corruption is visible
+            Write-Warning "Sync-TaskStatuses: failed to parse StartBoundary for '$($osTask.TaskName)': $($_.Exception.Message)"
+        }
 
         $recoveredId = $osTask.TaskName -replace '^DailyMotivation_', ''
         $recovered = [PSCustomObject]@{
@@ -1605,7 +1608,13 @@ function Register-ContextMenu {
 }
 
 function Unregister-ContextMenu {
-    Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" -Recurse -Force -ErrorAction SilentlyContinue
+    # AG1-019: surface removal failures via Write-Warning rather than silently discarding them
+    try {
+        Remove-Item "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation" -Recurse -Force -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Unregister-ContextMenu: failed to remove registry key: $($_.Exception.Message)"
+    }
 }
 
 # ============================================================
@@ -2272,8 +2281,11 @@ function Show-MainWindow {
             $dropZone.BorderThickness = [System.Windows.Thickness]::new(1.5)
             if ($e.Data.GetDataPresent([System.Windows.DataFormats]::FileDrop)) {
                 $dropped = $e.Data.GetData([System.Windows.DataFormats]::FileDrop)
-                if ($dropped.Count -gt 0 -and (Test-Path $dropped[0] -PathType Container)) {
-                    Set-SelectedPath $dropped[0]
+                # AG2-008: wrap in @() so a scalar string stays a string array;
+                # on a scalar, $dropped[0] returns the first *character*, not the path.
+                $droppedArr = @($dropped)
+                if ($droppedArr.Count -gt 0 -and (Test-Path $droppedArr[0] -PathType Container)) {
+                    Set-SelectedPath $droppedArr[0]
                 }
                 else {
             [void][System.Windows.MessageBox]::Show("Please drop a folder, not a file.",
