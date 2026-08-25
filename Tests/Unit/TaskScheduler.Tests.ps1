@@ -78,6 +78,28 @@ BeforeAll {
 }
 
 AfterAll {
+    # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
+    if ($IsWindows) {
+        try {
+            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+            if ($strayTasks) {
+                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+                foreach ($task in $strayTasks) {
+                    try {
+                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+                    }
+                }
+            }
+        }
+        catch {
+            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
+        }
+    }
+
     if (Test-Path $env:APPDATA) {
         Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -500,6 +522,27 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $result.Success | Should -Be $true
             Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
                 $Settings.StartWhenAvailable -eq $true
+            }
+        }
+
+        It 'Should pass a non-null ExecutionTimeLimit in task settings (AG20-011)' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                $null -ne $Settings -and $null -ne $Settings.ExecutionTimeLimit
+            }
+        }
+
+        It 'Should pass ExecutionTimeLimit of 30 minutes in task settings (AG20-011)' {
+            $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+            $result.Success | Should -Be $true
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                if ($null -eq $Settings -or $null -eq $Settings.ExecutionTimeLimit) { return $false }
+                $limit = $Settings.ExecutionTimeLimit
+                # CimInstance stores as TimeSpan; accept 30-minute value regardless of representation
+                if ($limit -is [System.TimeSpan]) { return $limit.TotalMinutes -eq 30 }
+                if ($limit -is [string]) { return $limit -match '^PT30M$|^0:30:00$|^00:30:00$' }
+                return $false
             }
         }
     }
