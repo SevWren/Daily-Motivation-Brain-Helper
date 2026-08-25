@@ -1026,7 +1026,7 @@ function New-MotivationTask {
         folder_path    = $FolderPath
         folder_name    = if ($FolderPath) { $leaf = Split-Path -Leaf $FolderPath; if ($leaf) { $leaf } else { "Unknown Folder" } } else { "Unknown Folder" }
         scheduled_time = $triggerForStorage.ToString("yyyy-MM-ddTHH:mm:ssK")
-        created_at     = (Get-Date -Format "o")
+        created_at     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
         status         = "PENDING"
         snooze_count   = 0
         description    = $safeDescription
@@ -1145,7 +1145,12 @@ function Sync-TaskStatuses {
         try {
             $trigger = $osTask.Triggers | Select-Object -First 1
             if ($trigger -and $trigger.StartBoundary) {
-                $scheduledTime = ([datetime]$trigger.StartBoundary).ToString("yyyy-MM-ddTHH:mm:ss")
+                # AG13-022: use InvariantCulture to avoid locale-dependent parse of ISO 8601 strings
+                $scheduledTime = [datetime]::Parse(
+                    $trigger.StartBoundary,
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind
+                ).ToString("yyyy-MM-ddTHH:mm:ss")
             }
         }
         catch {}
@@ -1159,7 +1164,7 @@ function Sync-TaskStatuses {
             # fall back to the full path as display name
             folder_name    = if ($folderPath) { $leaf = Split-Path -Leaf $folderPath; if ($leaf) { $leaf } else { $folderPath } } else { '' }
             scheduled_time = $scheduledTime
-            created_at     = (Get-Date -Format "o")
+            created_at     = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
             status         = "PENDING"
             snooze_count   = 0
         }
@@ -1599,7 +1604,7 @@ function Unregister-ContextMenu {
     WindowStartupLocation="CenterScreen"
     ResizeMode="CanMinimize"
     Background="#0D1117"
-    FontFamily="Segoe UI">
+    FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI">
 
     <Window.Resources>
         <!-- Base button style -->
@@ -2480,6 +2485,7 @@ function Show-MainWindow {
     Topmost="True"
     ShowInTaskbar="False"
     ResizeMode="NoResize"
+    FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI"
     Opacity="0">
 
     <Border Background="#14141F" CornerRadius="14" Padding="32,28,32,28">
@@ -3050,10 +3056,24 @@ function Show-PopupWindow {
         }
     }
 
-    $snooze5.Add_Click({  Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn  })
-    $snooze15.Add_Click({ Set-SnoozeDuration -Minutes 15 -SnoozeBtnControl $snoozeBtn })
-    $snooze30.Add_Click({ Set-SnoozeDuration -Minutes 30 -SnoozeBtnControl $snoozeBtn })
-    $snooze60.Add_Click({ Set-SnoozeDuration -Minutes 60 -SnoozeBtnControl $snoozeBtn })
+    # AG17-014: show a checkmark on the active snooze duration; default is 5 minutes
+    $snooze5.IsChecked = $true
+    $snooze5.Add_Click({
+        Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn
+        $snooze5.IsChecked=$true; $snooze15.IsChecked=$false; $snooze30.IsChecked=$false; $snooze60.IsChecked=$false
+    })
+    $snooze15.Add_Click({
+        Set-SnoozeDuration -Minutes 15 -SnoozeBtnControl $snoozeBtn
+        $snooze5.IsChecked=$false; $snooze15.IsChecked=$true; $snooze30.IsChecked=$false; $snooze60.IsChecked=$false
+    })
+    $snooze30.Add_Click({
+        Set-SnoozeDuration -Minutes 30 -SnoozeBtnControl $snoozeBtn
+        $snooze5.IsChecked=$false; $snooze15.IsChecked=$false; $snooze30.IsChecked=$true; $snooze60.IsChecked=$false
+    })
+    $snooze60.Add_Click({
+        Set-SnoozeDuration -Minutes 60 -SnoozeBtnControl $snoozeBtn
+        $snooze5.IsChecked=$false; $snooze15.IsChecked=$false; $snooze30.IsChecked=$false; $snooze60.IsChecked=$true
+    })
 
     # Exit item closes the popup without opening explorer (equivalent to Dismiss)
     if ($exitItem) {

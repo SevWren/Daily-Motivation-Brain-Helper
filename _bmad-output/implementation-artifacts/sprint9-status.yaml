@@ -1,0 +1,47 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint9-platform-date-polish.md
+last_updated: 2026-08-25T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Platform Polish"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "XAML Emoji Font Fallback Chain"
+        status: "done"
+        github_issue: 101
+        severity: "Low"
+        windows_only: false
+        notes: "Added Segoe UI Emoji, Segoe UI Symbol, Segoe UI to FontFamily on both MainWindow and PopupWindow elements. Linux-safe."
+      - id: "story-1-2"
+        title: "InvariantCulture Parse for StartBoundary"
+        status: "done"
+        github_issue: 105
+        severity: "Low"
+        windows_only: false
+        notes: "Replaced bare [datetime] cast with [datetime]::Parse(InvariantCulture, RoundtripKind) in Sync-TaskStatuses orphan recovery. Linux-safe."
+      - id: "story-1-3"
+        title: "Normalize created_at to Consistent ISO Format"
+        status: "done"
+        github_issue: 103
+        severity: "Low"
+        windows_only: false
+        notes: "Replaced Get-Date -Format 'o' with 'yyyy-MM-ddTHH:mm:ssK' in both New-MotivationTask call sites. Eliminates fractional-second variance between .NET runtimes. Linux-safe."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "UX State"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Snooze Menu IsChecked State"
+        status: "done"
+        github_issue: 133
+        severity: "Medium"
+        windows_only: false
+        notes: "Initialized Snooze5.IsChecked=true. Each click handler sets IsChecked=true on clicked item and false on others. Linux-safe static analysis."
+    retrospective:
+      status: "not-started"
