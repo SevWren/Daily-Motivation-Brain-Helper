@@ -2530,12 +2530,11 @@ function Show-MainWindow {
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                     <!-- AG19-013: shorter label; full meaning in ToolTip -->
                     <Button x:Name="DismissBtn" Content="Dismiss"
-                            ToolTip="Remove all pending reminders for this folder"
                             Width="148" Height="36" Foreground="#7878A0" FontSize="11"
                             Background="#14141F" BorderBrush="#555580" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,8,0" TabIndex="3"
                             AutomationProperties.Name="Dismiss this notification for today"
-                            ToolTip="Close this popup and remove the scheduled task for today">
+                            ToolTip="Remove all pending reminders for this folder">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bd" Background="{TemplateBinding Background}"
