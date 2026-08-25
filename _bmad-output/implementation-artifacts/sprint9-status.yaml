@@ -2,6 +2,7 @@ project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: _bmad-output/planning-artifacts/epic-sprint9-platform-date-polish.md
 last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-25)"
 
 epics:
   - id: "epic-1"
@@ -30,7 +31,7 @@ epics:
         windows_only: false
         notes: "Replaced Get-Date -Format 'o' with 'yyyy-MM-ddTHH:mm:ssK' in both New-MotivationTask call sites. Eliminates fractional-second variance between .NET runtimes. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
 
   - id: "epic-2"
     title: "UX State"
@@ -44,4 +45,4 @@ epics:
         windows_only: false
         notes: "Initialized Snooze5.IsChecked=true. Each click handler sets IsChecked=true on clicked item and false on others. Linux-safe static analysis."
     retrospective:
-      status: "not-started"
+      status: "complete"
