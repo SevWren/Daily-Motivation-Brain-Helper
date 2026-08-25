@@ -44,9 +44,36 @@ AfterAll {
         }
     }
 
+    # AG20-014: Verify no popup mutex is held by this process after tests complete
+    if ($IsWindows) {
+        try {
+            $currentUser = $env:USERNAME
+            $sessionId   = [System.Diagnostics.Process]::GetCurrentProcess().SessionId
+            $mutexPattern = "Global\DailyMotivationBrainHelperPopup_${currentUser}_${sessionId}"
+            $probe = [System.Threading.Mutex]::new($false, $mutexPattern)
+            try {
+                $acquired = $probe.WaitOne(0)
+                if (-not $acquired) {
+                    Write-Warning "AG20-014 teardown: Popup mutex '$mutexPattern' is still held after tests - possible leak"
+                }
+                else {
+                    $probe.ReleaseMutex()
+                }
+            }
+            finally {
+                $probe.Dispose()
+            }
+        }
+        catch {
+            # Mutex probe failed - not a test failure
+        }
+    }
+
     if (Test-Path $env:APPDATA) {
         Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # AG20-014 AC#2: APPDATA must be restored before AfterAll exits
     $env:APPDATA = $script:OriginalAppData
 }
 
