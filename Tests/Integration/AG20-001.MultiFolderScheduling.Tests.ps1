@@ -50,7 +50,7 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
         Initialize-AppData
     }
 
-    It 'Schedule 3 different folders - Get-MotivationTasks returns 3 tasks with correct folder paths' {
+    It 'AC#1: Schedule 3 different folders - tasks.json has 3 PENDING entries with unique TaskIds, Register-ScheduledTask called 3 times' {
         $folder1 = 'C:\Projects\Alpha'
         $folder2 = 'C:\Projects\Beta'
         $folder3 = 'C:\Projects\Gamma'
@@ -63,13 +63,54 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
         $r2.Success | Should -Be $true
         $r3.Success | Should -Be $true
 
+        # Verify tasks.json contains exactly 3 PENDING entries
         $tasks = Get-MotivationTasks
         $tasks.Count | Should -Be 3
 
+        # All tasks must be PENDING
+        $tasks | ForEach-Object { $_.status | Should -Be 'PENDING' }
+
+        # All TaskIds must be unique
+        $taskIds = $tasks | ForEach-Object { $_.task_id }
+        $taskIds.Count | Should -Be 3
+        ($taskIds | Select-Object -Unique).Count | Should -Be 3
+
+        # Verify correct folder paths
         $folderPaths = $tasks | ForEach-Object { $_.folder_path }
         $folderPaths | Should -Contain $folder1
         $folderPaths | Should -Contain $folder2
         $folderPaths | Should -Contain $folder3
+
+        # Verify Register-ScheduledTask was called exactly 3 times
+        Should -Invoke -CommandName Register-ScheduledTask -Times 3 -Exactly
+    }
+
+    It 'AC#2: Schedule 2 folders, remove 1 - tasks.json retains exactly 1 PENDING entry, Unregister-ScheduledTask called once' {
+        $folder1 = 'C:\Projects\Alpha'
+        $folder2 = 'C:\Projects\Beta'
+
+        $r1 = New-MotivationTask -FolderPath $folder1 -TriggerTime ((Get-Date).AddHours(2))
+        $r2 = New-MotivationTask -FolderPath $folder2 -TriggerTime ((Get-Date).AddHours(3))
+
+        $r1.Success | Should -Be $true
+        $r2.Success | Should -Be $true
+
+        # Remove task 2
+        $removeResult = Remove-MotivationTask -TaskId $r2.TaskId
+        $removeResult | Should -Be $true
+
+        # Verify tasks.json contains exactly 1 PENDING entry
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 1
+        $tasks[0].status | Should -Be 'PENDING'
+        $tasks[0].folder_path | Should -Be $folder1
+        $tasks[0].task_id | Should -Be $r1.TaskId
+
+        # Verify Unregister-ScheduledTask was called exactly once with correct task name
+        Should -Invoke -CommandName Unregister-ScheduledTask -Times 1 -Exactly
+        Should -Invoke -CommandName Unregister-ScheduledTask -ParameterFilter {
+            $TaskName -eq "DailyMotivation_$($r2.TaskId)"
+        } -Times 1 -Exactly
     }
 
     It 'Remove the MIDDLE task (task 2 of 3) - adjacent entries remain intact with no data corruption' {
@@ -165,6 +206,39 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
         $parsed = $raw | ConvertFrom-Json
         $parsedArray = @($parsed)
         $parsedArray.Count | Should -Be 3
+    }
+
+    It 'AC#3: Get-MotivationTasks returns all tasks with correct FolderPath values (case-insensitive match)' {
+        $folder1 = 'C:\Projects\Alpha'
+        $folder2 = 'c:\projects\beta'  # lowercase
+        $folder3 = 'C:\PROJECTS\GAMMA'  # uppercase
+
+        $r1 = New-MotivationTask -FolderPath $folder1 -TriggerTime ((Get-Date).AddHours(2))
+        $r2 = New-MotivationTask -FolderPath $folder2 -TriggerTime ((Get-Date).AddHours(3))
+        $r3 = New-MotivationTask -FolderPath $folder3 -TriggerTime ((Get-Date).AddHours(4))
+
+        $r1.Success | Should -Be $true
+        $r2.Success | Should -Be $true
+        $r3.Success | Should -Be $true
+
+        # Get all tasks
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 3
+
+        # Verify all folder paths are present (exact match - case preserved as stored)
+        $folderPaths = $tasks | ForEach-Object { $_.folder_path }
+        $folderPaths | Should -Contain $folder1
+        $folderPaths | Should -Contain $folder2
+        $folderPaths | Should -Contain $folder3
+
+        # Verify case-insensitive comparison works for duplicate detection
+        $rDupe = New-MotivationTask -FolderPath 'C:\PROJECTS\ALPHA' -TriggerTime ((Get-Date).AddHours(2))
+        $rDupe.Success | Should -Be $false
+        $rDupe.IsDuplicate | Should -Be $true
+
+        # Count must remain at 3 - case-insensitive duplicate was rejected
+        $tasks = Get-MotivationTasks
+        $tasks.Count | Should -Be 3
     }
 
     It 'Schedule same folder twice on the same date - second call returns IsDuplicate=$true, count stays at 3' {
