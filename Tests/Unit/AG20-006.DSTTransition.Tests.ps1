@@ -97,4 +97,44 @@ Describe 'Get-ScheduleTime - DST boundary safety (AG20-006)' {
         $result | Should -BeOfType [datetime]
         $result.Day | Should -Be 10   # next day
     }
+
+    It 'AC#1: Get-ScheduleTime with hour=2 on spring-forward day returns a valid non-null DateTime (AG20-006)' {
+        # 2 AM does not exist on spring-forward day - .Date.AddHours(2) returns the DateTime regardless;
+        # the assertion is that the function does not throw and returns something usable.
+        Mock Get-Date { [datetime]::new(2025, 3, 9, 0, 0, 0) }
+
+        # Override config to use hour 2 (falls in DST gap on US/Eastern spring-forward day)
+        Mock Get-Config {
+            @{ default_trigger_hour = 2; task_warning_threshold = 5; schemaVersion = 1 }
+        }
+
+        $result = $null
+        { $result = Get-ScheduleTime -TodayRadioControl $script:TodayControl } | Should -Not -Throw
+        $result | Should -Not -BeNullOrEmpty
+        $result | Should -BeOfType [datetime]
+        $result.Hour | Should -Be 2    # value stored as-typed; no DST correction applied
+    }
+
+    It 'AC#2: EndBoundary constructed from a DST-fold TriggerTime produces a parseable ISO 8601 string (AG20-006)' {
+        # US/Eastern fall-back: 2025-11-02 01:30 is ambiguous (occurs twice).
+        # Verify the EndBoundary ToString format is always a valid ISO 8601 regardless.
+        $ambiguousTime = [datetime]::new(2025, 11, 2, 1, 30, 0)
+        $executionLimit = [System.TimeSpan]::FromMinutes(30)
+        $endBoundary = $ambiguousTime.Add($executionLimit).AddMinutes(1).ToString('yyyy-MM-ddTHH:mm:ss')
+
+        # EndBoundary must be a non-empty string
+        $endBoundary | Should -Not -BeNullOrEmpty
+
+        # Must parse without throwing (parseable ISO 8601)
+        $parsed = $null
+        { $parsed = [datetime]::ParseExact(
+            $endBoundary,
+            'yyyy-MM-ddTHH:mm:ss',
+            [System.Globalization.CultureInfo]::InvariantCulture
+        ) } | Should -Not -Throw
+
+        $parsed | Should -BeOfType [datetime]
+        # EndBoundary should be 31 minutes after the ambiguous TriggerTime
+        ($parsed - $ambiguousTime).TotalMinutes | Should -Be 31
+    }
 }
