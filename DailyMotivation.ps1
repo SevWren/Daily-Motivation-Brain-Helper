@@ -471,23 +471,29 @@ function Set-PopupConfig {
     try {
         $cfgMutex    = [System.Threading.Mutex]::new($false, "Global\DailyMotivationPopupConfigLock")
         $cfgAcquired = $cfgMutex.WaitOne(2000)
+        # AG18-014: guard against data truncation for extremely long strings
+        $safeTitle       = if ($Title       -and $Title.Length       -gt 200)  { $Title.Substring(0, 200)       } else { $Title }
+        $safeBody        = if ($Body        -and $Body.Length        -gt 1000) { $Body.Substring(0, 1000)        } else { $Body }
+        $safeGlyph       = if ($Glyph       -and $Glyph.Length       -gt 10)   { $Glyph.Substring(0, 10)        } else { $Glyph }
+        $safeExplorerPath = if ($ExplorerPath -and $ExplorerPath.Length -gt 2000) { $ExplorerPath.Substring(0, 2000) } else { $ExplorerPath }
+
         $resolvedFolderName = if ($FolderName) {
             $FolderName
-        } elseif ($ExplorerPath) {
-            $leaf = Split-Path -Leaf $ExplorerPath
+        } elseif ($safeExplorerPath) {
+            $leaf = Split-Path -Leaf $safeExplorerPath
             if ($leaf) { $leaf } else { "Unknown Folder" }
         } else { "Unknown Folder" }
         [ordered]@{
-            glyph         = $Glyph
-            title         = $Title
-            body          = $Body
-            explorer_path = $ExplorerPath
-            folder_path   = $ExplorerPath
+            glyph         = $safeGlyph
+            title         = $safeTitle
+            body          = $safeBody
+            explorer_path = $safeExplorerPath
+            folder_path   = $safeExplorerPath
             folder_name   = $resolvedFolderName
             task_id       = $TaskId
-            message_glyph = $Glyph
-            message_title = $Title
-            message_body  = $Body
+            message_glyph = $safeGlyph
+            message_title = $safeTitle
+            message_body  = $safeBody
         } | ConvertTo-Json | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         Move-Item -Path $tempPath -Destination $script:PopupCfgPath -Force -ErrorAction Stop
     }
@@ -2606,12 +2612,13 @@ function Show-MainWindow {
                             </Button.Template>
                             <Button.ContextMenu>
                                 <ContextMenu Background="#1C1C2C" BorderBrush="#2A2A42">
-                                    <MenuItem x:Name="Snooze5"  Header=" 5 minutes (default)" Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze15" Header=" 15 minutes"           Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze30" Header=" 30 minutes"           Foreground="#E8E8F4" FontSize="12"/>
-                                    <MenuItem x:Name="Snooze60" Header=" 1 hour"               Foreground="#E8E8F4" FontSize="12"/>
+                                    <!-- AG17-018: tooltips on all snooze items -->
+                                    <MenuItem x:Name="Snooze5"  Header=" 5 minutes (default)" Foreground="#E8E8F4" FontSize="12" ToolTip="Snooze for 5 minutes"/>
+                                    <MenuItem x:Name="Snooze15" Header=" 15 minutes"           Foreground="#E8E8F4" FontSize="12" ToolTip="Snooze for 15 minutes"/>
+                                    <MenuItem x:Name="Snooze30" Header=" 30 minutes"           Foreground="#E8E8F4" FontSize="12" ToolTip="Snooze for 30 minutes"/>
+                                    <MenuItem x:Name="Snooze60" Header=" 1 hour"               Foreground="#E8E8F4" FontSize="12" ToolTip="Snooze for 1 hour"/>
                                     <Separator/>
-                                    <MenuItem x:Name="ExitItem" Header=" Exit"                 Foreground="#7878A0" FontSize="12"/>
+                                    <MenuItem x:Name="ExitItem" Header=" Exit"                 Foreground="#7878A0" FontSize="12" ToolTip="Close popup without opening folder"/>
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
@@ -2778,7 +2785,9 @@ function Show-PopupWindow {
     catch [System.Threading.AbandonedMutexException] {
         $mutexOwned = $true
         Start-Sleep -Milliseconds 500
-        $stale = Get-Process | Where-Object { $_.MainWindowTitle -like "*Daily Motivation*" -and $_.Id -ne $PID }
+        # AG14-008: filter by process name to avoid enumerating all processes
+        $stale = @(Get-Process -Name "DailyMotivation" -ErrorAction SilentlyContinue) |
+                 Where-Object { $_.MainWindowTitle -like "*Daily Motivation*" -and $_.Id -ne $PID }
         if ($stale) {
             if ($mutex) { try { $mutex.ReleaseMutex() } catch {} }
             if ($mutex) { $mutex.Dispose() }
@@ -2963,6 +2972,9 @@ function Show-PopupWindow {
 
     # Countdown timer (normal mode only)
     if (-not $script:pathMissing) {
+        # AG18-008: anchor to wall clock so missed/late ticks don't cause drift
+        $script:countdownStartedAt = [DateTime]::Now
+        $script:countdownPausedMs  = 0
         $timer = [System.Windows.Threading.DispatcherTimer]::new()
         $timer.Interval = [System.TimeSpan]::FromSeconds(1)
         $timer.Add_Tick({
@@ -2976,7 +2988,9 @@ function Show-PopupWindow {
                     $timer.Stop()
                     return
                 }
-                $script:remaining--
+                # Derive remaining from elapsed wall time minus accumulated pause
+                $elapsedMs = ([DateTime]::Now - $script:countdownStartedAt).TotalMilliseconds - $script:countdownPausedMs
+                $script:remaining = [Math]::Max(0, 20 - [int]($elapsedMs / 1000))
                 $countdownText.Text = $script:remaining
                 if ($script:remaining -le 0 -and -not $script:windowClosed) {
                     $script:windowClosed = $true
@@ -3000,11 +3014,17 @@ function Show-PopupWindow {
         if ($null -ne $pauseBtn) {
             $pauseBtn.Add_Click({
                 if ($script:timerPaused) {
+                    # Resuming: accumulate how long we were paused so the wall-clock calc stays correct
+                    if ($script:pauseStartedAt) {
+                        $script:countdownPausedMs += ([DateTime]::Now - $script:pauseStartedAt).TotalMilliseconds
+                        $script:pauseStartedAt = $null
+                    }
                     $timer.Start()
                     $pauseBtn.Content       = "Pause"
                     $script:timerPaused     = $false
                 }
                 else {
+                    $script:pauseStartedAt  = [DateTime]::Now
                     $timer.Stop()
                     $pauseBtn.Content       = "Resume"
                     $script:timerPaused     = $true
@@ -3022,6 +3042,13 @@ function Show-PopupWindow {
         $snoozeDropBtn.ContextMenu.Placement = 'Bottom'
         $snoozeDropBtn.ContextMenu.IsOpen = $true
     })
+
+    # AG17-005: snooze duration items are meaningless in path-missing mode (no countdown)
+    if ($script:pathMissing) {
+        foreach ($mi in @($snooze5, $snooze15, $snooze30, $snooze60)) {
+            if ($mi) { $mi.IsEnabled = $false }
+        }
+    }
 
     $snooze5.Add_Click({  Set-SnoozeDuration -Minutes 5 -SnoozeBtnControl $snoozeBtn  })
     $snooze15.Add_Click({ Set-SnoozeDuration -Minutes 15 -SnoozeBtnControl $snoozeBtn })
