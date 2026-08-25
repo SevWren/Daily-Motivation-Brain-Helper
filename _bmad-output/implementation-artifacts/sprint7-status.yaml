@@ -1,0 +1,47 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint7-ux-lifecycle.md
+last_updated: 2026-08-25T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "UX Clarity"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Set Keyboard Focus on Popup Launch"
+        status: "done"
+        github_issue: 156
+        severity: "High"
+        windows_only: true
+        notes: "Added $letsGoBtn.Focus() and Keyboard::Focus() in Add_Loaded handler. Uses $script:pathMissing to focus rePickBtn in path-missing mode. Windows gate required before closure."
+      - id: "story-1-2"
+        title: "Add Dismiss Button to Undo Banner"
+        status: "done"
+        github_issue: 155
+        severity: "Medium"
+        windows_only: false
+        notes: "Added DismissBannerBtn (x) to UndoBanner XAML column 2. Handler calls Stop-UndoTimer and clears lastTaskId without removing the scheduled task. Linux-safe static analysis."
+      - id: "story-1-3"
+        title: "Clarify Ambiguous Button Labels"
+        status: "done"
+        github_issue: 154
+        severity: "Medium"
+        windows_only: false
+        notes: "DismissBtn: Content='Dismiss for Today' -> 'Dismiss' with ToolTip. RePickBtn: 'Choose New Location' -> 'Re-Pick Folder' (matches CONTEXT.md domain term). UndoBtn unchanged. Linux-safe."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "Lifecycle Management"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Add /uninstall Mode"
+        status: "done"
+        github_issue: 128
+        severity: "Medium"
+        windows_only: false
+        notes: "Added '/uninstall' to ValidateSet and switch block. Calls Unregister-ContextMenu then shows confirmation MessageBox. Linux-safe static analysis; no Windows gate needed."
+    retrospective:
+      status: "not-started"

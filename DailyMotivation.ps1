@@ -18,7 +18,7 @@
 # SECTION 1: Param block
 # ============================================================
 param(
-    [ValidateSet("main", "/popup", "/setfolder")]
+    [ValidateSet("main", "/popup", "/setfolder", "/uninstall")]
     [string]$Mode       = "main",
     [ValidateScript({
         if ($_ -eq "") { $true }
@@ -1814,12 +1814,22 @@ function Unregister-ContextMenu {
                                      Maximum="30" Value="30"
                                      BorderThickness="0"/>
                     </StackPanel>
-                    <Button x:Name="UndoBtn" Grid.Column="1"
-                            Content="Undo"
-                            Style="{StaticResource SecondaryBtn}"
-                            FontSize="11" Padding="12,5" Margin="10,0,0,0"
-                            TabIndex="5"
-                            ToolTip="Cancel the schedule you just created"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button x:Name="UndoBtn"
+                                Content="Undo"
+                                Style="{StaticResource SecondaryBtn}"
+                                FontSize="11" Padding="12,5" Margin="10,0,4,0"
+                                TabIndex="5"
+                                ToolTip="Cancel the schedule you just created"/>
+                        <!-- AG19-014: dismiss banner without undoing the schedule -->
+                        <Button x:Name="DismissBannerBtn"
+                                Content="x"
+                                FontSize="11" Padding="6,5" Margin="0,0,0,0"
+                                Background="Transparent" BorderBrush="#2D6A4F"
+                                Foreground="#52B788" BorderThickness="1"
+                                TabIndex="6"
+                                ToolTip="Close this banner (keeps the scheduled task)"/>
+                    </StackPanel>
                 </Grid>
             </Border>
 
@@ -2049,6 +2059,7 @@ function Show-MainWindow {
     $undoLabel         = Find "UndoLabel"
     $undoProgress      = Find "UndoProgress"
     $undoBtn           = Find "UndoBtn"
+    $dismissBannerBtn  = Find "DismissBannerBtn"
     $taskList          = Find "TaskList"
     $noTasksLabel      = Find "NoTasksLabel"
     $historyToggleBtn  = Find "HistoryToggleBtn"
@@ -2268,6 +2279,13 @@ function Show-MainWindow {
                 $undoFeedbackTimer.Start()
             }
         })
+
+    # AG19-014: dismiss the undo banner without undoing the schedule
+    $dismissBannerBtn.Add_Click({
+        Stop-UndoTimer -UndoBannerControl $undoBanner
+        $script:lastTaskId       = $null
+        $script:undoScheduledFor = $null
+    })
 
     $taskList.Add_PreviewMouseLeftButtonUp({
             param($s, $e)
@@ -2510,7 +2528,9 @@ function Show-MainWindow {
                 </StackPanel>
                 <!-- Buttons -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="DismissBtn" Content="Dismiss for Today"
+                    <!-- AG19-013: shorter label; full meaning in ToolTip -->
+                    <Button x:Name="DismissBtn" Content="Dismiss"
+                            ToolTip="Remove all pending reminders for this folder"
                             Width="148" Height="36" Foreground="#7878A0" FontSize="11"
                             Background="#14141F" BorderBrush="#555580" BorderThickness="1"
                             Cursor="Hand" Margin="0,0,8,0" TabIndex="3"
@@ -2658,7 +2678,8 @@ function Show-MainWindow {
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="RePickBtn" Content="Choose New Location" Width="170" Height="36"
+                    <!-- AG19-013: align label with CONTEXT.md domain term -->
+                    <Button x:Name="RePickBtn" Content="Re-Pick Folder" Width="170" Height="36"
                             Foreground="#0D1117" FontSize="12" FontWeight="Bold"
                             Background="#00BCD4" BorderThickness="0" Cursor="Hand">
                         <Button.Template>
@@ -2905,6 +2926,16 @@ function Show-PopupWindow {
             catch {
                 $window.Opacity = 1  # ensure visible if animation fails
             }
+            # AG19-016: set keyboard focus so the user can tab/space without clicking first
+            try {
+                if (-not $script:pathMissing) {
+                    [void]$letsGoBtn.Focus()
+                    [void][System.Windows.Input.Keyboard]::Focus($letsGoBtn)
+                } else {
+                    [void]$rePickBtn.Focus()
+                    [void][System.Windows.Input.Keyboard]::Focus($rePickBtn)
+                }
+            } catch {}
             # Fallback: if opacity is still 0 after 500ms, force it visible
             $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
             $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
@@ -3445,6 +3476,13 @@ if (-not $NoRun) {
     switch ($Mode) {
         "/popup" {
             Show-PopupWindow
+        }
+        "/uninstall" {
+            # AG17-003: clean removal path for the context menu verb
+            Unregister-ContextMenu
+            [void][System.Windows.MessageBox]::Show(
+                "Daily Motivation context menu removed successfully.",
+                "Uninstall Complete", "OK", "Information")
         }
         "/setfolder" {
             if ($FolderPath -and (Test-Path $FolderPath -PathType Container)) {
