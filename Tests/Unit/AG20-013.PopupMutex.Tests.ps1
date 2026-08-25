@@ -106,4 +106,62 @@ Describe 'Show-PopupWindow mutex lifecycle (AG20-013)' -Skip:(-not $IsWindows) {
             $probe.Dispose()
         }
     }
+
+    It 'AC#2 (AG20-008): AbandonedMutexException is caught - Show-PopupWindow does not throw (AG20-013)' {
+        # Establish the mutex name first
+        Show-PopupWindow
+        $mutexName = $script:PopupMutexName
+        $mutexName | Should -Not -BeNullOrEmpty
+
+        # Simulate an abandoned mutex: acquire it in a background job (separate runspace)
+        # so when the job exits without ReleaseMutex, the OS marks it as abandoned
+        $job = Start-Job -ScriptBlock {
+            param($name)
+            $m = [System.Threading.Mutex]::new($false, $name)
+            $acquired = $m.WaitOne(500)
+            if ($acquired) {
+                # Hold it briefly then exit WITHOUT releasing (abandon)
+                Start-Sleep -Milliseconds 100
+                # Do NOT call $m.ReleaseMutex() - exit abandons it
+            }
+        } -ArgumentList $mutexName
+        # Wait for the job to hold and abandon the mutex
+        Wait-Job $job -Timeout 5 | Out-Null
+        Remove-Job $job -Force
+
+        # Give the OS a moment to mark the mutex as abandoned
+        Start-Sleep -Milliseconds 200
+
+        # Show-PopupWindow must handle AbandonedMutexException without throwing
+        { Show-PopupWindow } | Should -Not -Throw
+    }
+
+    It 'AC#1 (AG20-013): Show-PopupWindow releases mutex even when XAML load fails due to corrupted config path' {
+        # Write a valid PopupConfig but point it to an explorer_path that will cause
+        # the popup to exit via the "path missing" early return - this exercises the
+        # mutex release path in the catch/return handlers without requiring real WPF.
+        $fakeConfig = [ordered]@{
+            glyph         = "[+]"
+            title         = "Test"
+            body          = "Test body"
+            explorer_path = "C:\NonExistent_$(New-Guid)"
+            folder_name   = "NonExistent"
+            task_id       = "0000000000000000"
+        }
+        $fakeConfig | ConvertTo-Json | Set-Content -Path $script:PopupCfgPath -Encoding UTF8
+
+        # This should not throw even though the explorer path doesn't exist
+        { Show-PopupWindow } | Should -Not -Throw
+
+        # Mutex must be released after returning
+        $probe = [System.Threading.Mutex]::new($false, $script:PopupMutexName)
+        try {
+            $acquired = $probe.WaitOne(0)
+            $acquired | Should -Be $true -Because 'mutex must be released after Show-PopupWindow exits'
+            if ($acquired) { $probe.ReleaseMutex() }
+        }
+        finally {
+            $probe.Dispose()
+        }
+    }
 }
