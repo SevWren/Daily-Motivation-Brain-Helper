@@ -2,6 +2,7 @@ project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: _bmad-output/planning-artifacts/epic-sprint7-ux-lifecycle.md
 last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-25)"
 
 epics:
   - id: "epic-1"
@@ -30,7 +31,7 @@ epics:
         windows_only: false
         notes: "DismissBtn: Content='Dismiss for Today' -> 'Dismiss' with ToolTip. RePickBtn: 'Choose New Location' -> 'Re-Pick Folder' (matches CONTEXT.md domain term). UndoBtn unchanged. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
 
   - id: "epic-2"
     title: "Lifecycle Management"
@@ -44,4 +45,4 @@ epics:
         windows_only: false
         notes: "Added '/uninstall' to ValidateSet and switch block. Calls Unregister-ContextMenu then shows confirmation MessageBox. Linux-safe static analysis; no Windows gate needed."
     retrospective:
-      status: "not-started"
+      status: "complete"
