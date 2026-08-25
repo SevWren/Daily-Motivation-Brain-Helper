@@ -1,0 +1,88 @@
+---
+sprint: 14
+epic: "Epic 1: Task Scheduler Integration Test Coverage"
+story: "Story 1.2: SYSTEM Account Identity Constraint Tests"
+issue: "#159 AG20-002"
+priority: Critical
+platform: Windows-only (-Skip:(-not $IsWindows))
+started: 2026-08-25
+completed: 2026-08-25
+status: ready-for-windows-validation
+---
+
+# Sprint 14: SYSTEM Account Identity Constraint Tests
+
+## Story Summary
+Closes #159 AG20-002 (Critical)
+
+Add tests that simulate the SYSTEM account's APPDATA and registry constraints
+to catch scheduling failures under SYSTEM before deployment.
+
+## Acceptance Criteria
+
+1. **Given** `$env:APPDATA` is set to `C:\Windows\System32\config\systemprofile\AppData\Roaming` (SYSTEM path),
+   **When** `Initialize-AppData` is called,
+   **Then** the function either creates directories under that path or throws a descriptive error naming the failing operation (not a generic "Invalid Folder" error per CLAUDE.md WRONG 5).
+
+2. **Given** `Initialize-AppData` is called under the SYSTEM APPDATA path,
+   **When** the path is not writable (simulated via mock or temp read-only dir),
+   **Then** the error message includes the operation name and, where available, a Windows error code.
+
+## Implementation Plan
+
+1. Create new test file: Tests/Integration/AG20-002.SystemAccountConstraints.Tests.ps1
+2. Test AC#1: SYSTEM APPDATA path directory creation
+3. Test AC#2: Error messages include operation name and Windows error code
+4. Ensure tests are tagged `-Skip:(-not $IsWindows)`
+5. No live SYSTEM impersonation required - redirect $env:APPDATA in BeforeAll
+6. Verify with full test suite run
+
+## Testing Strategy
+
+- No live SYSTEM impersonation required
+- Redirect $env:APPDATA to SYSTEM path in BeforeAll
+- May need to simulate read-only directory for write failure tests
+- Must be `-Skip:(-not $IsWindows)`
+
+## Implementation Summary
+
+Created Tests/Integration/AG20-002.SystemAccountConstraints.Tests.ps1 with four tests
+covering SYSTEM account APPDATA path handling and error message quality:
+
+1. **AC#1 Test**: Initialize-AppData with SYSTEM APPDATA path
+   - Sets $env:APPDATA to C:\Windows\System32\config\systemprofile\AppData\Roaming
+   - Verifies function either succeeds or throws descriptive error
+   - Asserts error is NOT generic "Invalid Folder"
+   - Asserts error includes operation name (Initialize-AppData|Cannot create|Could not create)
+
+2. **AC#2 Writable path test**: SYSTEM path simulation with writable temp directory
+   - Creates temp SYSTEM-like profile structure
+   - Verifies successful directory creation
+   - Verifies all path variables (ConfigPath, PopupCfgPath, TasksPath, LogPath) are set correctly
+
+3. **AC#2 Error handling test**: Non-writable path simulation
+   - Creates read-only directory to simulate access denied
+   - Captures warning messages
+   - Verifies warning includes operation name
+   - Verifies fallback to TempDir mechanism works
+
+4. **Fallback test**: Complete fallback mechanism verification
+   - Uses invalid APPDATA path
+   - Mocks New-Item to fail for invalid path
+   - Verifies fallback to TempDir
+   - Verifies all config paths updated to fallback location
+
+All tests tagged -Skip:(-not $IsWindows) per CLAUDE.md mandate.
+
+## Windows Validation Required
+
+Per CLAUDE.md mandate: This issue (#159 AG20-002) may NOT be closed until a passing
+Windows 10/11 test run is posted as proof. Linux CI does not validate SYSTEM account
+path handling or Windows error codes.
+
+## Notes
+
+- CLAUDE.md WRONG 5: Error messages must name the failing operation and include Windows error code
+- Tests must verify descriptive error messages, not generic "Invalid Folder"
+- Requires Windows validation before closure per CLAUDE.md mandate
+- Tests use temp directories to simulate SYSTEM account paths (no elevation required)
