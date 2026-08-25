@@ -1,0 +1,37 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: inline
+last_updated: 2026-08-25T00:00:00Z
+
+closed_without_code:
+  - "104: AG7-014 code already handles tilde (GetTempPath fallback)"
+  - "102: Sprint 5 added InvalidOperationException + ManagementException catches"
+  - "93: Sprint 4 + IsWindowsPlatform fix guards DriveType"
+  - "91: Register-ContextMenu has IsWindowsPlatform guard + try/catch"
+  - "92: schedSvc -and short-circuit already prevents null deref"
+  - "98: EndBoundary is inside Windows-only platform branch"
+  - "89: PS property access case-insensitive on Windows (target platform)"
+  - "90: if ($config.folder_name) already simplified in prior sprint"
+  - "131: SnoozeDropBtn left-click is correct behavior for a dropdown chevron"
+
+epics:
+  - id: "epic-1"
+    title: "Validation and Platform Guards"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Platform-Aware Path Comparison in Duplicate Check"
+        status: "done"
+        github_issue: 94
+        severity: "Medium"
+        windows_only: false
+        notes: "Guard ToLowerInvariant() with $script:IsWindowsPlatform so Linux case-sensitive paths are compared correctly. Both normalizedInput and per-task dupPath guarded. Linux-safe."
+      - id: "story-1-2"
+        title: "Popup Config Field Null Fallbacks"
+        status: "done"
+        github_issue: 88
+        severity: "Medium"
+        windows_only: false
+        notes: "Added PSObject.Properties checks + safe defaults ([+], Daily Motivation, Time to get to work.) for glyph/title/body before setting WPF TextBlock.Text in Show-PopupWindow. Linux-safe."
+    retrospective:
+      status: "not-started"

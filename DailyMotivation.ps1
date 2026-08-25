@@ -804,17 +804,21 @@ function New-MotivationTask {
     # AG14-011: read tasks once here; reuse for both duplicate check and persistence below
     $tasksForDup = @(Get-TasksJson)
 
-    # Duplicate check - case-insensitive path, same date
+    # Duplicate check - case-insensitive path on Windows, case-sensitive on Linux
     # Read tasks directly from JSON WITHOUT syncing first to avoid false positives
     # where Sync-TaskStatuses marks tasks as DELETED due to temporary lookup failures
-    $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
+    # AG13-005: guard case-fold with platform check; Linux paths are case-sensitive
+    $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath)
+    if ($script:IsWindowsPlatform) { $normalizedInput = $normalizedInput.ToLowerInvariant() }
     if (-not $Force) {
         # AG14-010: foreach + break exits on first match rather than scanning all tasks
         $existingDup = $false
         foreach ($dup in $tasksForDup) {
             if ($null -eq $dup -or -not $dup.PSObject.Properties['folder_path']) { continue }
             if (-not $dup.folder_path) { continue }
-            if ([System.IO.Path]::GetFullPath($dup.folder_path).ToLowerInvariant() -ne $normalizedInput) { continue }
+            $dupPath = [System.IO.Path]::GetFullPath($dup.folder_path)
+            if ($script:IsWindowsPlatform) { $dupPath = $dupPath.ToLowerInvariant() }
+            if ($dupPath -ne $normalizedInput) { continue }
             if ($dup.status -ne "PENDING") { continue }
             try { if (([datetime]$dup.scheduled_time).Date -eq $TriggerTime.Date) { $existingDup = $true; break } } catch {}
         }
@@ -2907,9 +2911,13 @@ function Show-PopupWindow {
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
-        $glyphText.Text = Escape-XmlText $config.glyph
-        $titleText.Text = Escape-XmlText (Strip-MarkupText $config.title)
-        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $config.body)) -MaxLength 150
+        # AG12-023: fall back to safe defaults if config fields are absent or null
+        $safeGlyphVal = if ($config.PSObject.Properties['glyph']   -and $config.glyph)   { $config.glyph }   else { "[+]" }
+        $safeTitleVal = if ($config.PSObject.Properties['title']   -and $config.title)   { $config.title }   else { "Daily Motivation" }
+        $safeBodyVal  = if ($config.PSObject.Properties['body']    -and $config.body)    { $config.body }    else { "Time to get to work." }
+        $glyphText.Text = Escape-XmlText $safeGlyphVal
+        $titleText.Text = Escape-XmlText (Strip-MarkupText $safeTitleVal)
+        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $safeBodyVal)) -MaxLength 150
         if ($config.folder_name) {
             # UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
