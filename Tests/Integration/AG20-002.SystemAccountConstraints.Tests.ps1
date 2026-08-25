@@ -48,8 +48,12 @@ Describe 'AG20-002 SYSTEM Account Identity Constraints' -Skip:(-not $IsWindows) 
 
     BeforeEach {
         # Clean up any previous test directories
-        if ($script:AppDataDir -and (Test-Path $script:AppDataDir)) {
-            Remove-Item -Path $script:AppDataDir -Recurse -Force -ErrorAction SilentlyContinue
+        # Guard with Get-Variable to avoid StrictMode throw before AppDataDir is first set
+        $prevAppDir = if (Get-Variable -Name 'AppDataDir' -Scope 'Script' -ErrorAction SilentlyContinue) {
+            $script:AppDataDir
+        } else { $null }
+        if ($prevAppDir -and (Test-Path $prevAppDir)) {
+            Remove-Item -Path $prevAppDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 

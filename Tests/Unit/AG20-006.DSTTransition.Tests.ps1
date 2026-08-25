@@ -108,8 +108,8 @@ Describe 'Get-ScheduleTime - DST boundary safety (AG20-006)' {
             @{ default_trigger_hour = 2; task_warning_threshold = 5; schemaVersion = 1 }
         }
 
-        $result = $null
-        { $result = Get-ScheduleTime -TodayRadioControl $script:TodayControl } | Should -Not -Throw
+        # Call directly - if it throws the test fails with the exception; no scope-leak issue
+        $result = Get-ScheduleTime -TodayRadioControl $script:TodayControl
         $result | Should -Not -BeNullOrEmpty
         $result | Should -BeOfType [datetime]
         $result.Hour | Should -Be 2    # value stored as-typed; no DST correction applied
@@ -125,13 +125,12 @@ Describe 'Get-ScheduleTime - DST boundary safety (AG20-006)' {
         # EndBoundary must be a non-empty string
         $endBoundary | Should -Not -BeNullOrEmpty
 
-        # Must parse without throwing (parseable ISO 8601)
-        $parsed = $null
-        { $parsed = [datetime]::ParseExact(
+        # Must parse without throwing - call directly to avoid script-block scope issue
+        $parsed = [datetime]::ParseExact(
             $endBoundary,
             'yyyy-MM-ddTHH:mm:ss',
             [System.Globalization.CultureInfo]::InvariantCulture
-        ) } | Should -Not -Throw
+        )
 
         $parsed | Should -BeOfType [datetime]
         # EndBoundary should be 31 minutes after the ambiguous TriggerTime
