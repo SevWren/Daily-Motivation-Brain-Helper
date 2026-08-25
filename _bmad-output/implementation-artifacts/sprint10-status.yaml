@@ -2,6 +2,7 @@ project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: inline
 last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-25)"
 
 closed_without_code:
   - "104: AG7-014 code already handles tilde (GetTempPath fallback)"
@@ -34,4 +35,4 @@ epics:
         windows_only: false
         notes: "Added PSObject.Properties checks + safe defaults ([+], Daily Motivation, Time to get to work.) for glyph/title/body before setting WPF TextBlock.Text in Show-PopupWindow. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
