@@ -5,10 +5,10 @@
 
 .DESCRIPTION
     Verifies Invoke-FolderScheduling behavior when a UNC path is:
-      1. Reachable — schedules normally and sets IsNetworkPath = $true
-      2. Unreachable (Test-Path throws IOException) — returns Success = $false or does not
+      1. Reachable  -  schedules normally and sets IsNetworkPath = $true
+      2. Unreachable (Test-Path throws IOException)  -  returns Success = $false or does not
          propagate an unhandled exception
-      3. Gone (Test-Path returns $false) — behaves consistently with any other missing folder
+      3. Gone (Test-Path returns $false)  -  behaves consistently with any other missing folder
 
     Linux-compatible tests use HeadlessPlatform + Invoke-FolderScheduling.
     Windows-only tests (New-MotivationTask) are guarded with -Skip:(-not $IsWindows).
@@ -27,7 +27,7 @@ AfterAll {
     }
 }
 
-Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag "Unit", "NetworkPath" {
+Describe "Invoke-FolderScheduling  -  UNC path network failure (AG20-020)" -Tag "Unit", "NetworkPath" {
 
     BeforeEach {
         if (Test-Path $script:TestAppData) {
@@ -66,7 +66,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
         }
     }
 
-    Context "UNC path becomes unavailable — Test-Path throws (simulated network timeout)" {
+    Context "UNC path becomes unavailable  -  Test-Path throws (simulated network timeout)" {
         It "does not throw an unhandled exception when Test-Path raises IOException for a UNC path" {
             # Simulate network timeout / path suddenly unreachable
             Mock Test-Path {
@@ -82,7 +82,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
             $script:UncThrowResult | Should -Not -BeNullOrEmpty
         }
 
-        It "returns Success = false or proceeds gracefully — never an unhandled exception — when Test-Path throws for UNC path" {
+        It "returns Success = false or proceeds gracefully  -  never an unhandled exception  -  when Test-Path throws for UNC path" {
             # Per issue #173: acceptable outcomes are (a) Success=$false with error message,
             # or (b) graceful handling with no unhandled exception.
             Mock Test-Path {
@@ -104,7 +104,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
         }
     }
 
-    Context "UNC path gone — Test-Path returns false (simulated share removal)" {
+    Context "UNC path gone  -  Test-Path returns false (simulated share removal)" {
         It "does not throw an unhandled exception when Test-Path returns false for a UNC path" {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
 
@@ -133,7 +133,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
             { $script:LocalConsistResult = Invoke-FolderScheduling -FolderPath "/nonexistent/path/xyz"  -TriggerTime (Get-Date).AddHours(1) } |
                 Should -Not -Throw
 
-            # Both must return a result object — no silent nulls
+            # Both must return a result object  -  no silent nulls
             $script:UncConsistResult   | Should -Not -BeNullOrEmpty
             $script:LocalConsistResult | Should -Not -BeNullOrEmpty
         }
@@ -160,7 +160,7 @@ Describe "Invoke-FolderScheduling — UNC path network failure (AG20-020)" -Tag 
     }
 }
 
-Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows only)" `
+Describe "New-MotivationTask  -  UNC path network failure (AG20-020, Windows only)" `
     -Tag "Unit", "NetworkPath" `
     -Skip:(-not $IsWindows) {
 
@@ -172,12 +172,16 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
         Initialize-AppData
         $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-        Mock Register-ScheduledTask { return $null }
-        Mock Unregister-ScheduledTask { }
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
+        Mock Register-ScheduledTask {
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
+        }
+        Mock Unregister-ScheduledTask {
+            param($TaskName, $Confirm)
+        }
         Mock Get-ScheduledTask {
             param($TaskName)
-            # Return empty for wildcard (prevents Sync-TaskStatuses phantom recovery).
-            # Return null for specific task (no collision, no "still exists" after unregister).
             if ($TaskName -eq 'DailyMotivation_*') { return @() }
             return $null
         }
@@ -211,7 +215,7 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
         }
     }
 
-    Context "UNC path becomes unavailable — Test-Path throws (simulated network timeout)" {
+    Context "UNC path becomes unavailable  -  Test-Path throws (simulated network timeout)" {
         It "does not throw an unhandled exception when Test-Path raises IOException for a UNC path" {
             Mock Test-Path {
                 throw [System.IO.IOException]::new("Network path unreachable")
@@ -236,7 +240,7 @@ Describe "New-MotivationTask — UNC path network failure (AG20-020, Windows onl
 
     }
 
-    Context "UNC path gone — Test-Path returns false" {
+    Context "UNC path gone  -  Test-Path returns false" {
         It "does not throw when Test-Path returns false for a UNC path" {
             Mock Test-Path { return $false } -ParameterFilter { $Path -like '\\*' }
 

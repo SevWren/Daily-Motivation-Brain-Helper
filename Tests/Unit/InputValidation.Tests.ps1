@@ -17,29 +17,19 @@ BeforeAll {
     $script:ExePath = "C:\Test\DailyMotivation.exe"
 
     # Mock Windows Task Scheduler cmdlets only on Windows
+    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
     if ($IsWindows) {
-        $script:InputValMockedTasks = @{}
-
         Mock Register-ScheduledTask {
-            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-            $script:InputValMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
-            return $null
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
         }
         Mock Unregister-ScheduledTask {
             param($TaskName, $Confirm)
-            if ($script:InputValMockedTasks.ContainsKey($TaskName)) {
-                $script:InputValMockedTasks.Remove($TaskName)
-            }
         }
         Mock Get-ScheduledTask {
             param($TaskName)
-            if ($TaskName -eq "DailyMotivation_*") {
-                return @($script:InputValMockedTasks.Values)
-            }
-            if ($script:InputValMockedTasks.ContainsKey($TaskName)) {
-                return $script:InputValMockedTasks[$TaskName]
-            }
-            throw "Task not found: $TaskName"
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
         }
     }
 }

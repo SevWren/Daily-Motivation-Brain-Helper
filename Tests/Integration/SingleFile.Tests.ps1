@@ -165,46 +165,23 @@ Describe 'Mode switching and config persistence (AG8-026)' {
     }
 
     It 'Should verify tasks.json persists across mode switches' -Skip:(-not $IsWindows) {
-        # Simulate main mode creating a task
-        $script:IntegrationMockedTasks = @{}
-
-        # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return
-        # real CimInstances. -RemoveParameterValidation only strips ValidateXxx attributes, NOT type
-        # constraints — passing PSCustomObjects still fails with argument-transformation errors.
-        # Follow the AG8-007 pattern: let the real helper cmdlets run, only mock Register-ScheduledTask
-        # to prevent actual Task Scheduler writes.
+        # AG8-007: let real helper cmdlets run, only mock Register/Unregister/Get-ScheduledTask
+        # Register returns task object (AG5-001 verification uses return value)
         Mock Register-ScheduledTask {
-            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force)
-            # Track registered task
-            $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
-                TaskName = $TaskName
-                Triggers = @($Trigger)
-            }
-            return $null
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
         }
         Mock Get-ScheduledTask {
-            param($TaskName, $ErrorAction)
-            if ($TaskName -eq "DailyMotivation_*") {
-                return @($script:IntegrationMockedTasks.Values)
-            }
-            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
-                return $script:IntegrationMockedTasks[$TaskName]
-            }
-            throw "Task not found: $TaskName"
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
         }
         Mock Unregister-ScheduledTask {
             param($TaskName, $Confirm)
-            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
-                $script:IntegrationMockedTasks.Remove($TaskName)
-            }
         }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
         $result = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime ((Get-Date).AddHours(2))
-        Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: '$($result['Error'])'"
-        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
-        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
 
         # Verify task persists
@@ -223,36 +200,19 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     # Windows-only: Requires Task Scheduler cmdlets
 
     BeforeEach {
-        # Setup for integration tests with stateful mock tracking
-        $script:IntegrationMockedTasks = @{}
-
-        # Only mock the Task Scheduler registry/persistence cmdlets, not the object creation cmdlets.
-        # New-ScheduledTaskAction, New-ScheduledTaskTrigger, New-ScheduledTaskSettingsSet, and
-        # New-ScheduledTaskPrincipal are native Windows cmdlets that work correctly - don't mock them.
+        # AG8-007: mock only Task Scheduler persistence cmdlets.
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask).
         Mock Register-ScheduledTask {
-            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-            # Track registered task with Triggers property so Sync-TaskStatuses can read it
-            $script:IntegrationMockedTasks[$TaskName] = [PSCustomObject]@{
-                TaskName = $TaskName
-                Triggers = @($Trigger)
-            }
-            return $null
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready'; Triggers = @($Trigger) }
         }
         Mock Unregister-ScheduledTask {
             param($TaskName, $Confirm)
-            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
-                $script:IntegrationMockedTasks.Remove($TaskName)
-            }
         }
         Mock Get-ScheduledTask {
-            param($TaskName, $ErrorAction)
-            if ($TaskName -eq "DailyMotivation_*") {
-                return @($script:IntegrationMockedTasks.Values)
-            }
-            if ($script:IntegrationMockedTasks.ContainsKey($TaskName)) {
-                return $script:IntegrationMockedTasks[$TaskName]
-            }
-            throw "Task not found: $TaskName"
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
         }
         $script:ExePath = 'C:\Test\DailyMotivation.exe'
 
@@ -266,10 +226,6 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
     It 'Should complete full task lifecycle: create, list, remove' {
         # Create task
         $result = New-MotivationTask -FolderPath 'C:\Projects\TestApp' -TriggerTime ((Get-Date).AddHours(3))
-        Write-Host "DEBUG - Result.Success: $($result.Success)"
-        Write-Host "DEBUG - Result.Error: '$($result['Error'])'"
-        Write-Host "DEBUG - Result.IsDuplicate: $($result.IsDuplicate)"
-        Write-Host "DEBUG - Result.TaskId: $($result.TaskId)"
         $result.Success | Should -Be $true
         $taskId = $result.TaskId
 
@@ -292,9 +248,6 @@ Describe 'Integration scenario - Full lifecycle (AG8-007)' -Skip:(-not $IsWindow
 
         # Create first task
         $r1 = New-MotivationTask -FolderPath 'C:\TestFolder' -TriggerTime $triggerTime
-        Write-Host "DEBUG - r1.Success: $($r1.Success)"
-        Write-Host "DEBUG - r1.IsDuplicate: $($r1.IsDuplicate)"
-        Write-Host "DEBUG - r1.TaskId: $($r1.TaskId)"
         $r1.Success | Should -Be $true
 
         # Attempt duplicate

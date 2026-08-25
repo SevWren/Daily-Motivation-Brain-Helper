@@ -4,7 +4,7 @@
     AG20-009: Verify that New-MotivationTask passes an ExePath containing spaces
     to New-ScheduledTaskAction verbatim (no extra quoting applied by the caller).
 .NOTES
-    Windows-only — Task Scheduler cmdlets do not exist on Linux.
+    Windows-only  -  Task Scheduler cmdlets do not exist on Linux.
     The -Execute parameter of New-ScheduledTaskAction is designed to receive
     the bare executable path; Task Scheduler wraps it internally when building
     the command line. DailyMotivation.ps1 must NOT double-quote the path before
@@ -31,28 +31,25 @@ BeforeAll {
 
     # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return real
     # CimInstances. Mocking any of them with PSCustomObjects and -RemoveParameterValidation fails
-    # because that flag strips ValidateXxx attributes only — NOT type constraints.
+    # because that flag strips ValidateXxx attributes only  -  NOT type constraints.
     # Let all helper cmdlets run for real.
     #
     # Capture Execute/Arguments from Register-ScheduledTask instead: the real CIM action object
     # has .Execute and .Arguments properties that reflect exactly what DailyMotivation.ps1 passed.
     $script:CapturedRegistrations = @()
-    $script:MockedTasks = @{}
+    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
     Mock Register-ScheduledTask {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
         $script:CapturedRegistrations += [PSCustomObject]@{
             ActionExecute   = $Action.Execute
             ActionArguments = $Action.Arguments
         }
-        $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
-        return $null
+        return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
     }
+    # Get-ScheduledTask: collision detection only; return $null = no collision
     Mock Get-ScheduledTask {
-        param($TaskName, $ErrorAction)
-        if ($TaskName -eq 'DailyMotivation_*') { return @($script:MockedTasks.Values) }
-        if ($script:MockedTasks.ContainsKey($TaskName)) {
-            return $script:MockedTasks[$TaskName]
-        }
+        param($TaskName)
+        if ($TaskName -eq 'DailyMotivation_*') { return @() }
         return $null
     }
     Mock Unregister-ScheduledTask {}
@@ -67,17 +64,16 @@ AfterAll {
     }
 }
 
-Describe 'AG20-009 — ExePath with spaces in New-MotivationTask' -Skip:(-not $IsWindows) {
+Describe 'AG20-009  -  ExePath with spaces in New-MotivationTask' -Skip:(-not $IsWindows) {
 
     BeforeEach {
-        # Reset captured registrations and mocked task registry for each test.
+        # Reset captured registrations for each test.
         $script:CapturedRegistrations = @()
-        $script:MockedTasks           = @{}
 
         # Reset tasks.json to empty so duplicate-detection does not interfere.
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
 
-        # Override ExePath to a path that contains spaces — the core of this issue.
+        # Override ExePath to a path that contains spaces  -  the core of this issue.
         $script:OriginalExePath = $script:ExePath
         $script:ExePath = 'C:\Program Files\Daily Motivation\DailyMotivation.exe'
     }

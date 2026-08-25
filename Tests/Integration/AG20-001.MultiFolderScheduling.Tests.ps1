@@ -18,21 +18,19 @@ BeforeAll {
     $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Multi_$(New-Guid)"
     Initialize-AppData
     $script:ExePath = 'C:\Test\DailyMotivation.exe'
-    $script:MockedTasks = @{}
+    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
     Mock Register-ScheduledTask {
-        param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,$Force,$ErrorAction)
-        $script:MockedTasks[$TaskName] = [PSCustomObject]@{ TaskName=$TaskName; Triggers=@($Trigger) }
-        return $null
+        param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,[switch]$Force)
+        return [PSCustomObject]@{ TaskName=$TaskName; State='Ready'; Triggers=@($Trigger) }
     }
     Mock Unregister-ScheduledTask {
         param($TaskName,$Confirm)
-        if ($script:MockedTasks.ContainsKey($TaskName)) { $script:MockedTasks.Remove($TaskName) }
     }
+    # Get-ScheduledTask: collision detection only; return $null = no collision
     Mock Get-ScheduledTask {
-        param($TaskName,$ErrorAction)
-        if ($TaskName -eq 'DailyMotivation_*') { return @($script:MockedTasks.Values) }
-        if ($script:MockedTasks.ContainsKey($TaskName)) { return $script:MockedTasks[$TaskName] }
-        throw "Task not found: $TaskName"
+        param($TaskName)
+        if ($TaskName -eq 'DailyMotivation_*') { return @() }
+        return $null
     }
 }
 
@@ -45,7 +43,6 @@ AfterAll {
 Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) {
 
     BeforeEach {
-        $script:MockedTasks = @{}
         $script:AppDir = Join-Path $env:APPDATA 'DailyMotivationBrainHelper'
         if (Test-Path $script:AppDir) {
             Remove-Item -Path $script:AppDir -Recurse -Force
@@ -162,7 +159,7 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
         $raw = Get-Content -Path $tasksJsonPath -Raw
         $raw | Should -Not -BeNullOrEmpty
 
-        # ConvertFrom-Json throws on invalid JSON — this assertion catches corruption
+        # ConvertFrom-Json throws on invalid JSON  -  this assertion catches corruption
         { $raw | ConvertFrom-Json } | Should -Not -Throw
 
         $parsed = $raw | ConvertFrom-Json
@@ -190,7 +187,7 @@ Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) 
         $rDupe.Success    | Should -Be $false
         $rDupe.IsDuplicate | Should -Be $true
 
-        # Count must remain at 3 — duplicate was rejected
+        # Count must remain at 3  -  duplicate was rejected
         $tasks = Get-MotivationTasks
         $tasks.Count | Should -Be 3
     }

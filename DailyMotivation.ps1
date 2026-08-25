@@ -957,12 +957,13 @@ function New-MotivationTask {
                 Description = $safeDescription
                 Force       = $true
             }
-            Register-ScheduledTask @registerParams -ErrorAction Stop | Out-Null
-            # AG5-001: verify the task was actually created in the OS
-            $verifiedTask = $null
-            try { $verifiedTask = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop } catch {}
-            if (-not $verifiedTask) {
-                return @{ Success = $false; TaskId = $null; IsDuplicate = $false; Error = "OS task registration reported success but task '$taskName' not found (silent failure)" }
+            # AG5-001: Register and verify in one step via return value.
+            # Register-ScheduledTask returns the task object on success; $null indicates
+            # a silent failure. This avoids a cross-call Get-ScheduledTask dependency.
+            $registeredTask = Register-ScheduledTask @registerParams -ErrorAction Stop
+            if (-not $registeredTask) {
+                return @{ Success = $false; TaskId = $null; IsDuplicate = $false
+                          Error = "OS task registration returned null for '$taskName' (silent failure)" }
             }
         }
         catch {
@@ -995,7 +996,7 @@ function New-MotivationTask {
                 }
                 default {
                     return @{ Success = $false; TaskId = $null; IsDuplicate = $false
-                              Error = ("OS task registration failed (HResult 0x{0:X8}): $errorMsg" -f $hResult) }
+                              Error = "OS task registration failed (HResult 0x$($hResult.ToString('X8'))): $errorMsg" }
                 }
             }
         }

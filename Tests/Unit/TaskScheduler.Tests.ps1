@@ -40,13 +40,10 @@ BeforeAll {
     # Mock overrides in Context/It blocks are cleaned up in AfterEach to restore baseline.
     # This prevents test pollution where one test's mock affects subsequent tests.
 
-    # Mock Windows Task Scheduler cmdlets so tests run without admin rights
-    # Mock Register-ScheduledTask at the highest level to bypass CimInstance type validation
-    # Real Task Scheduler cmdlets return CimInstance objects, which cannot be easily mocked.
-    # By mocking Register-ScheduledTask directly, we bypass parameter type validation and
-    # focus on testing the business logic (JSON persistence, duplicate detection, etc.)
-    # Track registered tasks in script scope for stateful mocking
-    $script:MockedTasks = @{}
+    # Mock Windows Task Scheduler cmdlets so tests run without admin rights.
+    # Register-ScheduledTask returns the task object on success (AG5-001 verification
+    # now uses the return value, so mocks must return a non-null object).
+    # Get-ScheduledTask is only used for collision detection (return $null = no collision).
 
     # AG8-001: Add -Verifiable to enable mock call verification
     Mock Register-ScheduledTask -Verifiable {
@@ -59,35 +56,23 @@ BeforeAll {
             $Description,
             [switch]$Force
         )
-        # Track registered task for Get-ScheduledTask mock
-        $script:MockedTasks[$TaskName] = [PSCustomObject]@{
+        # Return a task object: AG5-001 verification checks the return value, not a
+        # separate Get-ScheduledTask call. Returning $null would fail verification.
+        return [PSCustomObject]@{
             TaskName = $TaskName
-            State = [PSCustomObject]@{ State = 'Ready' }
+            State    = [PSCustomObject]@{ State = 'Ready' }
             Triggers = @($Trigger)
         }
-
-        return $null
     }
     # AG8-003: Add -Verifiable to Unregister mock for validation
     Mock Unregister-ScheduledTask -Verifiable {
         param($TaskName, $Confirm)
-        # Remove from tracked tasks
-        if ($script:MockedTasks.ContainsKey($TaskName)) {
-            $script:MockedTasks.Remove($TaskName)
-        }
     }
-    # Mock Get-ScheduledTask - handle both specific task lookups and wildcard queries
-    # - For specific task names: return tracked task or throw if not found
-    # - For wildcard "DailyMotivation_*": return all tracked tasks
-    # Note: -ErrorAction is a CommonParameter and cannot be captured in Pester mocks
+    # Get-ScheduledTask: used only for task-name collision detection.
+    # Return $null for specific names (no collision) and empty array for wildcard.
     Mock Get-ScheduledTask {
         param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") {
-            return @($script:MockedTasks.Values)
-        }
-        if ($script:MockedTasks.ContainsKey($TaskName)) {
-            return $script:MockedTasks[$TaskName]
-        }
+        if ($TaskName -eq "DailyMotivation_*") { return @() }
         return $null
     }
 }
@@ -106,7 +91,6 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
-        $script:MockedTasks = @{}
     }
 
     Context 'When creating a new task' {
@@ -200,14 +184,6 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
                 param($config)
                 $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-                $taskName = "DailyMotivation_$taskId"
-                # Directly insert into MockedTasks  -  ScriptMethods bypass Pester mock scope
-                # so calling Register-ScheduledTask here would invoke the real cmdlet.
-                $script:MockedTasks[$taskName] = [PSCustomObject]@{
-                    TaskName = $taskName
-                    State    = [PSCustomObject]@{ State = 'Ready' }
-                    Triggers = @()
-                }
                 return @{ Success = $true; TaskId = $taskId }
             }
         }
@@ -395,8 +371,11 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
         }
 
         AfterEach {
-            # Restore mocks to defaults
-            Mock Register-ScheduledTask { return $null }
+            # Restore mocks to defaults (Register must return task object for AG5-001 verification)
+            Mock Register-ScheduledTask {
+                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+                return [PSCustomObject]@{ TaskName = $TaskName; State = [PSCustomObject]@{ State = 'Ready' }; Triggers = @($Trigger) }
+            }
             Mock Save-TasksJson {
                 param([object[]]$Tasks)
                 $path     = $script:TasksPath
@@ -473,87 +452,52 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
 
     Context 'Trigger timing parameters passed to Register-ScheduledTask (AG20-011)' {
         # Override the global mock to also capture $Settings for inspection.
-        BeforeAll {
-            $script:CapturedSettings = $null
-            Mock Register-ScheduledTask -Verifiable {
-                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-                $script:MockedTasks[$TaskName] = [PSCustomObject]@{
-                    TaskName = $TaskName
-                    State    = [PSCustomObject]@{ State = 'Ready' }
-                    Triggers = @($Trigger)
-                    Settings = $Settings
-                }
-                $script:CapturedSettings = $Settings
-                return $null
-            }
-        }
-
-        AfterAll {
-            # Restore the global mock
-            Mock Register-ScheduledTask -Verifiable {
-                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-                $script:MockedTasks[$TaskName] = [PSCustomObject]@{
-                    TaskName = $TaskName
-                    State    = [PSCustomObject]@{ State = 'Ready' }
-                    Triggers = @($Trigger)
-                }
-                return $null
-            }
-        }
-
         It 'Should pass StartBoundary matching TriggerTime to Register-ScheduledTask' {
-            # [datetime]::new() produces exact second-boundary values (no sub-second ticks).
-            # Get-Date -Second 0 retains sub-second ticks from the current clock, which
-            # would cause a mismatch because StartBoundary is second-precision only.
             $triggerTime = [datetime]::new(2026, 12, 25, 14, 0, 0)
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
 
-            $taskName        = "DailyMotivation_$($result.TaskId)"
-            $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
-            $capturedTrigger | Should -Not -BeNullOrEmpty
-
-            # New-ScheduledTaskTrigger stores StartBoundary as ISO 8601, either in
-            # local time ('2026-12-25T14:00:00') or UTC ('2026-12-25T20:00:00Z').
-            # Parse with RoundtripKind and normalise both sides to UTC before comparing.
-            $stored = [datetime]::Parse(
-                $capturedTrigger.StartBoundary,
-                [System.Globalization.CultureInfo]::InvariantCulture,
-                [System.Globalization.DateTimeStyles]::RoundtripKind)
-            $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
-            $expectedUtc = $triggerTime.ToUniversalTime()
-            $storedUtc | Should -Be $expectedUtc
+            # Verify trigger via -ParameterFilter (no cross-mock state sharing needed)
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                if (-not $Trigger -or -not $Trigger.StartBoundary) { return $false }
+                $stored = [datetime]::Parse(
+                    $Trigger.StartBoundary,
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind)
+                $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
+                $expectedUtc = $triggerTime.ToUniversalTime()
+                $storedUtc -eq $expectedUtc
+            }
         }
 
         It 'Should set EndBoundary 31 minutes after TriggerTime' {
-            # [datetime]::new() avoids sub-second tick mismatch (see StartBoundary test).
             $triggerTime = [datetime]::new(2026, 12, 25, 14, 0, 0)
-
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $triggerTime
             $result.Success | Should -Be $true
 
-            $taskName        = "DailyMotivation_$($result.TaskId)"
-            $capturedTrigger = $script:MockedTasks[$taskName].Triggers[0]
-
-            $stored = [datetime]::Parse(
-                $capturedTrigger.EndBoundary,
-                [System.Globalization.CultureInfo]::InvariantCulture,
-                [System.Globalization.DateTimeStyles]::RoundtripKind)
-            $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
-            $expectedUtc = $triggerTime.AddMinutes(31).ToUniversalTime()
-            $storedUtc | Should -Be $expectedUtc
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                if (-not $Trigger -or -not $Trigger.EndBoundary) { return $false }
+                $stored = [datetime]::Parse(
+                    $Trigger.EndBoundary,
+                    [System.Globalization.CultureInfo]::InvariantCulture,
+                    [System.Globalization.DateTimeStyles]::RoundtripKind)
+                $storedUtc   = if ($stored.Kind -eq [System.DateTimeKind]::Utc) { $stored } else { $stored.ToUniversalTime() }
+                $expectedUtc = $triggerTime.AddMinutes(31).ToUniversalTime()
+                $storedUtc -eq $expectedUtc
+            }
         }
 
         It 'Should pass a non-null Settings object to Register-ScheduledTask' {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
             $result.Success | Should -Be $true
-            $script:CapturedSettings | Should -Not -BeNullOrEmpty
+            Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
+                $null -ne $Settings
+            }
         }
 
         It 'Should pass StartWhenAvailable=true in task settings' {
             $result = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
             $result.Success | Should -Be $true
-            # Inspect via Register-ScheduledTask -ParameterFilter
             Should -Invoke Register-ScheduledTask -Times 1 -ParameterFilter {
                 $Settings.StartWhenAvailable -eq $true
             }
@@ -568,7 +512,6 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
             New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
-        $script:MockedTasks = @{}
 
         # Inject platform adapter to prevent Sync-TaskStatuses from interfering with Get-MotivationTasks tests.
         # ScriptMethod is required because DailyMotivation.ps1 calls via method-invocation syntax.
@@ -576,21 +519,10 @@ Describe 'Get-MotivationTasks' -Skip:(-not $IsWindows) {
         $script:Platform | Add-Member -MemberType ScriptMethod -Name 'ScheduleTask' -Value {
             param($config)
             $taskId = [System.Guid]::NewGuid().ToString("N").Substring(0, 16)
-            $taskName = "DailyMotivation_$taskId"
-            # Directly insert into MockedTasks  -  ScriptMethods bypass Pester mock scope.
-            $script:MockedTasks[$taskName] = [PSCustomObject]@{
-                TaskName = $taskName
-                State    = [PSCustomObject]@{ State = 'Ready' }
-                Triggers = @()
-            }
             return @{ Success = $true; TaskId = $taskId }
         }
         $script:Platform | Add-Member -MemberType ScriptMethod -Name 'UnscheduleTask' -Value {
             param($taskId)
-            $taskName = "DailyMotivation_$taskId"
-            if ($script:MockedTasks.ContainsKey($taskName)) {
-                $script:MockedTasks.Remove($taskName)
-            }
         }
     }
 
@@ -661,10 +593,8 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
             New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
         }
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
-        $script:MockedTasks = @{}
-        # No Platform adapter here: use the real Windows path so that
-        # Unregister-ScheduledTask goes through the Pester mock (BeforeAll scope)
-        # and both task removal and -Invoke assertions work correctly.
+        # No Platform adapter: use the Windows path so Unregister-ScheduledTask goes
+        # through the Pester mock (BeforeAll scope) for -Invoke assertions.
         $script:Platform = $null
     }
 

@@ -27,35 +27,26 @@ BeforeAll {
     # Override ExePath for task creation
     $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    # Track registered tasks for stateful mocking
-    $script:SecurityMockedTasks = @{}
-
-    # Mock Windows Task Scheduler cmdlets
+    # Mock Windows Task Scheduler cmdlets.
+    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask).
     Mock Register-ScheduledTask {
         param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-        $script:SecurityMockedTasks[$TaskName] = [PSCustomObject]@{
-            TaskName = $TaskName
+        return [PSCustomObject]@{
+            TaskName  = $TaskName
             Principal = [PSCustomObject]@{
                 RunLevel = if ($Principal) { $Principal.RunLevel } else { 'Limited' }
             }
-            Triggers = @($Trigger)
+            Triggers  = @($Trigger)
+            State     = 'Ready'
         }
-        return $null
     }
     Mock Unregister-ScheduledTask {
         param($TaskName, $Confirm)
-        if ($script:SecurityMockedTasks.ContainsKey($TaskName)) {
-            $script:SecurityMockedTasks.Remove($TaskName)
-        }
     }
+    # Get-ScheduledTask: collision detection only; return $null = no collision
     Mock Get-ScheduledTask {
         param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") {
-            return @($script:SecurityMockedTasks.Values)
-        }
-        if ($script:SecurityMockedTasks.ContainsKey($TaskName)) {
-            return $script:SecurityMockedTasks[$TaskName]
-        }
+        if ($TaskName -eq "DailyMotivation_*") { return @() }
         return $null
     }
 }
@@ -155,8 +146,7 @@ Describe 'AG10-003: No Path Validation Before Registry/Task Storage' -Skip:(-not
 
 Describe 'AG10-004: Task Scheduler RunLevel Elevated for Network Paths' -Skip:(-not $IsWindows) {
     BeforeEach {
-        # Reset mock state and tasks.json before each test
-        $script:SecurityMockedTasks = @{}
+        # Reset tasks.json before each test
         '[]' | Set-Content $script:TasksPath -Encoding UTF8 -Force
         # No Platform adapter: test through real Windows path so RunLevel is actually set
         # by New-ScheduledTaskPrincipal and stored via Register-ScheduledTask mock.
@@ -290,7 +280,7 @@ Describe 'AG10-012: Mutex Name Lacks User Isolation' -Skip:(-not $IsWindows) {
             # Show-PopupWindow computes and exposes $script:PopupMutexName at call time.
             # Call it via a no-op path so the name is computed without opening a real window.
             # We test the naming convention by checking the base name alone never satisfies
-            # the plain-name pattern — i.e., the name must carry _USERNAME_SESSIONID suffix.
+            # the plain-name pattern  -  i.e., the name must carry _USERNAME_SESSIONID suffix.
 
             # Read the actual mutex name from the script-level variable populated by Show-PopupWindow.
             # Simulate the name computation directly (same logic as production code).
