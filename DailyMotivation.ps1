@@ -795,22 +795,24 @@ function New-MotivationTask {
 
     try {
 
+    # AG14-011: read tasks once here; reuse for both duplicate check and persistence below
+    $tasksForDup = @(Get-TasksJson)
+
     # Duplicate check - case-insensitive path, same date
     # Read tasks directly from JSON WITHOUT syncing first to avoid false positives
     # where Sync-TaskStatuses marks tasks as DELETED due to temporary lookup failures
     $normalizedInput = [System.IO.Path]::GetFullPath($FolderPath).ToLowerInvariant()
     if (-not $Force) {
-        $existing = Get-MotivationTasks | Where-Object {
-            # Check property exists first (guard against malformed/legacy task objects)
-            if ($null -eq $_ -or -not $_.PSObject.Properties['folder_path']) { return $false }
-            if (-not $_.folder_path) { return $false }
-            if ([System.IO.Path]::GetFullPath($_.folder_path).ToLowerInvariant() -ne $normalizedInput) { return $false }
-            if ($_.status -ne "PENDING") { return $false }
-            $dateMatch = $false
-            try { $dateMatch = ([datetime]$_.scheduled_time).Date -eq $TriggerTime.Date } catch {}
-            return $dateMatch
+        # AG14-010: foreach + break exits on first match rather than scanning all tasks
+        $existingDup = $false
+        foreach ($dup in $tasksForDup) {
+            if ($null -eq $dup -or -not $dup.PSObject.Properties['folder_path']) { continue }
+            if (-not $dup.folder_path) { continue }
+            if ([System.IO.Path]::GetFullPath($dup.folder_path).ToLowerInvariant() -ne $normalizedInput) { continue }
+            if ($dup.status -ne "PENDING") { continue }
+            try { if (([datetime]$dup.scheduled_time).Date -eq $TriggerTime.Date) { $existingDup = $true; break } } catch {}
         }
-        if ($existing) {
+        if ($existingDup) {
             return @{ Success = $false; TaskId = $null; IsDuplicate = $true }
         }
     }
@@ -1010,7 +1012,8 @@ function New-MotivationTask {
         [DateTime]::SpecifyKind($TriggerTime, [System.DateTimeKind]::Local)
     } else { $TriggerTime }
 
-    $tasks   = @(Get-TasksJson)
+    # AG14-011: reuse the read from the duplicate-check phase above (no second disk read)
+    $tasks   = $tasksForDup
     $newTask = [PSCustomObject]@{
         task_id        = $taskId
         task_name      = $taskName
@@ -1064,9 +1067,16 @@ function Sync-TaskStatuses {
     $tasks = @(Get-TasksJson)
     $changed = $false
 
+    # AG14-019: build $knownNames in the same pass as the DELETED sweep (single enumeration)
+    $knownNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
     # Direction 1: JSON → OS Scheduler  -  mark tasks DELETED if OS task is gone
     foreach ($t in $tasks) {
         if ($null -eq $t -or -not $t.PSObject.Properties) { continue }
+        # Collect task_name for Direction-2 duplicate detection in the same pass
+        if ($t.PSObject.Properties['task_name'] -and $t.task_name) {
+            [void]$knownNames.Add($t.task_name)
+        }
         if ($t.status -eq "PENDING") {
             try {
 
@@ -1104,7 +1114,9 @@ function Sync-TaskStatuses {
     # Direction 2: OS Scheduler → JSON  -  recover orphaned OS tasks missing from tasks.json
     # This handles the case where Register-ScheduledTask succeeded but Save-TasksJson failed,
     # leaving an OS task with no corresponding record in tasks.json.
-    $knownNames = @($tasks | Where-Object { $null -ne $_ -and $_.PSObject.Properties['task_name'] } | ForEach-Object { $_.task_name })
+    # $knownNames was built in the Direction-1 loop above (AG14-019: single enumeration).
+    # AG14-020: compile description regex once outside the loop
+    $descRegex = [regex]::new('^Daily Motivation Brain Helper - (.+)$')
     try {
         $osTasks = @(Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue)
     }
@@ -1112,13 +1124,14 @@ function Sync-TaskStatuses {
 
     foreach ($osTask in $osTasks) {
         if ($null -eq $osTask -or -not $osTask.TaskName) { continue }
-        if ($knownNames -contains $osTask.TaskName) { continue }
+        if ($knownNames.Contains($osTask.TaskName)) { continue }
 
         # Parse folder_path from Description: "Daily Motivation Brain Helper - {FolderPath}"
         $folderPath = ''
         $taskDescription = if ($osTask.PSObject.Properties['Description']) { $osTask.Description } else { '' }
-        if ($taskDescription -match '^Daily Motivation Brain Helper - (.+)$') {
-            $folderPath = $Matches[1].Trim()
+        $descMatch = $descRegex.Match($taskDescription)
+        if ($descMatch.Success) {
+            $folderPath = $descMatch.Groups[1].Value.Trim()
         }
 
         # Parse scheduled time from the first trigger
@@ -1332,6 +1345,14 @@ function Start-UndoTimer {
         [Parameter(Mandatory)]
         [object]$UndoBannerControl
     )
+    # AG18-022: stop and dispose any previously running undo timer before starting a new one.
+    # Without this, scheduling two tasks within 30 s creates two timers sharing $script:undoSeconds.
+    if ($script:undoTimer) {
+        try { $script:undoTimer.Stop()    } catch {}
+        try { $script:undoTimer.Dispose() } catch {}
+        $script:undoTimer = $null
+    }
+
     # Store controls at script scope for timer callback access
     $script:undoLabelCtrl    = $UndoLabelControl
     $script:undoProgressCtrl = $UndoProgressControl
@@ -1530,11 +1551,11 @@ function Register-ContextMenu {
     $verbKey = "HKCU:\Software\Classes\Directory\shell\ScheduleMotivation"
     $cmdKey  = "$verbKey\command"
     try {
-
-        [void](New-Item -Path $verbKey -Force)
+        # AG17-010: guard with Test-Path so existing keys are not recreated on every Schedule
+        if (-not (Test-Path $verbKey)) { [void](New-Item -Path $verbKey -Force) }
         Set-ItemProperty -Path $verbKey -Name "(Default)" -Value "Set as tomorrow's folder (Daily Motivation)"
 
-        [void](New-Item -Path $cmdKey -Force)
+        if (-not (Test-Path $cmdKey)) { [void](New-Item -Path $cmdKey -Force) }
         # Escape embedded double-quotes using PowerShell backtick escape
         $escapedPath = $ExePath -replace '"', '`"'
         Set-ItemProperty -Path $cmdKey -Name "(Default)" -Value ('"' + $escapedPath + '" /setfolder "%1"')
@@ -2291,7 +2312,13 @@ function Show-MainWindow {
                 "Clear all history entries? This cannot be undone.",
                 "Clear History", "YesNo", "Question")
             if ($confirm -eq "Yes") {
-                if (Test-Path -Path "$script:LogPath" -PathType Leaf) { Clear-Content -Path $script:LogPath }  # AG4-016
+                if (Test-Path -Path "$script:LogPath" -PathType Leaf) {
+                    # AG19-019: back up before clearing so data can be recovered manually
+                    $backupName = "popup_log_backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+                    $backupPath = Join-Path $script:AppDataDir $backupName
+                    try { Copy-Item -Path $script:LogPath -Destination $backupPath -Force -ErrorAction SilentlyContinue } catch {}
+                    Clear-Content -Path $script:LogPath  # AG4-016
+                }
                 Update-HistoryUI -HistoryListControl $historyList -SortOrder $script:historySortOrder
             }
         })

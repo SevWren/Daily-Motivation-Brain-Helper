@@ -1,0 +1,68 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: _bmad-output/planning-artifacts/epic-sprint6-performance-resilience.md
+last_updated: 2026-08-25T00:00:00Z
+
+epics:
+  - id: "epic-1"
+    title: "Performance and Resource Management"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Fix Undo Timer Multiple Instance Accumulation"
+        status: "done"
+        github_issue: 145
+        severity: "Medium"
+        windows_only: false
+        notes: "Added Stop+Dispose of previous $script:undoTimer at top of Start-UndoTimer before creating a new one. Linux-safe."
+      - id: "story-1-2"
+        title: "Pre-Compile Regex in Sync-TaskStatuses"
+        status: "done"
+        github_issue: 112
+        severity: "Low"
+        windows_only: false
+        notes: "Hoisted description regex to [regex]::new() before the foreach loop. Changed -match to .Match() for pre-compiled path. Linux-safe."
+      - id: "story-1-3"
+        title: "Eliminate Double Enumeration in Sync-TaskStatuses"
+        status: "done"
+        github_issue: 111
+        severity: "Low"
+        windows_only: false
+        notes: "Built $knownNames as HashSet[string] inside the Direction-1 foreach loop. Removed second Where-Object pipeline. Changed -contains to .Contains(). Linux-safe."
+      - id: "story-1-4"
+        title: "Eliminate Duplicate Reads in New-MotivationTask"
+        status: "done"
+        github_issue: 110
+        severity: "Medium"
+        windows_only: false
+        notes: "Pre-read tasks once into $tasksForDup; reused for duplicate check and persistence. Duplicate check rewritten as foreach+break for early exit (#109). Linux-safe."
+    retrospective:
+      status: "not-started"
+
+  - id: "epic-2"
+    title: "Data Safety and AppData Robustness"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-2-1"
+        title: "Tilde Expansion in Initialize-AppData Already Fixed"
+        status: "done"
+        github_issue: 104
+        severity: "Medium"
+        windows_only: false
+        notes: "Issue already resolved by AG7-014 code (lines 199-200): homeDir = $env:HOME || $env:USERPROFILE || GetTempPath(). No code change needed. Issue can be closed."
+      - id: "story-2-2"
+        title: "Backup Before History Clear"
+        status: "done"
+        github_issue: 157
+        severity: "Medium"
+        windows_only: false
+        notes: "Added Copy-Item backup to popup_log_backup_YYYYMMDD_HHmmss.txt in AppDataDir before Clear-Content in clearHistoryBtn handler. Linux-safe."
+      - id: "story-2-3"
+        title: "Fix Duplicate Registry Key Creation in Register-ContextMenu"
+        status: "done"
+        github_issue: 130
+        severity: "Medium"
+        windows_only: true
+        notes: "Guarded New-Item calls with Test-Path so existing keys are not recreated on every Schedule. Windows-only (registry); static-analysis test is Linux-safe. Requires live Windows test for closure."
+    retrospective:
+      status: "not-started"
