@@ -78,6 +78,30 @@ AfterAll {
         catch {}
     }
 
+    # AG20-015: Comprehensive sweep for ANY stray DailyMotivation_* tasks (safety net)
+    # This catches tasks that were created but not tracked (e.g., test failure before adding to $script:IntegCreated)
+    if ($IsWindows) {
+        try {
+            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+            if ($strayTasks) {
+                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+                foreach ($task in $strayTasks) {
+                    try {
+                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+                    }
+                }
+            }
+        }
+        catch {
+            # Get-ScheduledTask itself failed - log but don't fail the test run
+            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
+        }
+    }
+
     $probe = $null
     if (Get-Variable -Name 'probeExe' -Scope 'Script' -ErrorAction SilentlyContinue) { $probe = $script:probeExe }
     if ($probe -and (Test-Path -LiteralPath $probe)) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue }

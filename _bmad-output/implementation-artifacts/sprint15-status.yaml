@@ -1,0 +1,87 @@
+---
+sprint: 15
+epic: "Epic 1: Task Scheduler Integration Test Coverage"
+story: "Story 1.3: Post-Run Task Cleanup Safety Sweep"
+issue: "#170 AG20-015"
+priority: High
+platform: Windows-only (-Skip:(-not $IsWindows))
+started: 2026-08-25
+completed: 2026-08-25
+status: ready-for-windows-validation
+---
+
+# Sprint 15: Post-Run Task Cleanup Safety Sweep
+
+## Story Summary
+Closes #170 AG20-015 (High)
+
+Add AfterAll blocks to sweep for real DailyMotivation_* tasks after tests complete
+to ensure failed mock scope never silently leaves persistent Task Scheduler entries.
+
+## Acceptance Criteria
+
+1. **Given** any test in `Tests/Integration/` completes (pass or fail),
+   **When** the AfterAll block runs,
+   **Then** `Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue` returns no results, or the test suite logs a prominent warning and the AfterAll block calls `Unregister-ScheduledTask` on any found tasks.
+
+2. **Given** a stray task is found during AfterAll sweep,
+   **When** cleanup runs,
+   **Then** the cleanup itself is logged to the test output (not silently swallowed).
+
+## Implementation Plan
+
+1. Review existing AfterAll blocks in Tests/Integration/*.Tests.ps1
+2. Add cleanup sweep to all integration test files
+3. Sweep checks for DailyMotivation_* tasks
+4. Log warning if tasks found
+5. Unregister any found tasks (don't hard-fail the suite)
+6. Verify with full test suite run
+
+## Testing Strategy
+
+- Add to AfterAll in all Tests/Integration/*.Tests.ps1 files
+- Must be `-Skip:(-not $IsWindows)`
+- Sweep is a safety net, not a test assertion
+- Should clean up and warn, not hard-fail the suite
+
+## Implementation Summary
+
+Added AG20-015 cleanup sweep to AfterAll blocks in all 5 integration test files:
+
+1. **AG20-001.MultiFolderScheduling.Tests.ps1**: Added comprehensive sweep for stray
+   DailyMotivation_* tasks after test completion
+
+2. **AG20-002.SystemAccountConstraints.Tests.ps1**: Added cleanup sweep to AfterAll
+
+3. **AG20-023.NoRunRobustness.Tests.ps1**: Added cleanup sweep with $IsWindows guard
+
+4. **SingleFile.Tests.ps1**: Added cleanup sweep with $IsWindows guard
+
+5. **TaskScheduler.Real.Integration.Tests.ps1**: Enhanced existing cleanup with
+   comprehensive sweep after explicit task cleanup (catches untracked tasks)
+
+All cleanup sweeps follow the same pattern:
+- Query Get-ScheduledTask -TaskName "DailyMotivation_*"
+- If tasks found, log prominent warning with count
+- Unregister each found task individually
+- Log each removal (or failure) to test output
+- Don't hard-fail the suite - cleanup is a safety net
+
+Acceptance Criteria coverage:
+- AC#1: Sweep runs after every test completion, removes stray tasks, or test continues
+- AC#2: All cleanup is logged to test output (Write-Warning, Write-Host)
+
+All sweeps are Windows-only (wrapped in $IsWindows guard) and don't fail the test run.
+
+## Windows Validation Required
+
+Per CLAUDE.md mandate: This issue (#170 AG20-015) may NOT be closed until a passing
+Windows 10/11 test run is posted as proof. The cleanup sweep cannot be validated on
+Linux CI as it requires Get-ScheduledTask and Unregister-ScheduledTask cmdlets.
+
+## Notes
+
+- Low priority but important for test hygiene
+- Prevents pollution from failed test runs
+- CLAUDE.md mandate: Requires Windows validation before closure
+- Sweep is a safety net - logs and cleans up, doesn't hard-fail the suite
