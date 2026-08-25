@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Unit tests for the messages array and Get-RandomMessage in DailyMotivation.ps1.
@@ -69,8 +69,12 @@ Describe 'Get-RandomMessage' {
 
     It 'Should return a message whose glyph is in the expected bracket format' {
         $msg = Get-RandomMessage
-        # AG8-015: Use -Match for regex validation
+        # AG8-015: -Match with ^\[.\]$ passes for glyphs like '[ ]' (space character).
+        # The Should -Contain $knownGlyphs test below is the authoritative gate;
+        # keep this as a structural guard for 3-char bracket format.
         $msg.glyph | Should -Match '^\[.\]$'
+        # AG8-015: additionally verify it is NOT a whitespace-only inner character
+        $msg.glyph[1] | Should -Not -Match '\s' -Because 'glyph inner character must be visible, not whitespace'
     }
 
     # AG8-015: Add strict glyph validation tests

@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Tests for AG19-010: Tab order/keyboard navigation is set on all interactive controls.
@@ -47,7 +47,7 @@ Describe "AG19-010: Tab Order/Keyboard Navigation" {
             $script:content = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
         }
 
-        It "Should set TabIndex=0 on LetsGoBtn (primary action — open folder)" {
+        It "Should set TabIndex=0 on LetsGoBtn (primary action  -  open folder)" {
             $script:content | Should -Match 'x:Name="LetsGoBtn"[^<>]*TabIndex="0"' `
                 -Because "LetsGoBtn is the primary popup action and must have highest tab priority TabIndex=0 (AG19-010)"
         }
@@ -62,7 +62,7 @@ Describe "AG19-010: Tab Order/Keyboard Navigation" {
                 -Because "SnoozeDropBtn dropdown follows SnoozeBtn and must be TabIndex=2 (AG19-010)"
         }
 
-        It "Should set TabIndex=3 on DismissBtn (lowest priority — dismiss for today)" {
+        It "Should set TabIndex=3 on DismissBtn (lowest priority  -  dismiss for today)" {
             $script:content | Should -Match 'x:Name="DismissBtn"[^<>]*TabIndex="3"' `
                 -Because "DismissBtn is the lowest priority popup action and must be TabIndex=3 (AG19-010)"
         }

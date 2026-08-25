@@ -126,11 +126,17 @@ Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
             Should -Invoke Register-ScheduledTask -Times 1 -Exactly
         }
 
-        It 'Should generate unique task IDs for different folders' {
+        It 'Should generate distinct task IDs for two independent calls (AG8-005)' {
+            # AG8-005: This test only shows two independent GUIDs differ; it does NOT
+            # exercise the collision-retry path. The retry logic is covered by the
+            # dedicated context below ('Collision detection retry loop').
             $t = (Get-Date).AddHours(2)
             $r1 = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime $t
             $r2 = New-MotivationTask -FolderPath $script:TestFolder2 -TriggerTime $t
             $r1.TaskId | Should -Not -Be $r2.TaskId
+            # Both TaskIds must be 16-char hex strings
+            $r1.TaskId | Should -Match '^[0-9a-f]{16}$'
+            $r2.TaskId | Should -Match '^[0-9a-f]{16}$'
         }
 
         It 'Should persist the task to tasks.json' {

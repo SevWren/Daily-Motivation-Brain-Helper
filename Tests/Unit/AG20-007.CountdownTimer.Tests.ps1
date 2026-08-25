@@ -1,7 +1,7 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
-    TDD tests for AG20-007 — system clock change during popup countdown execution.
+    TDD tests for AG20-007  -  system clock change during popup countdown execution.
 
 .DESCRIPTION
     Issue #162: The popup countdown uses $script:remaining-- on each DispatcherTimer tick
@@ -10,14 +10,14 @@
 
     Test coverage in this file:
       1. Cross-platform: Get-PopupConfig returns an object that does NOT carry a
-         countdown_seconds field — documenting that no config-driven countdown duration
+         countdown_seconds field  -  documenting that no config-driven countdown duration
          is wired up (the hardcoded value of 20 is used instead).
       2. Cross-platform (Pending): Get-CountdownElapsed / wall-clock fallback interface
-         does not exist — this pending test is the TDD red specification.
-      3. Cross-platform (Pending): Set-CountdownDuration public seam does not exist —
+         does not exist  -  this pending test is the TDD red specification.
+      3. Cross-platform (Pending): Set-CountdownDuration public seam does not exist  - 
          pending test expresses the desired interface.
       4. Windows-only (-Skip): Show-PopupWindow countdown initialises from a configurable
-         value — currently hardcoded; skipped on non-Windows because WPF requires Windows/STA.
+         value  -  currently hardcoded; skipped on non-Windows because WPF requires Windows/STA.
 #>
 
 BeforeAll {
@@ -33,10 +33,10 @@ AfterAll {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Config schema — countdown_seconds is absent from popup_config.json
+# 1. Config schema  -  countdown_seconds is absent from popup_config.json
 #    (cross-platform, always runs)
 # ---------------------------------------------------------------------------
-Describe 'Get-PopupConfig — countdown duration field' {
+Describe 'Get-PopupConfig  -  countdown duration field' {
     Context 'When popup_config.json does not exist' {
         It 'Returns the default fallback object without a countdown_seconds field' {
             # Remove any pre-existing popup config so we get the hardcoded fallback path.
@@ -49,7 +49,7 @@ Describe 'Get-PopupConfig — countdown duration field' {
             $cfg.glyph         | Should -Not -BeNullOrEmpty -Because 'glyph must always be present'
             $cfg.PSObject.Properties.Name | Should -Contain 'explorer_path'
 
-            # ... but no countdown_seconds field — documenting the gap described in AG20-007.
+            # ... but no countdown_seconds field  -  documenting the gap described in AG20-007.
             # The countdown is hardcoded to 20 inside Show-PopupWindow; it is not driven by config.
             $cfg.PSObject.Properties.Name | Should -Not -Contain 'countdown_seconds' `
                 -Because 'AG20-007: countdown duration is currently hardcoded, not config-driven; this test documents the gap'
@@ -83,11 +83,11 @@ Describe 'Get-PopupConfig — countdown duration field' {
 }
 
 # ---------------------------------------------------------------------------
-# 2. Pending (red) — wall-clock fallback public interface does not yet exist
+# 2. Pending (red)  -  wall-clock fallback public interface does not yet exist
 #    TDD specification: a Get-CountdownElapsed function must be added so that
 #    the popup timer can detect clock skew and correct $script:remaining.
 # ---------------------------------------------------------------------------
-Describe 'Get-CountdownElapsed — wall-clock fallback seam' {
+Describe 'Get-CountdownElapsed  -  wall-clock fallback seam' {
     It 'Get-CountdownElapsed command exists as a public function' -Pending {
         # AG20-007 TDD red test.
         # This test will pass once a wall-clock-based fallback is implemented.
@@ -101,12 +101,12 @@ Describe 'Get-CountdownElapsed — wall-clock fallback seam' {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Pending (red) — configurable countdown duration public seam does not exist
+# 3. Pending (red)  -  configurable countdown duration public seam does not exist
 #    TDD specification: a Set-CountdownDuration (or equivalent) function should
 #    allow callers to specify how many seconds the popup countdown runs, enabling
 #    tests to exercise the timer logic with short durations.
 # ---------------------------------------------------------------------------
-Describe 'Set-CountdownDuration — configurable duration seam' {
+Describe 'Set-CountdownDuration  -  configurable duration seam' {
     It 'Set-CountdownDuration command exists as a public function' -Pending {
         # AG20-007 TDD red test.
         # Currently $script:remaining is hardcoded to 20 in Show-PopupWindow.
@@ -119,11 +119,11 @@ Describe 'Set-CountdownDuration — configurable duration seam' {
 }
 
 # ---------------------------------------------------------------------------
-# 4. Windows-only — wall-clock fallback behaviour during backward clock skew
+# 4. Windows-only  -  wall-clock fallback behaviour during backward clock skew
 #    Skipped on non-Windows because Show-PopupWindow requires WPF / STA thread.
 # ---------------------------------------------------------------------------
-Describe 'Show-PopupWindow — wall-clock fallback for system clock change' -Skip:(-not $IsWindows) {
-    It 'Wall-clock fallback for system clock changes is not yet implemented — this test documents the missing behaviour specification' {
+Describe 'Show-PopupWindow  -  wall-clock fallback for system clock change' -Skip:(-not $IsWindows) {
+    It 'Wall-clock fallback for system clock changes is not yet implemented  -  this test documents the missing behaviour specification' {
         Set-ItResult -Skipped -Because 'AG20-007: No wall-clock fallback mechanism exists. The DispatcherTimer tick handler decrements $script:remaining by 1 on every tick regardless of actual elapsed wall time. A backward system-clock adjustment will cause the countdown to display a remaining time that does not match real elapsed seconds. This test is the TDD specification: once a wall-clock seam (e.g. Get-CountdownElapsed) is added and wired into the tick handler, replace this Skip with a real assertion that verifies $script:remaining is corrected when the clock is set back.'
     }
 }
