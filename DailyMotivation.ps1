@@ -233,7 +233,7 @@ function Initialize-AppData {
     # Set restrictive explicit ACL on config directory (Windows only).
     # This ensures the current user owns the directory exclusively and
     # satisfies AG10-011 (file permissions must have at least one explicit rule).
-    if ($IsWindows -and (Test-Path $script:AppDataDir)) {
+    if ($script:IsWindowsPlatform -and (Test-Path $script:AppDataDir)) {
         try {
             $acl = Get-Acl -Path $script:AppDataDir
             $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -928,8 +928,8 @@ function New-MotivationTask {
         # AG5-009: also match extended-length UNC (\\?\UNC\server\share)
         $isUncPath     = $FolderPath -match '^\\\\[^\\]|^\\\\\?\\UNC\\'
         $isMappedDrive = $false
-        # AG5-009: DriveInfo.DriveType returns Unknown on Linux; guard with $IsWindows
-        if ($IsWindows -and $FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
+        # AG5-009: DriveInfo.DriveType returns Unknown on Linux; guard with platform check
+        if ($script:IsWindowsPlatform -and $FolderPath -and $FolderPath.Length -ge 2 -and $FolderPath[1] -eq ':') {
             try {
                 $driveInfo     = [System.IO.DriveInfo]::new($FolderPath.Substring(0, 1))
                 $isMappedDrive = $driveInfo.DriveType -eq [System.IO.DriveType]::Network
@@ -1533,8 +1533,10 @@ function Invoke-FolderScheduling {
 
 function Register-ContextMenu {
     param([string]$ExePath)
-    # AG4-021: context menu uses HKCU: registry -- Windows only
-    if (-not $IsWindows) {
+    # AG4-021: context menu uses HKCU: registry -- Windows only.
+    # Use $script:IsWindowsPlatform (not $IsWindows) so the compiled ps2exe exe, which
+    # targets .NET Framework 4.x where $IsWindows is $null, correctly detects Windows.
+    if (-not $script:IsWindowsPlatform) {
         return @{ Success = $false; Reason = "Registry not available on this platform" }
     }
     # Guard: only register when invoked from a compiled .exe, not the source .ps1.
