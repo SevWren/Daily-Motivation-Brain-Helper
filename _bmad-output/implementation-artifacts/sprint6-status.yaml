@@ -2,6 +2,7 @@ project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: _bmad-output/planning-artifacts/epic-sprint6-performance-resilience.md
 last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-25)"
 
 epics:
   - id: "epic-1"
@@ -37,7 +38,7 @@ epics:
         windows_only: false
         notes: "Pre-read tasks once into $tasksForDup; reused for duplicate check and persistence. Duplicate check rewritten as foreach+break for early exit (#109). Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
 
   - id: "epic-2"
     title: "Data Safety and AppData Robustness"
@@ -65,4 +66,4 @@ epics:
         windows_only: true
         notes: "Guarded New-Item calls with Test-Path so existing keys are not recreated on every Schedule. Windows-only (registry); static-analysis test is Linux-safe. Requires live Windows test for closure."
     retrospective:
-      status: "not-started"
+      status: "complete"
