@@ -1,7 +1,8 @@
 project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: _bmad-output/planning-artifacts/epic-sprint5-popup-robustness.md
-last_updated: 2026-08-24T00:00:00Z
+last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-24)"
 
 epics:
   - id: "epic-1"
@@ -23,7 +24,7 @@ epics:
         windows_only: false
         notes: "Replaced if/elseif/else at New-MotivationTask catch (~line 962) with switch -Regex covering all 5 Windows error conditions with HResult. Added 5 static-analysis tests to TaskScheduler.Tests.ps1. Linux-safe test."
     retrospective:
-      status: "not-started"
+      status: "complete"
 
   - id: "epic-2"
     title: "Popup and Scheduling Robustness"
@@ -58,4 +59,4 @@ epics:
         windows_only: false
         notes: "Added explicit catch [System.InvalidOperationException] and catch [System.Management.ManagementException] before the generic catch in Sync-TaskStatuses. Added static-analysis tests to SyncTaskStatuses.Tests.ps1. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"

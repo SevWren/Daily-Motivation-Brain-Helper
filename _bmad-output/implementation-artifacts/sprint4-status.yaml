@@ -1,7 +1,8 @@
 project_key: Daily-Motivation-Brain-Helper
 tracking_system: github
 story_location: _bmad-output/planning-artifacts/epic-sprint4-concurrency-registration.md
-last_updated: 2026-08-24T00:00:00Z
+last_updated: 2026-08-25T00:00:00Z
+windows_gate: "PASSED 437/0/6 (2026-08-24, validated with Sprint 5 gate)"
 
 epics:
   - id: "epic-1"
@@ -37,7 +38,7 @@ epics:
         windows_only: false
         notes: "All session state reset at top of Show-PopupWindow before mutex. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
 
   - id: "epic-2"
     title: "Task Registration and Defensive Coding"
@@ -100,4 +101,4 @@ epics:
         windows_only: false
         notes: "Fall back to GetTempPath() if TempDir does not exist. Linux-safe."
     retrospective:
-      status: "not-started"
+      status: "complete"
