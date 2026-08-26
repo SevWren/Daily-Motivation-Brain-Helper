@@ -197,3 +197,55 @@ Describe 'BUG-2 File-Wide Regression Guard: $window.Dispose() must not exist' {
         $src -match '\$window\.Dispose\(\)' | Should -Be $false -Because 'System.Windows.Window does not implement IDisposable'
     }
 }
+
+Describe 'AG14-004: undoFeedbackTimer scope and disposal (#106)' {
+    It 'undoFeedbackTimer is assigned to $script: scope in Show-MainWindow (not a local variable)' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-MainWindow')
+        $functionEnd   = $src.IndexOf('function Show-PopupWindow', $functionStart)
+        $body = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $body -match '\$script:undoFeedbackTimer\s*=' | Should -Be $true -Because 'undoFeedbackTimer must be $script: scoped so Add_Closing can stop it when window closes early (#106)'
+    }
+
+    It 'Add_Closing handler in Show-MainWindow disposes $script:undoFeedbackTimer' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-MainWindow')
+        $functionEnd   = $src.IndexOf('function Show-PopupWindow', $functionStart)
+        $body = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $closingMatch = [regex]::Match($body, 'Add_Closing\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $closingBlock = $closingMatch.Groups[1].Value
+        $closingBlock -match 'undoFeedbackTimer.*Dispose\(\)' | Should -Be $true -Because 'Add_Closing must dispose undoFeedbackTimer so it is released if window closes during the 2.5s feedback window (#106)'
+    }
+
+    It 'Add_Closed handler in Show-MainWindow disposes $script:undoFeedbackTimer' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-MainWindow')
+        $functionEnd   = $src.IndexOf('function Show-PopupWindow', $functionStart)
+        $body = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $closedMatches = [regex]::Matches($body, 'Add_Closed\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $anyClosedDisposesTimer = ($closedMatches | ForEach-Object { $_.Groups[1].Value }) -match 'undoFeedbackTimer.*Dispose\(\)'
+        [bool]($anyClosedDisposesTimer) | Should -Be $true -Because 'Add_Closed must dispose undoFeedbackTimer to release resources after window close (#106)'
+    }
+}
+
+Describe 'AG14-005: Show-PopupWindow cancelCountdown handler removal and button null-out (#107)' {
+    It 'Show-PopupWindow Add_Closed calls remove_PreviewMouseDown for cancelCountdown' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $body = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $closedMatches = [regex]::Matches($body, 'Add_Closed\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $anyClosedRemoves = ($closedMatches | ForEach-Object { $_.Groups[1].Value }) -match 'remove_PreviewMouseDown.*cancelCountdown'
+        [bool]($anyClosedRemoves) | Should -Be $true -Because 'Stored cancelCountdown handlers must be explicitly removed on close to release closure references (#107)'
+    }
+
+    It 'Show-PopupWindow Add_Closed nulls button references to release WPF GC roots' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $body = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $closedMatches = [regex]::Matches($body, 'Add_Closed\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $anyClosedNullsBtn = ($closedMatches | ForEach-Object { $_.Groups[1].Value }) -match '\$letsGoBtn\s*=\s*\$null'
+        [bool]($anyClosedNullsBtn) | Should -Be $true -Because 'Button references must be nulled in Add_Closed to allow GC to collect the window (#107)'
+    }
+}
