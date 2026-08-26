@@ -1242,12 +1242,7 @@ function Remove-MotivationTask {
             $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction Stop
         }
         catch { $stillExists = $null }
-        # A task in "Running" state after Unregister-ScheduledTask means the deletion
-        # was committed to the Task Scheduler database; the running instance (which is
-        # the popup process itself calling this cleanup) is still alive but will exit
-        # naturally. Treating this as a failed removal leaves tasks.json with a stale
-        # PENDING record and the OS Task orphaned after the process exits (#194).
-        if ($stillExists -and $stillExists.State -ne 'Running') {
+        if ($stillExists) {
             return $false
         }
     }
