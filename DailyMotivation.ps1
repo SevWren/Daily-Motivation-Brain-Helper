@@ -2942,7 +2942,7 @@ function Show-PopupWindow {
         $pathMissingPanel.Visibility = "Visible"
         $folderName = if ($config.explorer_path) { Split-Path -Leaf $config.explorer_path } else { "Unknown" }
         if (-not $folderName) { $folderName = "Unknown" }
-        $missingPathLabel.Text = "This folder can't be found: $(Escape-XmlText $folderName)"
+        $missingPathLabel.Text = "This folder can't be found: $folderName"
         $missingPathLabel.ToolTip    = $config.explorer_path
     }
     else {
@@ -2950,16 +2950,16 @@ function Show-PopupWindow {
         $safeGlyphVal = if ($config.PSObject.Properties['glyph']   -and $config.glyph)   { $config.glyph }   else { "[+]" }
         $safeTitleVal = if ($config.PSObject.Properties['title']   -and $config.title)   { $config.title }   else { "Daily Motivation" }
         $safeBodyVal  = if ($config.PSObject.Properties['body']    -and $config.body)    { $config.body }    else { "Time to get to work." }
-        $glyphText.Text = Escape-XmlText $safeGlyphVal
-        $titleText.Text = Escape-XmlText (Strip-MarkupText $safeTitleVal)
-        $bodyText.Text  = Truncate-TextForDisplay (Escape-XmlText (Strip-MarkupText $safeBodyVal)) -MaxLength 150
+        $glyphText.Text = $safeGlyphVal
+        $titleText.Text = Strip-MarkupText $safeTitleVal
+        $bodyText.Text  = Truncate-TextForDisplay (Strip-MarkupText $safeBodyVal) -MaxLength 150
         if ($config.folder_name) {
             # UNC root shares show full path instead of leaf name
             $displayName = if ($config.explorer_path -match '^\\\\[^\\]+\\[^\\]+$') {
                 $config.explorer_path
             }
             else { $config.folder_name }
-            $folderNameText.Text       = "Folder: $(Escape-XmlText $displayName)"
+            $folderNameText.Text       = "Folder: $displayName"
             $folderNameText.Visibility = "Visible"
         }
     }
