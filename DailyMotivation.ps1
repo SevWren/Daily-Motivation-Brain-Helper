@@ -1226,13 +1226,23 @@ function Remove-MotivationTask {
         $script:Platform.UnscheduleTask($TaskId)
     }
     else {
-        # Windows-specific Task Scheduler logic
-        # Verify unregister succeeded and handle failures properly
+        # Windows-specific Task Scheduler logic.
+        # Disable before deleting: ITaskFolder::DeleteTask rejects deletion of a task
+        # that has an active future trigger while a running instance exists. This occurs
+        # when a task is triggered manually while its scheduled trigger is still pending.
+        # Disabling deactivates future triggers without stopping the running instance,
+        # unblocking the delete (#194).
+        try { Disable-ScheduledTask -TaskName $target.task_name -ErrorAction SilentlyContinue | Out-Null } catch {}
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
         }
         catch {
-            # Don't remove from tasks.json if unregister failed (maintain consistency)
+            try {
+                $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
+                Add-Content -Path $debugLog `
+                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Remove-MotivationTask: Unregister failed for '$($target.task_name)': $($_.Exception.Message)" `
+                    -Encoding UTF8 -ErrorAction SilentlyContinue
+            } catch {}
             return $false
         }
         # Verify task was actually removed  -  use its own try/catch because
