@@ -210,3 +210,83 @@ Describe 'tasks.json schema contract  -  malformed entries' {
         }
     }
 }
+
+Describe 'Issue #194 regression: Remove-MotivationTask treats Running state as successful unregister' -Skip:(-not $IsWindows) {
+    # When the popup process calls Remove-MotivationTask on its own running OS Task,
+    # Unregister-ScheduledTask commits the deletion to the Task Scheduler database but
+    # the task briefly remains in "Running" state. The old verification check treated
+    # Running as "still exists" and returned $false without updating tasks.json,
+    # leaving a stale PENDING record and an orphaned OS Task after process exit.
+    BeforeAll {
+        . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
+        $script:OrigAppData194 = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_194_$(New-Guid)"
+        Initialize-AppData
+        $script:TasksPath194 = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\tasks.json'
+    }
+
+    AfterAll {
+        if (Test-Path $env:APPDATA) { Remove-Item $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue }
+        $env:APPDATA = $script:OrigAppData194
+    }
+
+    It 'returns true and removes task from tasks.json when Get-ScheduledTask returns Running state after Unregister' {
+        Mock Unregister-ScheduledTask { }
+        Mock Get-ScheduledTask {
+            # Simulate the task still showing as Running immediately after unregister,
+            # which is what happens when the popup process removes its own OS Task.
+            return [PSCustomObject]@{ TaskName = 'DailyMotivation_194test'; State = 'Running' }
+        }
+        Mock Sync-TaskStatuses { }
+
+        $task = [PSCustomObject]@{
+            task_id        = '194test00000000a'
+            task_name      = 'DailyMotivation_194test'
+            folder_path    = 'C:\TestFolder194'
+            folder_name    = 'TestFolder194'
+            scheduled_time = '2026-09-10T14:00:00'
+            created_at     = (Get-Date -Format 'o')
+            status         = 'PENDING'
+            snooze_count   = 0
+        }
+        @($task) | ConvertTo-Json | Set-Content $script:TasksPath194 -Encoding UTF8
+
+        $result = Remove-MotivationTask -TaskId '194test00000000a'
+
+        $result | Should -Be $true `
+            -Because '#194: a Running state after Unregister-ScheduledTask means deletion was committed; tasks.json must be updated'
+
+        $remaining = Get-Content $script:TasksPath194 -Raw | ConvertFrom-Json
+        $remaining | Where-Object { $_.task_id -eq '194test00000000a' } | Should -BeNullOrEmpty `
+            -Because '#194: the task record must be removed from tasks.json even when the process was still Running at verification time'
+    }
+
+    It 'still returns false when Get-ScheduledTask returns a non-Running state (genuine unregister failure)' {
+        Mock Unregister-ScheduledTask { }
+        Mock Get-ScheduledTask {
+            return [PSCustomObject]@{ TaskName = 'DailyMotivation_194testb'; State = 'Ready' }
+        }
+        Mock Sync-TaskStatuses { }
+
+        $task = [PSCustomObject]@{
+            task_id        = '194test00000000b'
+            task_name      = 'DailyMotivation_194testb'
+            folder_path    = 'C:\TestFolder194b'
+            folder_name    = 'TestFolder194b'
+            scheduled_time = '2026-09-10T14:00:00'
+            created_at     = (Get-Date -Format 'o')
+            status         = 'PENDING'
+            snooze_count   = 0
+        }
+        @($task) | ConvertTo-Json | Set-Content $script:TasksPath194 -Encoding UTF8
+
+        $result = Remove-MotivationTask -TaskId '194test00000000b'
+
+        $result | Should -Be $false `
+            -Because 'a Ready/other state after Unregister-ScheduledTask is a genuine failure; tasks.json must not be modified'
+
+        $remaining = Get-Content $script:TasksPath194 -Raw | ConvertFrom-Json
+        $remaining | Where-Object { $_.task_id -eq '194test00000000b' } | Should -Not -BeNullOrEmpty `
+            -Because 'tasks.json must be unchanged when the OS Task genuinely failed to unregister'
+    }
+}
