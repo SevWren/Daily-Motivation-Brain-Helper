@@ -228,6 +228,67 @@ Describe 'AG14-004: undoFeedbackTimer scope and disposal (#106)' {
     }
 }
 
+Describe 'Issue #192: $script:fallbackTimer scope and tick guard in Show-PopupWindow' {
+    BeforeAll {
+        $script:src192   = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $funcStart       = $script:src192.IndexOf('function Show-PopupWindow')
+        $funcEnd         = $script:src192.IndexOf('# ============================================================', $funcStart + 100)
+        $script:popupBody192 = $script:src192.Substring($funcStart, $funcEnd - $funcStart)
+
+        # Isolate the Add_Loaded block for scope-specific assertions
+        $loadedStart = $script:popupBody192.IndexOf('$window.Add_Loaded(')
+        $loadedEnd   = $script:popupBody192.IndexOf('    })', $loadedStart) + 6
+        $script:loadedBlock192 = $script:popupBody192.Substring($loadedStart, $loadedEnd - $loadedStart)
+
+        # Isolate the Add_Closing block
+        $closingMatch = [regex]::Match($script:popupBody192, 'Add_Closing\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $script:closingBlock192 = $closingMatch.Groups[1].Value
+
+        # Isolate the Add_Closed block(s)
+        $closedMatches = [regex]::Matches($script:popupBody192, 'Add_Closed\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $script:closedBodies192 = $closedMatches | ForEach-Object { $_.Groups[1].Value }
+    }
+
+    It 'fallbackTimer is assigned to $script: scope inside Add_Loaded (not a bare local variable)' {
+        $script:loadedBlock192 -match '\$script:fallbackTimer\s*=' | Should -Be $true `
+            -Because '#192: bare $fallbackTimer in Add_Loaded is destroyed when the event handler returns; the tick closure must resolve $script:fallbackTimer instead'
+    }
+
+    It 'bare $fallbackTimer = assignment does not appear inside Add_Loaded' {
+        # Match assignment to bare $fallbackTimer (not $script:fallbackTimer)
+        $script:loadedBlock192 -match '(?<!\$script:)(?<!\w)\$fallbackTimer\s*=' | Should -Be $false `
+            -Because '#192: a bare local $fallbackTimer would be null when the tick fires 500ms later'
+    }
+
+    It 'fallbackTimer tick handler references $script:fallbackTimer (not bare $fallbackTimer)' {
+        $tickMatch = [regex]::Match($script:loadedBlock192, 'Add_Tick\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $tickBody  = $tickMatch.Groups[1].Value
+        $tickBody -match '\$script:fallbackTimer' | Should -Be $true `
+            -Because '#192: the tick must use $script:fallbackTimer.Stop() so the call resolves after Add_Loaded scope is gone'
+    }
+
+    It 'fallbackTimer tick handler is wrapped in try/catch' {
+        $tickMatch = [regex]::Match($script:loadedBlock192, 'Add_Tick\s*\(\{(.+?)\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $tickBody  = $tickMatch.Groups[1].Value
+        ($tickBody -match 'try\s*\{') -and ($tickBody -match '\}\s*catch') | Should -Be $true `
+            -Because '#192: an unguarded exception in the tick propagates through the WPF dispatcher and aborts ShowDialog()'
+    }
+
+    It 'Add_Closing references $script:fallbackTimer' {
+        $script:closingBlock192 -match '\$script:fallbackTimer' | Should -Be $true `
+            -Because '#192: Add_Closing cleanup was previously dead code because it referenced the bare (null) $fallbackTimer'
+    }
+
+    It 'Add_Closed disposes $script:fallbackTimer and nulls it out' {
+        $anyDisposesAndNulls = $script:closedBodies192 | Where-Object {
+            ($_ -match '\$script:fallbackTimer.*Dispose\(\)') -and
+            ($_ -match '\$script:fallbackTimer\s*=\s*\$null')
+        }
+        [bool]($anyDisposesAndNulls) | Should -Be $true `
+            -Because '#192: Add_Closed must dispose and null $script:fallbackTimer to release the timer and prevent a stale reference on the next popup session'
+    }
+}
+
 Describe 'AG14-005: Show-PopupWindow cancelCountdown handler removal and button null-out (#107)' {
     It 'Show-PopupWindow Add_Closed calls remove_PreviewMouseDown for cancelCountdown' {
         $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw

@@ -2997,17 +2997,21 @@ function Show-PopupWindow {
                     [void][System.Windows.Input.Keyboard]::Focus($rePickBtn)
                 }
             } catch {}
-            # Fallback: if opacity is still 0 after 500ms, force it visible
-            $fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
+            # Fallback: if opacity is still 0 after 500ms, force it visible.
+            # $script: scope is required so the tick closure can resolve the variable
+            # after Add_Loaded's local scope is destroyed (#192).
+            $script:fallbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
             $fallbackInterval = [System.TimeSpan]::FromMilliseconds(500)
             if ($fallbackInterval.TotalMilliseconds -gt 0) {
-                $fallbackTimer.Interval = $fallbackInterval
+                $script:fallbackTimer.Interval = $fallbackInterval
             }
-            $fallbackTimer.Add_Tick({
-                $fallbackTimer.Stop()
-                if ($window.Opacity -lt 0.5) { $window.Opacity = 1 }
+            $script:fallbackTimer.Add_Tick({
+                try {
+                    if ($null -ne $script:fallbackTimer) { $script:fallbackTimer.Stop() }
+                    if ($window -and $window.Opacity -lt 0.5) { $window.Opacity = 1 }
+                } catch {}
             })
-            $fallbackTimer.Start()
+            $script:fallbackTimer.Start()
         })
 
     # Race condition fix: stop countdown on ANY button press before click handler fires
@@ -3274,17 +3278,18 @@ function Show-PopupWindow {
     # AG6-010: Stop timers when window is closing to prevent resource leaks
     $window.Add_Closing({
         if ($null -ne $timer -and $timer.IsEnabled) { $timer.Stop() }
-        if ($null -ne $fallbackTimer -and $fallbackTimer.IsEnabled) { $fallbackTimer.Stop() }
+        if ($null -ne $script:fallbackTimer -and $script:fallbackTimer.IsEnabled) { $script:fallbackTimer.Stop() }
     })
 
     # Add window cleanup handler for timers and event handlers (#106, #107)
     $window.Add_Closed({
         try {
             # Stop and dispose fallback timer if it exists
-            if ($null -ne $fallbackTimer) {
+            if ($null -ne $script:fallbackTimer) {
                 try {
-                    $fallbackTimer.Stop()
-                    $fallbackTimer.Dispose()
+                    $script:fallbackTimer.Stop()
+                    $script:fallbackTimer.Dispose()
+                    $script:fallbackTimer = $null
                 } catch {}
             }
             # Stop and dispose countdown timer if it exists
