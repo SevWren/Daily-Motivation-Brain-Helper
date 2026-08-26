@@ -2309,14 +2309,15 @@ function Show-MainWindow {
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
                 $undoLabel.Text        = "Reminder cancelled successfully. Your folder was not scheduled."
                 $undoBanner.Visibility = "Visible"
-                $undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
-                $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
-                $undoFeedbackTimer.Add_Tick({
-                    $undoFeedbackTimer.Stop()
-                    try { $undoFeedbackTimer.Dispose() } catch {}
+                $script:undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
+                $script:undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
+                $script:undoFeedbackTimer.Add_Tick({
+                    $script:undoFeedbackTimer.Stop()
+                    try { $script:undoFeedbackTimer.Dispose() } catch {}
+                    $script:undoFeedbackTimer = $null
                     $undoBanner.Visibility = "Collapsed"
                 })
-                $undoFeedbackTimer.Start()
+                $script:undoFeedbackTimer.Start()
             }
         })
 
@@ -2438,7 +2439,13 @@ function Show-MainWindow {
                 try { $script:undoTimer.Dispose() } catch {}
                 $script:undoTimer = $null
             }
-            foreach ($brush in @($script:dropZoneBrushNormal, $script:dropZoneBrushHover, 
+            # Stop and dispose undo feedback timer if still running (#106)
+            if ($script:undoFeedbackTimer) {
+                $script:undoFeedbackTimer.Stop()
+                try { $script:undoFeedbackTimer.Dispose() } catch {}
+                $script:undoFeedbackTimer = $null
+            }
+            foreach ($brush in @($script:dropZoneBrushNormal, $script:dropZoneBrushHover,
                                  $script:dropZoneBgNormal, $script:dropZoneBgHover)) {
                 if ($brush -is [System.IDisposable]) {
                     try { $brush.Dispose() } catch {}
@@ -2459,6 +2466,7 @@ function Show-MainWindow {
         }
         if ($script:undoFeedbackTimer) {
             $script:undoFeedbackTimer.Stop()
+            try { $script:undoFeedbackTimer.Dispose() } catch {}
             $script:undoFeedbackTimer = $null
         }
     })
@@ -3269,7 +3277,7 @@ function Show-PopupWindow {
         if ($null -ne $fallbackTimer -and $fallbackTimer.IsEnabled) { $fallbackTimer.Stop() }
     })
 
-    # Add window cleanup handler for timers
+    # Add window cleanup handler for timers and event handlers (#106, #107)
     $window.Add_Closed({
         try {
             # Stop and dispose fallback timer if it exists
@@ -3286,6 +3294,16 @@ function Show-PopupWindow {
                     $timer.Dispose()
                 } catch {}
             }
+            # Remove stored PreviewMouseDown handlers to release closure references (#107)
+            if ($null -ne $cancelCountdown) {
+                try { $letsGoBtn.remove_PreviewMouseDown($cancelCountdown) } catch {}
+                try { $dismissBtn.remove_PreviewMouseDown($cancelCountdown) } catch {}
+                try { $snoozeBtn.remove_PreviewMouseDown($cancelCountdown) } catch {}
+                try { $snoozeDropBtn.remove_PreviewMouseDown($cancelCountdown) } catch {}
+            }
+            # Null button/control references to release WPF GC roots (#107)
+            $letsGoBtn = $null; $dismissBtn = $null; $snoozeBtn = $null
+            $snoozeDropBtn = $null; $pauseBtn = $null; $rePickBtn = $null
         }
         catch {}
     })
