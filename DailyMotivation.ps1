@@ -1530,7 +1530,10 @@ function Invoke-FolderScheduling {
         }
     }
 
-    # Write popup config for the scheduled task
+    # Write popup config for the scheduled task.
+    # If the write fails the OS Task is rolled back so the user can retry rather
+    # than being left with a task that fires against a stale popup_config.json
+    # (#183 BUG-4, #194).
     $popupConfigParams = @{
         Glyph        = $msg.Glyph
         Title        = $msg.Title
@@ -1538,7 +1541,19 @@ function Invoke-FolderScheduling {
         ExplorerPath = $FolderPath
         TaskId       = $result.TaskId
     }
-    Set-PopupConfig @popupConfigParams
+    try {
+        Set-PopupConfig @popupConfigParams
+    }
+    catch {
+        Remove-MotivationTask -TaskId $result.TaskId -ErrorAction SilentlyContinue | Out-Null
+        return @{
+            Success       = $false
+            TaskId        = $null
+            IsDuplicate   = $false
+            IsNetworkPath = $isNetworkPath
+            Error         = "OS task registration succeeded but popup config write failed: $($_.Exception.Message)"
+        }
+    }
 
     # REQ-010: Register context menu on successful scheduling
     if ($script:ExePath) {
@@ -2295,7 +2310,13 @@ function Show-MainWindow {
         })
 
     $scheduleBtn.Add_Click({
-            if ($script:selectedPath) { Do-Schedule -FolderPath $script:selectedPath }
+            if ($script:selectedPath) {
+                try {
+                    Do-Schedule -FolderPath $script:selectedPath
+                } catch {
+                    Show-ErrorDialog -Title "Schedule Failed" -Message "Could not complete scheduling: $($_.Exception.Message)"
+                }
+            }
         })
 
     $undoBtn.Add_Click({
@@ -2403,7 +2424,11 @@ function Show-MainWindow {
         switch ($ke.Key) {
             ([System.Windows.Input.Key]::Return) {
                 if ($scheduleBtn.IsEnabled -and $script:selectedPath) {
-                    Do-Schedule -FolderPath $script:selectedPath
+                    try {
+                        Do-Schedule -FolderPath $script:selectedPath
+                    } catch {
+                        Show-ErrorDialog -Title "Schedule Failed" -Message "Could not complete scheduling: $($_.Exception.Message)"
+                    }
                     $ke.Handled = $true
                 }
             }
