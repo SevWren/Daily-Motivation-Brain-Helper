@@ -1226,26 +1226,13 @@ function Remove-MotivationTask {
         $script:Platform.UnscheduleTask($TaskId)
     }
     else {
-        # Windows-specific Task Scheduler logic.
-        # Disable the task before deleting: the COM API (ITaskFolder::DeleteTask)
-        # rejects deletion of a task that has an active future trigger while running.
-        # This occurs when a task scheduled for a future time is manually triggered
-        # (e.g., via the Task Scheduler "Run" button). Disabling deactivates the
-        # future trigger without terminating the running instance, unblocking delete.
-        try {
-            Disable-ScheduledTask -TaskName $target.task_name -ErrorAction SilentlyContinue | Out-Null
-        } catch {}
+        # Windows-specific Task Scheduler logic
+        # Verify unregister succeeded and handle failures properly
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
         }
         catch {
-            # Log the failure so popup_debug.txt reveals the exact error for diagnosis
-            try {
-                $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
-                Add-Content -Path $debugLog `
-                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Remove-MotivationTask: Unregister-ScheduledTask failed for '$($target.task_name)': $($_.Exception.Message)" `
-                    -Encoding UTF8 -ErrorAction SilentlyContinue
-            } catch {}
+            # Don't remove from tasks.json if unregister failed (maintain consistency)
             return $false
         }
         # Verify task was actually removed  -  use its own try/catch because
@@ -1255,8 +1242,11 @@ function Remove-MotivationTask {
             $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction Stop
         }
         catch { $stillExists = $null }
-        # A Running state after Unregister-ScheduledTask means deletion was committed;
-        # the running instance is still alive but exits naturally (#194).
+        # A task in "Running" state after Unregister-ScheduledTask means the deletion
+        # was committed to the Task Scheduler database; the running instance (which is
+        # the popup process itself calling this cleanup) is still alive but will exit
+        # naturally. Treating this as a failed removal leaves tasks.json with a stale
+        # PENDING record and the OS Task orphaned after the process exits (#194).
         if ($stillExists -and $stillExists.State -ne 'Running') {
             return $false
         }
