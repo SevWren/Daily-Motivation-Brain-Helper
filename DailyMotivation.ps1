@@ -1227,40 +1227,19 @@ function Remove-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic.
-        # ITaskFolder::DeleteTask (and Unregister-ScheduledTask) returns "Access is denied"
-        # when the caller is the same process registered as the running task instance --
-        # regardless of trigger state or user permissions. The popup IS that running
-        # instance, so any direct COM call to delete or modify the task from within this
-        # process is blocked by Windows Task Scheduler's COM security layer (#194).
-        # Fix: delegate deletion to schtasks.exe as a subprocess. schtasks.exe opens its
-        # own COM connection with a different client identity, bypassing the restriction.
+        # Any attempt to delete the OS Task from within this process -- via
+        # Unregister-ScheduledTask, Disable-ScheduledTask, or schtasks.exe called
+        # synchronously (-Wait) -- returns "Access is denied" while this process IS
+        # the registered running instance of that task. The running instance must be
+        # released (this process must exit) before the deletion can succeed.
+        # Fix: spawn schtasks.exe WITHOUT -Wait so the delete executes after this
+        # process exits and releases the running instance. The 2-second cmd timeout
+        # guarantees DailyMotivation.exe has fully exited before schtasks runs (#194).
         try {
-            $proc = Start-Process -FilePath 'schtasks.exe' `
-                        -ArgumentList "/delete /tn `"$($target.task_name)`" /f" `
-                        -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
-            if ($proc.ExitCode -ne 0) {
-                throw "schtasks.exe exited with code $($proc.ExitCode)"
-            }
-        }
-        catch {
-            try {
-                $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
-                Add-Content -Path $debugLog `
-                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Remove-MotivationTask: schtasks delete failed for '$($target.task_name)': $($_.Exception.Message)" `
-                    -Encoding UTF8 -ErrorAction SilentlyContinue
-            } catch {}
-            return $false
-        }
-        # Verify task was actually removed  -  use its own try/catch because
-        # Get-ScheduledTask throws for not-found tasks (which is the success case).
-        $stillExists = $null
-        try {
-            $stillExists = Get-ScheduledTask -TaskName $target.task_name -ErrorAction Stop
-        }
-        catch { $stillExists = $null }
-        if ($stillExists) {
-            return $false
-        }
+            Start-Process -FilePath 'cmd.exe' `
+                -ArgumentList "/c timeout /t 2 /nobreak >nul & schtasks /delete /tn `"$($target.task_name)`" /f" `
+                -WindowStyle Hidden -ErrorAction SilentlyContinue
+        } catch {}
     }
 
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
