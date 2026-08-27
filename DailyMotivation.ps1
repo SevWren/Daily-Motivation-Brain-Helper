@@ -1227,20 +1227,26 @@ function Remove-MotivationTask {
     }
     else {
         # Windows-specific Task Scheduler logic.
-        # Disable before deleting: ITaskFolder::DeleteTask rejects deletion of a task
-        # that has an active future trigger while a running instance exists. This occurs
-        # when a task is triggered manually while its scheduled trigger is still pending.
-        # Disabling deactivates future triggers without stopping the running instance,
-        # unblocking the delete (#194).
-        try { Disable-ScheduledTask -TaskName $target.task_name -ErrorAction SilentlyContinue | Out-Null } catch {}
+        # ITaskFolder::DeleteTask (and Unregister-ScheduledTask) returns "Access is denied"
+        # when the caller is the same process registered as the running task instance --
+        # regardless of trigger state or user permissions. The popup IS that running
+        # instance, so any direct COM call to delete or modify the task from within this
+        # process is blocked by Windows Task Scheduler's COM security layer (#194).
+        # Fix: delegate deletion to schtasks.exe as a subprocess. schtasks.exe opens its
+        # own COM connection with a different client identity, bypassing the restriction.
         try {
-            Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
+            $proc = Start-Process -FilePath 'schtasks.exe' `
+                        -ArgumentList "/delete /tn `"$($target.task_name)`" /f" `
+                        -WindowStyle Hidden -Wait -PassThru -ErrorAction Stop
+            if ($proc.ExitCode -ne 0) {
+                throw "schtasks.exe exited with code $($proc.ExitCode)"
+            }
         }
         catch {
             try {
                 $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
                 Add-Content -Path $debugLog `
-                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Remove-MotivationTask: Unregister failed for '$($target.task_name)': $($_.Exception.Message)" `
+                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Remove-MotivationTask: schtasks delete failed for '$($target.task_name)': $($_.Exception.Message)" `
                     -Encoding UTF8 -ErrorAction SilentlyContinue
             } catch {}
             return $false
