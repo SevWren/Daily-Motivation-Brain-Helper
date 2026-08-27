@@ -100,12 +100,15 @@ _Avoid_: Reminder, Entry, Item, Job, Appointment
 **TaskId**:
 A 16-character random hex string that uniquely identifies a MotivationTask.
 Used as the key for Task Scheduler's task name and for Outcome Log entries.
+A MotivationTask record without a TaskId is invalid and excluded from all
+operations.
 _Avoid_: ID, GUID, Identifier, Task name
 
 **TriggerTime**:
 The datetime at which Task Scheduler fires the popup for a MotivationTask. Stored
 as ISO 8601 (`scheduled_time` field); invalid stored values are silently skipped
-during duplicate detection.
+during duplicate detection. TriggerTime is Local time - a task scheduled at 14:00
+fires at 14:00 by the user's local clock, not UTC.
 _Avoid_: Scheduled time, Fire time, Run time, Alarm time, Execution time
 
 **Schedule** (verb):
@@ -136,7 +139,9 @@ The lifecycle state of a MotivationTask. At runtime only `PENDING` (created, not
 yet triggered) and `DELETED` (OS Task missing or removed at reconciliation time)
 are assigned. `COMPLETED` and `FAILED` are reserved for future use and are never
 set by current code. Values outside the canonical set are normalized to `UNKNOWN`
-at load time. Duplicate detection only considers `PENDING` tasks.
+and immediately discarded at load time - UNKNOWN records are excluded from all
+operations including the Task List, Duplicate detection, Snooze, and Remove. Only
+tasks created by the App carry a valid Status.
 _Avoid_: State, Phase, Flag
 
 **Network Path**:
@@ -155,9 +160,11 @@ Today option is hidden after the default trigger hour passes on the current day.
 _Avoid_: Date picker, Time picker, Toggle
 
 **Task List**:
-The scrollable panel in main mode displaying all non-DELETED MotivationTasks with
-their FolderNames, scheduled TriggerTimes, and Statuses. The primary surface for
-viewing and removing pending reminders.
+The scrollable panel in main mode displaying all valid, non-DELETED MotivationTasks
+with their FolderNames, scheduled TriggerTimes, and Statuses. Only tasks created by
+the App appear; records with UNKNOWN status are discarded at the data layer before
+reaching the Task List. The primary surface for viewing and removing pending
+reminders.
 _Avoid_: Task view, Task panel, Reminder list
 
 **History Panel**:
@@ -206,7 +213,10 @@ _Avoid_: Let's Go (legacy term), Confirm, Go button, Launch
 
 **Snooze**:
 Creates a new MotivationTask scheduled N minutes in the future (5, 15, 30, or 60),
-replacing the original after the Popup closes. Increments the SnoozeCount.
+replacing the original after the Popup closes. Increments the SnoozeCount. Not
+available in Path Missing state. Requires the originating MotivationTask to still
+be PENDING at the time of execution; if it has been removed, no replacement task
+is created.
 _Avoid_: Delay, Postpone, Defer, Remind me later
 
 **Dismiss**:
@@ -305,12 +315,16 @@ via `Unregister-ContextMenu`.
 _Avoid_: Right-click option, Shell extension, Registry entry
 
 **Mutex**:
-Two named Windows mutexes are used:
+Three named Windows mutexes are used:
 - **Popup mutex** - `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`
   ensures only one Popup is visible per user session (user/session isolation
   prevents cross-user DoS). Exposed at runtime as `$script:PopupMutexName`.
 - **Config lock** - `Global\DailyMotivationPopupConfigLock` serializes writes to
   `popup_config.json` in `Set-PopupConfig`.
+- **Schedule lock** - `Global\DailyMotivationScheduleLock` serializes the full
+  read-duplicate-check-register-save cycle in `New-MotivationTask`,
+  `Sync-MotivationTasks`, and `Remove-MotivationTask`, making each atomic with
+  respect to concurrent Schedule calls. See ADR-011.
 _Avoid_: Lock, Guard, Semaphore
 
 **Undo**:
@@ -414,7 +428,8 @@ _Avoid_: Test script, Run script
   either (a) or (b) having already installed the verb.
 - All persistent state lives in the **AppData Dir**: `config.json` (**AppConfig**),
   `popup_config.json` (**PopupConfig**), `tasks.json` (**MotivationTask** list),
-  `popup_log.txt` (**Outcome Log**)
+  `popup_log.txt` (**Outcome Log**), `popup_debug.txt` (diagnostic log written by
+  popup mode and Remove-MotivationTask)
 - The **Script** compiles 1:1 into the **Exe** via ps2exe; there is no other
   build artifact
 
@@ -502,4 +517,4 @@ _Avoid_: Test script, Run script
 
 ---
 
-_Last updated: 2026-08-26_
+_Last updated: 2026-08-27_
