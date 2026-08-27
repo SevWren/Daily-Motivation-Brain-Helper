@@ -29,9 +29,11 @@ is solved and triggers premature issue closure.
 | User posts passing `.\Invoke-Tests.ps1` output from a real Windows 10/11 machine | Yes |
 | User explicitly states "confirmed fixed", "verified", "this resolves it", or equivalent | Yes |
 | User links a passing Windows CI run for the affected tests | Yes |
+| Agent stated it was waiting on verification AND user replied confirming it works ("verified", "runs fine", "it works", "looks good", or equivalent) | Yes |
 | CI green on Linux | **No** |
 | Mocked-only tests passing | **No** |
 | Code review / agent self-assessment | **No** |
+| Agent ran tests itself with no subsequent user reply | **No** |
 | Conversation silence / no objection | **No** |
 
 **Rule:** Do not write `Closes #N`, `Fixes #N`, or `Resolves #N` in any commit
@@ -63,7 +65,12 @@ User confirmed: Windows PS7 test run posted showing 0 failures for
 Issue #194 regression tests.
 ```
 
-The confirmation evidence must be traceable to a specific user message in the
-current conversation. Never infer confirmation from a passing test run that you
-(the agent) executed - only the user can attest that the fix resolves their
-reported problem.
+The key distinction is who ran the verification:
+
+- **Agent ran it, no user reply** - does not count. A test run the agent executed
+  proves nothing about the user's environment or whether they consider the issue resolved.
+- **Agent explicitly stated it was waiting on verification, user replied confirming
+  it works** - counts. The agent's "waiting" message creates a clear gate; the
+  user's reply in response to that gate is traceable confirmation. Even a brief
+  reply ("verified", "runs fine", "it works") is sufficient - the user's response
+  to an explicit hold is an informed attestation, not silence or assumption.
