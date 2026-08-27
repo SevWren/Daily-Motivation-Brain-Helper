@@ -9,8 +9,8 @@ throughout the codebase use the slash-prefixed form to match this behavior.
 
 Standardize on slash-prefixed mode names everywhere:
 
-- Parameter `ValidateSet`: `"main"`, `"/popup"`, `"/setfolder"`
-- Switch cases: match `"/popup"` and `"/setfolder"`; bare `"main"` is the default fallthrough
+- Parameter `ValidateSet`: `"main"`, `"/popup"`, `"/setfolder"`, `"/uninstall"`
+- Switch cases: match `"/popup"`, `"/setfolder"`, and `"/uninstall"`; bare `"main"` is the default fallthrough
 - OS Task action argument: `/popup`
 - Context Menu Verb command: `/setfolder "%1"`
 

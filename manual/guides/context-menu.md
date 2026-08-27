@@ -21,10 +21,11 @@ The context menu always schedules for **tomorrow** at the `default_trigger_hour`
 
 ## Removing the context menu entry
 
-The context menu entry is re-registered each time you schedule successfully — it cannot be disabled from within the app. To remove it manually:
+Run `DailyMotivation.exe /uninstall` from a command prompt. This removes
+the "Set as tomorrow's folder (Daily Motivation)" entry and shows a
+confirmation dialog. It only removes the context menu entry - your
+scheduled reminders and settings are untouched.
 
-1. Open `regedit`.
-2. Navigate to `HKCU\Software\Classes\Directory\shell\`.
-3. Delete the `ScheduleMotivation` key.
-
-The entry will be re-added the next time you schedule a folder through the main window.
+The entry will be re-added automatically the next time you launch the app
+in main mode, or the next time you schedule a folder through the main
+window - both self-heal the registry key if it's missing.
