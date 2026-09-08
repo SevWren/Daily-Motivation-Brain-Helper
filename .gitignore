@@ -87,3 +87,9 @@ sevwrenai.2026-08-22.private-key.pem
 utility/git-repo-info.bat
 gh_app_token.py
 sevwrenai.private-key.pem
+.claude/agents/pester-engineer/
+.claude/agents/windows-platform-advisor/
+.claude/agents/writing-docs/
+
+llms-full.txt
+bmad_user_guide_generation_orchestrated_agent_workflow.md
