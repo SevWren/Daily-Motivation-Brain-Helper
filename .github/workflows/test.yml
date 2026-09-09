@@ -69,7 +69,7 @@ jobs:
 
   coverage-gate:
     name: Coverage Gate
-    runs-on: ubuntu-latest          # CodeCoverageSummary is a container action (Linux-only)
+    runs-on: ubuntu-latest
     needs: test
     if: ${{ !cancelled() }}         # run even if test had failures; gate is independent
 
@@ -80,17 +80,33 @@ jobs:
           name: test-results-windows-latest
 
       - name: Check coverage threshold
-        uses: irongut/CodeCoverageSummary@v1.3.0
-        with:
-          filename: coverage.xml
-          badge: true
-          format: markdown
-          hide_branch_rate: false
-          hide_complexity: true
-          indicators: true
-          output: both
-          thresholds: '40 60'       # temporary: warn at 40%, fail below 40% (see coverage roadmap issue)
-          fail_below_min: true
+        shell: pwsh
+        run: |
+          # Parse Pester JaCoCo XML directly — irongut/CodeCoverageSummary cannot handle
+          # the <!DOCTYPE report ...> declaration in Pester's JaCoCo output.
+          # Temporary threshold: 40% (see coverage roadmap issue #196).
+          $minPct = 40
+          [xml]$report = Get-Content coverage.xml -Raw
+          $allCounters = @(
+            $report.report.counter
+            $report.report.package | ForEach-Object { $_.counter }
+            $report.report.package | ForEach-Object { $_.class } | ForEach-Object { $_.counter }
+          ) | Where-Object { $_ -and $_.type -eq 'LINE' }
+          $covered = ($allCounters | Measure-Object -Property covered -Sum).Sum
+          $missed  = ($allCounters | Measure-Object -Property missed  -Sum).Sum
+          $total   = $covered + $missed
+          if ($total -eq 0) { throw "Coverage XML contained no LINE counters — verify Pester generated coverage.xml" }
+          $pct = [math]::Round($covered / $total * 100, 1)
+          Write-Host "Line coverage: $pct% ($covered covered / $total total lines)"
+          Write-Host "Threshold:     $minPct%"
+          if ($pct -lt $minPct) {
+            Write-Host "##[error]Coverage $pct% is below the $minPct% minimum threshold"
+            exit 1
+          }
+          Write-Host "Coverage gate passed: $pct% >= $minPct%"
+          # Write a step summary
+          "## Coverage Gate`n`n| Metric | Value |`n|--------|-------|`n| Line coverage | $pct% |`n| Covered lines | $covered |`n| Total lines | $total |`n| Threshold | $minPct% |`n| Status | :white_check_mark: Passed |" |
+            Add-Content $env:GITHUB_STEP_SUMMARY
 
   analyze:
     name: Static Analysis
