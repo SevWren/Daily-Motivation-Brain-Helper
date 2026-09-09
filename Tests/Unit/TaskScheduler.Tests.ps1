@@ -78,26 +78,26 @@ BeforeAll {
 }
 
 AfterAll {
+    if (-not $IsWindows) { return }
+
     # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
-    if ($IsWindows) {
-        try {
-            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
-            if ($strayTasks) {
-                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
-                foreach ($task in $strayTasks) {
-                    try {
-                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
-                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
-                    }
-                    catch {
-                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
-                    }
+    try {
+        $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+        if ($strayTasks) {
+            Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+            foreach ($task in $strayTasks) {
+                try {
+                    Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                    Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                }
+                catch {
+                    Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
                 }
             }
         }
-        catch {
-            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
-        }
+    }
+    catch {
+        Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
     }
 
     if (Test-Path $env:APPDATA) {
