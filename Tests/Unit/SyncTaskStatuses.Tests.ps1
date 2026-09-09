@@ -50,6 +50,7 @@ BeforeAll {
 }
 
 AfterAll {
+    if (-not $IsWindows) { return }
     if (Test-Path $env:APPDATA) {
         Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
     }
