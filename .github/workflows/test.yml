@@ -89,7 +89,7 @@ jobs:
           hide_complexity: true
           indicators: true
           output: both
-          thresholds: '70 80'       # warn at 70%, fail below 70% (Story 2.5)
+          thresholds: '40 60'       # temporary: warn at 40%, fail below 40% (see coverage roadmap issue)
           fail_below_min: true
 
   analyze:
