@@ -1226,19 +1226,8 @@ function Remove-MotivationTask {
         $script:Platform.UnscheduleTask($TaskId)
     }
     else {
-        # Windows-specific Task Scheduler logic.
-        # Any attempt to delete the OS Task from within this process -- via
-        # Unregister-ScheduledTask, Disable-ScheduledTask, or schtasks.exe called
-        # synchronously (-Wait) -- returns "Access is denied" while this process IS
-        # the registered running instance of that task. The running instance must be
-        # released (this process must exit) before the deletion can succeed.
-        # Fix: spawn schtasks.exe WITHOUT -Wait so the delete executes after this
-        # process exits and releases the running instance. The 2-second cmd timeout
-        # guarantees DailyMotivation.exe has fully exited before schtasks runs (#194).
         try {
-            Start-Process -FilePath 'cmd.exe' `
-                -ArgumentList "/c timeout /t 2 /nobreak >nul & schtasks /delete /tn `"$($target.task_name)`" /f" `
-                -WindowStyle Hidden -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
         } catch {}
     }
 
@@ -2325,15 +2314,16 @@ function Show-MainWindow {
                 $scheduleBtn.IsEnabled = ($script:selectedPath -ne "")
                 $undoLabel.Text        = "Reminder cancelled successfully. Your folder was not scheduled."
                 $undoBanner.Visibility = "Visible"
-                $script:undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
-                $script:undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
-                $script:undoFeedbackTimer.Add_Tick({
-                    $script:undoFeedbackTimer.Stop()
-                    try { $script:undoFeedbackTimer.Dispose() } catch {}
+                $undoFeedbackTimer = [System.Windows.Threading.DispatcherTimer]::new()
+                $undoFeedbackTimer.Interval = [System.TimeSpan]::FromMilliseconds(2500)
+                $undoFeedbackTimer.Add_Tick({
+                    $undoFeedbackTimer.Stop()
+                    $undoFeedbackTimer.Dispose()
                     $script:undoFeedbackTimer = $null
                     $undoBanner.Visibility = "Collapsed"
                 })
-                $script:undoFeedbackTimer.Start()
+                $script:undoFeedbackTimer = $undoFeedbackTimer
+                $undoFeedbackTimer.Start()
             }
         })
 
@@ -2419,9 +2409,7 @@ function Show-MainWindow {
         switch ($ke.Key) {
             ([System.Windows.Input.Key]::Return) {
                 if ($scheduleBtn.IsEnabled -and $script:selectedPath) {
-                    try {
-                        Do-Schedule -FolderPath $script:selectedPath
-                    } catch {
+                    try { Do-Schedule -FolderPath $script:selectedPath } catch {
                         Show-ErrorDialog -Title "Schedule Failed" -Message "Could not complete scheduling: $($_.Exception.Message)"
                     }
                     $ke.Handled = $true
