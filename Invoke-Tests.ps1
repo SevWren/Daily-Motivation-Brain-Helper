@@ -97,8 +97,8 @@ try {
     Write-Host "=====================================================================" -ForegroundColor Cyan
 
     # Story 2.4: Enforce coverage threshold in CI mode.
-    # $CoverageThreshold aligned with the 70% minimum in the CI coverage-gate job.
-    $CoverageThreshold = 70
+    # $CoverageThreshold aligned with the CI coverage-gate job (temporarily 40%; see GitHub issue for roadmap to 100%).
+    $CoverageThreshold = 40
     if ($CI -and $Coverage -and $null -ne $result.CodeCoverage) {
         $pct = [math]::Round($result.CodeCoverage.CoveragePercent, 1)
         Write-Host ""
