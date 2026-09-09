@@ -1,7 +1,7 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
-    Unit tests for Get-Config upgrade path — AG20-012.
+    Unit tests for Get-Config upgrade path  -  AG20-012.
     Verifies that Get-Config returns safe defaults when config.json was written
     by an older (or newer) version of the application with a partial or different schema.
 #>
@@ -35,7 +35,7 @@ Describe 'Get-Config old schema upgrade path' {
     }
 
     It 'Returns task_warning_threshold = 5 when config.json is missing that key (old schema)' {
-        # Seed: only default_trigger_hour present — simulates config written before task_warning_threshold existed
+        # Seed: only default_trigger_hour present  -  simulates config written before task_warning_threshold existed
         @{ default_trigger_hour = 9 } |
             ConvertTo-Json |
             Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
@@ -46,7 +46,7 @@ Describe 'Get-Config old schema upgrade path' {
     }
 
     It 'Preserves the present key default_trigger_hour = 9 when task_warning_threshold is missing' {
-        # The valid key that IS present must survive — only the missing key gets a default
+        # The valid key that IS present must survive  -  only the missing key gets a default
         @{ default_trigger_hour = 9 } |
             ConvertTo-Json |
             Set-Content $script:ConfigPath -Encoding UTF8
@@ -58,7 +58,7 @@ Describe 'Get-Config old schema upgrade path' {
     }
 
     It 'Returns default_trigger_hour = 14 when config.json is missing that key' {
-        # Seed: only task_warning_threshold present — simulates config missing default_trigger_hour
+        # Seed: only task_warning_threshold present  -  simulates config missing default_trigger_hour
         @{ task_warning_threshold = 3 } |
             ConvertTo-Json |
             Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
@@ -109,7 +109,7 @@ Describe 'Get-Config old schema upgrade path' {
     }
 
     It 'Returns both safe defaults when config.json is a completely empty JSON object' {
-        # {} is valid JSON but contains no keys at all — both fields must fall back to defaults.
+        # {} is valid JSON but contains no keys at all  -  both fields must fall back to defaults.
         '{}' |
             Set-Content (Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json') -Encoding UTF8
 

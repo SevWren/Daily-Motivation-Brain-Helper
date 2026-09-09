@@ -107,6 +107,12 @@ check_file() {
   if is_binary "$file"; then
     return
   fi
+  # Skip third-party vendor/installed directories (e.g. BMAD framework files)
+  case "$file" in
+    _bmad/*|.claude/skills/bmad-*)
+      return
+      ;;
+  esac
 
   local category
   category=$(get_file_category "$file")

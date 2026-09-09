@@ -1,0 +1,83 @@
+---
+sprint: 13
+epic: "Epic 1: Task Scheduler Integration Test Coverage"
+story: "Story 1.1: Multi-Folder Scheduling Integration Tests"
+issue: "#158 AG20-001"
+priority: Critical
+platform: Windows-only (-Skip:(-not $IsWindows))
+started: 2026-08-25
+completed: 2026-08-25
+status: ready-for-windows-validation
+---
+
+# Sprint 13: Multi-Folder Scheduling Integration Tests
+
+## Story Summary
+Closes #158 AG20-001 (Critical)
+
+Add integration tests that schedule two or more distinct folders simultaneously
+to verify tasks.json consistency with N entries and selective removal.
+
+## Acceptance Criteria
+
+1. **Given** the test environment has a clean temp APPDATA dir and Register-ScheduledTask is mocked,
+   **When** `New-MotivationTask` is called for three distinct FolderPaths in the same session,
+   **Then** `tasks.json` contains exactly three PENDING entries, each with a unique TaskId, and `Get-ScheduledTask` is called three times.
+
+2. **Given** two tasks are registered for different folders,
+   **When** `Remove-MotivationTask` is called for one TaskId,
+   **Then** `tasks.json` retains exactly one PENDING entry and `Unregister-ScheduledTask` is called exactly once with the correct task name.
+
+3. **Given** a tasks.json with three entries,
+   **When** `Get-MotivationTasks` is called,
+   **Then** all three tasks are returned with correct FolderPath values (case-insensitive match).
+
+## Implementation Plan
+
+1. Check existing Tests/Integration/AG20-001.MultiFolderScheduling.Tests.ps1
+2. Enhance tests to cover all three acceptance criteria
+3. Ensure tests are tagged `-Skip:(-not $IsWindows)`
+4. No mocking of New-ScheduledTaskAction/Trigger/Settings/Principal (per CLAUDE.md WRONG 8)
+5. Verify with full test suite run
+
+## Testing Strategy
+
+- File: Tests/Integration/AG20-001.MultiFolderScheduling.Tests.ps1
+- Must use real New-ScheduledTaskAction/Trigger/Settings/Principal cmdlets
+- Mock only Register-ScheduledTask, Get-ScheduledTask, Unregister-ScheduledTask
+- Requires Windows validation before closure per CLAUDE.md mandate
+
+## Implementation Summary
+
+Enhanced Tests/Integration/AG20-001.MultiFolderScheduling.Tests.ps1 with three new tests
+explicitly covering all acceptance criteria:
+
+1. **AC#1 Test** (lines 53-82): Schedules 3 folders, verifies:
+   - tasks.json contains exactly 3 PENDING entries
+   - All TaskIds are unique
+   - All folder paths are correct
+   - Register-ScheduledTask was called exactly 3 times
+
+2. **AC#2 Test** (lines 84-105): Schedules 2 folders, removes 1, verifies:
+   - tasks.json retains exactly 1 PENDING entry
+   - Correct task remains (folder1, task_id matches)
+   - Unregister-ScheduledTask called exactly once with correct task name
+
+3. **AC#3 Test** (lines 187-218): Tests case-insensitive path matching:
+   - Schedules 3 folders with mixed case (Alpha, beta lowercase, GAMMA uppercase)
+   - Verifies all 3 tasks returned with paths preserved as stored
+   - Verifies duplicate detection is case-insensitive (C:\PROJECTS\ALPHA detected as duplicate of C:\Projects\Alpha)
+
+All existing tests remain unchanged and hardened.
+
+## Windows Validation Required
+
+Per CLAUDE.md mandate: This issue (#158 AG20-001) may NOT be closed until a passing
+Windows 10/11 test run is posted as proof. Linux CI does not validate Register-ScheduledTask behavior.
+
+## Notes
+
+- CLAUDE.md mandate: Never close Register-ScheduledTask issues based on Linux CI alone
+- All tests must be tagged `-Skip:(-not $IsWindows)`
+- Do not weaken existing test assertions
+- No mocking of New-ScheduledTaskAction/Trigger/Settings/Principal per CLAUDE.md WRONG 8

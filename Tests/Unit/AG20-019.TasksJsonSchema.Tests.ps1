@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Contract tests for tasks.json schema robustness (AG20-019).
@@ -38,7 +38,7 @@ AfterAll {
     $env:APPDATA = $script:OriginalAppData
 }
 
-Describe 'tasks.json schema contract — malformed entries' {
+Describe 'tasks.json schema contract  -  malformed entries' {
 
     BeforeEach {
         # Reset tasks.json to empty before each test
@@ -53,13 +53,15 @@ Describe 'tasks.json schema contract — malformed entries' {
             { Get-TasksJson } | Should -Not -Throw
         }
 
-        It 'returns the entry (or skips it) without throwing — either behavior is acceptable' {
+        It 'returns the entry (or skips it) without throwing  -  either behavior is acceptable' {
             $badTask = New-TestTask @{task_id=$null; task_name='DailyMotivation_test_nullid'}
             @($badTask) | ConvertTo-Json | Set-Content $script:TasksPath -Encoding UTF8
 
-            $result = Get-TasksJson
-            # Must not throw; result is either an array containing the entry or an empty array
-            $result | Should -Not -Be $null
+            # AG18-010: entries with null task_id are filtered out; the result is an
+            # empty collection. Assert on .Count rather than piping to Should -- an empty
+            # array @() sends nothing through the pipeline so Should receives $null.
+            $result = @(Get-TasksJson)
+            $result.Count | Should -Be 0
         }
     }
 

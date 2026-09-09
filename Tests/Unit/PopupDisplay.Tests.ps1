@@ -187,3 +187,41 @@ Describe 'Strip-MarkupText' {
         }
     }
 }
+
+Describe 'Issue #192 regression: Escape-XmlText must not be applied to WPF .Text property assignments' {
+    # WPF TextBlock.Text is a plain-text property set in code-behind.
+    # Escape-XmlText converts apostrophes to &apos;, angle brackets to &lt;/&gt;, etc.
+    # Assigning escaped text to .Text displays the entity literals on screen (don&apos;t).
+    # Escape-XmlText is only correct when embedding text in an XML/XAML markup string.
+    BeforeAll {
+        $src       = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $funcStart = $src.IndexOf('function Show-PopupWindow')
+        $funcEnd   = $src.IndexOf('# ============================================================', $funcStart + 100)
+        $script:popupBodyDisp = $src.Substring($funcStart, $funcEnd - $funcStart)
+    }
+
+    It 'glyphText.Text assignment does not call Escape-XmlText' {
+        $script:popupBodyDisp -match '\$glyphText\.Text\s*=.*Escape-XmlText' | Should -Be $false `
+            -Because 'WPF .Text is plain text; Escape-XmlText renders XML entities literally on screen (#192)'
+    }
+
+    It 'titleText.Text assignment does not call Escape-XmlText' {
+        $script:popupBodyDisp -match '\$titleText\.Text\s*=.*Escape-XmlText' | Should -Be $false `
+            -Because 'WPF .Text is plain text; Escape-XmlText renders XML entities literally on screen (#192)'
+    }
+
+    It 'bodyText.Text assignment does not call Escape-XmlText' {
+        $script:popupBodyDisp -match '\$bodyText\.Text\s*=.*Escape-XmlText' | Should -Be $false `
+            -Because 'WPF .Text is plain text; Escape-XmlText renders XML entities literally on screen (#192)'
+    }
+
+    It 'folderNameText.Text assignment does not call Escape-XmlText' {
+        $script:popupBodyDisp -match '\$folderNameText\.Text\s*=.*Escape-XmlText' | Should -Be $false `
+            -Because 'WPF .Text is plain text; Escape-XmlText renders XML entities literally on screen (#192)'
+    }
+
+    It 'missingPathLabel.Text assignment does not call Escape-XmlText' {
+        $script:popupBodyDisp -match '\$missingPathLabel\.Text\s*=.*Escape-XmlText' | Should -Be $false `
+            -Because 'WPF .Text is plain text; Escape-XmlText renders XML entities literally on screen (#192)'
+    }
+}

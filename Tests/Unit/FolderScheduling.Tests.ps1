@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Tests for extracted folder scheduling business logic
@@ -239,5 +239,116 @@ Describe 'BUG-3: Do-Schedule error dialog title for scheduling failures' {
         $fnEnd   = $content.IndexOf("`nfunction ", $fnStart + 25)
         $functionBody = if ($fnEnd -gt $fnStart) { $content.Substring($fnStart, $fnEnd - $fnStart) } else { $content.Substring($fnStart) }
         $functionBody -match '"Invalid Folder"' | Should -Be $true
+    }
+}
+
+Describe 'BUG-1: Show-PopupWindow openExplorer state preservation' {
+    It 'Show-PopupWindow finally block does not reset openExplorer' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $finallyMatch  = [regex]::Match($functionBody, 'finally\s*\{(.+?)\}', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $finallyContent = $finallyMatch.Groups[1].Value
+        $finallyContent -match '\$script:openExplorer\s*=' | Should -Be $false -Because 'finally block must not reset openExplorer; user button choice must be preserved (BUG-1 fix)'
+    }
+    It 'Show-PopupWindow initializes openExplorer=true before ShowDialog' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match '\$script:openExplorer\s*=\s*\$true' | Should -Be $true -Because 'Popup must initialize openExplorer=true before showing window'
+    }
+    It 'Open Folder button sets openExplorer=true' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $functionBody -match 'letsGoBtn.*Add_Click' | Should -Be $true
+        $openBlock = [regex]::Match($functionBody, '\$letsGoBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $openBlock.Value -match '\$script:openExplorer\s*=\s*\$true' | Should -Be $true -Because 'Open Folder button must set openExplorer=true'
+    }
+    It 'Dismiss button sets openExplorer=false' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $dismissBlock = [regex]::Match($functionBody, '\$dismissBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $dismissBlock.Value -match '\$script:openExplorer\s*=\s*\$false' | Should -Be $true -Because 'Dismiss button must set openExplorer=false'
+    }
+    It 'Snooze button sets openExplorer=false' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $functionStart = $src.IndexOf('function Show-PopupWindow')
+        $functionEnd   = $src.IndexOf('# ============================================================', $functionStart + 100)
+        $functionBody  = $src.Substring($functionStart, $functionEnd - $functionStart)
+        $snoozeBlock = [regex]::Match($functionBody, '\$snoozeBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        $snoozeBlock.Value -match '\$script:openExplorer\s*=\s*\$false' | Should -Be $true -Because 'Snooze button must set openExplorer=false'
+    }
+}
+
+Describe 'BUG-4 (#183) and #194: Set-PopupConfig failure handling in Invoke-FolderScheduling and schedule callers' {
+    BeforeAll {
+        $script:src194 = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+
+        $ifStart = $script:src194.IndexOf('function Invoke-FolderScheduling')
+        $ifEnd   = $script:src194.IndexOf("`n# ============", $ifStart)
+        $script:ifBody = $script:src194.Substring($ifStart, $ifEnd - $ifStart)
+
+        $mwStart = $script:src194.IndexOf('function Show-MainWindow')
+        $mwEnd   = $script:src194.IndexOf('function Show-PopupWindow', $mwStart)
+        $script:mwBody = $script:src194.Substring($mwStart, $mwEnd - $mwStart)
+    }
+
+    It 'Invoke-FolderScheduling wraps Set-PopupConfig in try/catch' {
+        # The Set-PopupConfig call must be inside a try block so a write failure
+        # can be caught and rolled back rather than propagating silently (#183 BUG-4)
+        $setConfigIdx = $script:ifBody.IndexOf('Set-PopupConfig @popupConfigParams')
+        $tryIdx       = $script:ifBody.LastIndexOf('try {', $setConfigIdx)
+        $tryIdx | Should -BeGreaterThan -1 `
+            -Because '#183 BUG-4: Set-PopupConfig must be in a try block so failures are caught and the OS Task can be rolled back'
+    }
+
+    It 'Invoke-FolderScheduling calls Remove-MotivationTask in the Set-PopupConfig catch block' {
+        # If Set-PopupConfig fails the OS Task must be rolled back to keep
+        # tasks.json and popup_config.json in sync (#183 BUG-4, #194)
+        $setConfigIdx  = $script:ifBody.IndexOf('Set-PopupConfig @popupConfigParams')
+        $catchIdx      = $script:ifBody.IndexOf('catch {', $setConfigIdx)
+        $catchEnd      = $script:ifBody.IndexOf('}', $catchIdx + 7)
+        $catchBlock    = $script:ifBody.Substring($catchIdx, $catchEnd - $catchIdx + 1)
+        $catchBlock -match 'Remove-MotivationTask' | Should -Be $true `
+            -Because '#194: when Set-PopupConfig fails the just-registered OS Task must be removed so the user is not left with an unserviceable scheduled task'
+    }
+
+    It 'Invoke-FolderScheduling returns Success=false when Set-PopupConfig catch fires' {
+        $setConfigIdx = $script:ifBody.IndexOf('Set-PopupConfig @popupConfigParams')
+        $catchIdx     = $script:ifBody.IndexOf('catch {', $setConfigIdx)
+        $returnIdx    = $script:ifBody.IndexOf('return', $catchIdx)
+        $returnEnd    = $script:ifBody.IndexOf('}', $returnIdx)
+        $returnBlock  = $script:ifBody.Substring($returnIdx, $returnEnd - $returnIdx)
+        $returnBlock -match 'Success\s*=\s*\$false' | Should -Be $true `
+            -Because 'caller (Do-Schedule) checks Success to decide whether to show an error dialog'
+    }
+
+    It 'scheduleBtn.Add_Click wraps Do-Schedule in try/catch' {
+        $btnBlock = [regex]::Match($script:mwBody,
+            '\$scheduleBtn\.Add_Click\(\{[\s\S]+?\}\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        ($btnBlock.Value -match 'try\s*\{') -and ($btnBlock.Value -match '\}\s*catch') | Should -Be $true `
+            -Because '#183 BUG-4: without try/catch the WPF dispatcher swallows any exception from Do-Schedule silently'
+    }
+
+    It 'Add_KeyDown Enter handler wraps Do-Schedule in try/catch' {
+        $keyBlock = [regex]::Match($script:mwBody,
+            'Key\]::Return\)[\s\S]+?(?=\n\s+\(|\n\s+\})', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+        ($keyBlock.Value -match 'try\s*\{') -and ($keyBlock.Value -match '\}\s*catch') | Should -Be $true `
+            -Because '#183 BUG-4: Enter key path has the same silent-swallow risk as the schedule button'
+    }
+
+    It 'Invoke-FolderScheduling returns an Error string describing the popup config failure' {
+        $setConfigIdx = $script:ifBody.IndexOf('Set-PopupConfig @popupConfigParams')
+        $catchIdx     = $script:ifBody.IndexOf('catch {', $setConfigIdx)
+        $catchToEnd   = $script:ifBody.IndexOf('# REQ-010', $catchIdx)
+        $catchRegion  = $script:ifBody.Substring($catchIdx, $catchToEnd - $catchIdx)
+        $catchRegion -match 'Error\s*=' | Should -Be $true `
+            -Because 'Do-Schedule reads result.Error to build the error dialog message shown to the user'
     }
 }

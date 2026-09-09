@@ -4,7 +4,7 @@
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `Mode` | `string` | `main` | `ValidateSet`: `main`, `/popup`, `/setfolder` |
+| `Mode` | `string` | `main` | `ValidateSet`: `main`, `/popup`, `/setfolder`, `/uninstall` |
 | `FolderPath` | `string` | `""` | Required for meaningful setfolder use; validated against leading `*?<>|` |
 | `NoRun` | `switch` | off | Define functions only; skip entry point (tests) |
 
@@ -17,6 +17,7 @@ When compiled, positional CLI arguments map to `Mode` (and folder path for setfo
 | `DailyMotivation.exe` | `main` | Main WPF window |
 | `DailyMotivation.exe /popup` | `"/popup"` | Popup UI (Task Scheduler) |
 | `DailyMotivation.exe /setfolder "C:\path\to\folder"` | `"/setfolder"` | Schedule folder for tomorrow at default hour; MessageBox confirmation |
+| `DailyMotivation.exe /uninstall` | `"/uninstall"` | Remove Context Menu Verb registry key; show confirmation MessageBox |
 | `pwsh .\DailyMotivation.ps1 -NoRun` | n/a | Test load only |
 
 ### Important: slash-prefixed modes

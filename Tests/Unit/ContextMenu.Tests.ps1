@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Unit tests for context menu functions in DailyMotivation.ps1.
@@ -56,7 +56,7 @@ Describe 'Register-ContextMenu' {
         }
     }
 
-    It 'Should create the registry verb key' {
+    It 'Should create the registry verb key' -Skip:(-not $IsWindows) {
         Register-ContextMenu -ExePath $script:TestExe
         if ($IsWindows) {
             Test-Path $script:VerbKey | Should -Be $true
@@ -66,7 +66,7 @@ Describe 'Register-ContextMenu' {
         }
     }
 
-    It 'Should set the verb display name' {
+    It 'Should set the verb display name' -Skip:(-not $IsWindows) {
         Register-ContextMenu -ExePath $script:TestExe
         if ($IsWindows) {
             $val = (Get-ItemProperty -Path $script:VerbKey -ErrorAction SilentlyContinue).'(default)'
@@ -79,7 +79,7 @@ Describe 'Register-ContextMenu' {
         }
     }
 
-    It 'Should set the command to exe /setfolder "%1"' {
+    It 'Should set the command to exe /setfolder "%1"' -Skip:(-not $IsWindows) {
         Register-ContextMenu -ExePath $script:TestExe
         if ($IsWindows) {
             $cmdKey = "$($script:VerbKey)\command"

@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Tests for AG20-005: atomic write failure and data preservation in Save-TasksJson.
@@ -15,7 +15,7 @@
     Platform-agnostic: no Task Scheduler dependency; runs on Linux and Windows.
 #>
 
-Describe 'AG20-005 — Save-TasksJson atomic write failure and data preservation' {
+Describe 'AG20-005  -  Save-TasksJson atomic write failure and data preservation' {
 
     BeforeAll {
         . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
@@ -95,7 +95,7 @@ Describe 'AG20-005 — Save-TasksJson atomic write failure and data preservation
 
         It 'tasks.json still contains the ORIGINAL valid task after the failed write' {
             # The pre-existing tasks.json must be untouched because Move-Item never
-            # completed — the .tmp file was never renamed over the live file.
+            # completed  -  the .tmp file was never renamed over the live file.
             $raw = Get-Content -Path $script:TasksJsonPath -Raw -Encoding UTF8
             $raw | Should -Not -BeNullOrEmpty
 

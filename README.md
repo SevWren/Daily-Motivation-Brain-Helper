@@ -51,6 +51,7 @@ Click **View History** in the main window to see a log of your last 30 popup out
 | `DailyMotivation.exe` | Main UI | You double-click the exe |
 | `DailyMotivation.exe /popup` | Popup notification | Windows Task Scheduler fires |
 | `DailyMotivation.exe /setfolder "C:\path"` | Context menu handler | Explorer right-click verb |
+| `DailyMotivation.exe /uninstall` | CLI cleanup | Run manually to remove the context menu entry |
 
 ---
 

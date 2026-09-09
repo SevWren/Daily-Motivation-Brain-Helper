@@ -1,0 +1,34 @@
+project_key: Daily-Motivation-Brain-Helper
+tracking_system: github
+story_location: inline
+last_updated: 2026-08-25T00:00:00Z
+
+closed_without_code:
+  - "73: created_at normalized to yyyy-MM-ddTHH:mm:ssK in Sprint 9"
+  - "75: StartBoundary now uses InvariantCulture parse (Sprint 9)"
+  - "81: Direct TextBlock mutation is correct; WPF binding unnecessary overhead"
+  - "68: Hour comparison is correct for integer-hour triggers; no minutes in default_trigger_hour"
+  - "67: DateTime formats now consistent after Sprint 9 normalization"
+  - "71: Window closes after snooze preventing rapid double-click; -Force is intentional for snooze"
+
+epics:
+  - id: "epic-1"
+    title: "Messages and Config Persistence"
+    status: "ready-for-dev"
+    stories:
+      - id: "story-1-1"
+        title: "Guard Empty Messages Array in Get-RandomMessage"
+        status: "done"
+        github_issue: 78
+        severity: "High"
+        windows_only: false
+        notes: "Added $Messages.Count == 0 guard returning hardcoded fallback before the crypto RNG index calculation. Prevents division-by-zero on empty array. Linux-safe."
+      - id: "story-1-2"
+        title: "Persist Snooze Duration Preference to Config"
+        status: "done"
+        github_issue: 72
+        severity: "Low"
+        windows_only: false
+        notes: "Added snooze_duration_minutes=5 to ConfigDefaults; validation in Get-Config; Set-SnoozeDuration saves via Get-Config/Save-Config; Show-PopupWindow loads on startup and initializes IsChecked state from persisted value. Linux-safe."
+    retrospective:
+      status: "not-started"

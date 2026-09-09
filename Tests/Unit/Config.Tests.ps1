@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Unit tests for configuration functions in DailyMotivation.ps1.
@@ -117,7 +117,7 @@ Describe 'Initialize-AppData' {
         BeforeEach {
             $script:OriginalAppDataForFallback = $env:APPDATA
             # Create a FILE at a temp path so that New-Item -ItemType Directory under it always fails.
-            # A directory cannot be created under a file regardless of privileges — this is more
+            # A directory cannot be created under a file regardless of privileges  -  this is more
             # reliable than using a system path (admin runners can write to System32).
             $script:AppDataBlockerFile = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_blocker_$(New-Guid)"
             New-Item -Path $script:AppDataBlockerFile -ItemType File -Force | Out-Null
@@ -325,6 +325,21 @@ Describe 'Write-OutcomeLog' {
             # If more than expected, pipes in data weren't escaped
             # This test documents current behavior; ideally should escape pipes
             $pipeCount | Should -BeGreaterOrEqual 5
+        }
+
+        It 'Log entry with empty TaskId must still produce exactly 5 pipes (parseable line) (AG8-011)' {
+            # AG8-011: A log line with empty TaskId must remain structurally parseable.
+            # Format: [timestamp] | TaskId | FolderName | HASH:{sha256} | Outcome | SnoozeCount
+            Write-OutcomeLog -TaskId '' -FolderName 'TestFolder' -FolderPath 'C:\Test' -Outcome 'Dismissed'
+            $logPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_log.txt'
+            $content = Get-Content $logPath -Raw
+            $lines = @($content -split "`n" | Where-Object { $_ -ne '' })
+            $lastLine = [string]$lines[-1]
+            # Must have exactly 5 pipe delimiters (6 fields) for the line to be parseable
+            $pipeCount = ($lastLine.ToCharArray() | Where-Object { $_ -eq '|' }).Count
+            $pipeCount | Should -Be 5 -Because 'an empty TaskId must not collapse fields; log line must remain parseable'
+            # The Outcome field must still be present
+            $lastLine | Should -Match 'Dismissed'
         }
     }
 }

@@ -1,4 +1,4 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
     Unit tests for Performance & Resource Leak fixes (Section 14: AG14-001 through AG14-024).
@@ -52,7 +52,7 @@ Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
     # MissingMethodException at runtime. HOTFIX 92e5f60 removed all DriveInfo.Dispose()
     # calls. These tests verify that regression does not reoccur.
 
-    It 'Should NOT call Dispose() on DriveInfo in Invoke-FolderScheduling — DriveInfo is not IDisposable' {
+    It 'Should NOT call Dispose() on DriveInfo in Invoke-FolderScheduling  -  DriveInfo is not IDisposable' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
         $content = Get-Content $sourceFile -Raw
 
@@ -65,11 +65,11 @@ Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
 
         if ($hasDriveInfo) {
             # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
-            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
+            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable  -  calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
         }
     }
 
-    It 'Should NOT call Dispose() on DriveInfo in New-MotivationTask — DriveInfo is not IDisposable' {
+    It 'Should NOT call Dispose() on DriveInfo in New-MotivationTask  -  DriveInfo is not IDisposable' {
         $sourceFile = Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1'
         $content = Get-Content $sourceFile -Raw
 
@@ -82,7 +82,7 @@ Describe 'AG14-007: DriveInfo Is Not IDisposable (HOTFIX 92e5f60)' {
 
         if ($hasDriveInfo) {
             # DriveInfo is a value-type wrapper; .Dispose() does not exist on it
-            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable — calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
+            $hasDisposal | Should -Be $false -Because "DriveInfo is not IDisposable  -  calling .Dispose() throws MissingMethodException (HOTFIX 92e5f60)"
         }
     }
 }

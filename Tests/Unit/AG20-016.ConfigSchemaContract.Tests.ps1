@@ -1,7 +1,7 @@
-#Requires -Modules Pester
+#Requires -Modules @{ ModuleName='Pester'; ModuleVersion='5.0.0' }
 <#
 .SYNOPSIS
-    AG20-016 — Config schema contract tests.
+    AG20-016  -  Config schema contract tests.
 
 .DESCRIPTION
     Verifies that Get-Config enforces type and range constraints on
@@ -48,7 +48,7 @@ Describe 'Config schema contract' {
     }
 
     # -------------------------------------------------------------------------
-    # TYPE ASSERTIONS — fresh defaults
+    # TYPE ASSERTIONS  -  fresh defaults
     # -------------------------------------------------------------------------
 
     Context 'Type assertions on default values' {
@@ -68,7 +68,7 @@ Describe 'Config schema contract' {
     }
 
     # -------------------------------------------------------------------------
-    # default_trigger_hour — RANGE VALIDATION
+    # default_trigger_hour  -  RANGE VALIDATION
     # Current behaviour: values outside [0,23] are replaced with the safe
     # default of 14.
     # -------------------------------------------------------------------------
@@ -93,7 +93,7 @@ Describe 'Config schema contract' {
             $cfg.default_trigger_hour | Should -Be 14
         }
 
-        It 'returns 0 when default_trigger_hour = 0 (lower boundary — valid)' {
+        It 'returns 0 when default_trigger_hour = 0 (lower boundary  -  valid)' {
             $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
             @{ default_trigger_hour = 0; task_warning_threshold = 5 } |
                 ConvertTo-Json | Set-Content $configPath -Encoding UTF8
@@ -102,7 +102,7 @@ Describe 'Config schema contract' {
             $cfg.default_trigger_hour | Should -Be 0
         }
 
-        It 'returns 23 when default_trigger_hour = 23 (upper boundary — valid)' {
+        It 'returns 23 when default_trigger_hour = 23 (upper boundary  -  valid)' {
             $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
             @{ default_trigger_hour = 23; task_warning_threshold = 5 } |
                 ConvertTo-Json | Set-Content $configPath -Encoding UTF8
@@ -113,13 +113,13 @@ Describe 'Config schema contract' {
     }
 
     # -------------------------------------------------------------------------
-    # default_trigger_hour — WRONG TYPE
+    # default_trigger_hour  -  WRONG TYPE
     # Current behaviour: non-numeric string fails the type guard and is replaced
     # with the safe default of 14.
     # -------------------------------------------------------------------------
 
     Context 'default_trigger_hour wrong-type handling' {
-        It 'returns safe default 14 when default_trigger_hour = "noon" (string — wrong type)' {
+        It 'returns safe default 14 when default_trigger_hour = "noon" (string  -  wrong type)' {
             # Write raw JSON so that "noon" is stored as a JSON string, not a number.
             $configPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\config.json'
             '{"default_trigger_hour":"noon","task_warning_threshold":5}' |
@@ -140,7 +140,7 @@ Describe 'Config schema contract' {
     }
 
     # -------------------------------------------------------------------------
-    # task_warning_threshold — RANGE AND TYPE VALIDATION
+    # task_warning_threshold  -  RANGE AND TYPE VALIDATION
     # Current behaviour:
     #   negative values (< 0) → replaced with safe default 5
     #   0                      → returned as-is (guard only rejects < 0)
