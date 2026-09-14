@@ -8,13 +8,11 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-002 - Windows SYSTEM account testing required" -ForegroundColor Yellow
-        return
+    if ($IsWindows) {
+        $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
+        . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
     }
-    $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
-    . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
-    $script:OriginalAppData = $env:APPDATA
 }
 
 AfterAll {

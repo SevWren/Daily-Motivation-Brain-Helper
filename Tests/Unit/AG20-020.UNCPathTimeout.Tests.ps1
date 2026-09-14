@@ -165,8 +165,6 @@ Describe "New-MotivationTask  -  UNC path network failure (AG20-020, Windows onl
     -Skip:(-not $IsWindows) {
 
     BeforeAll {
-        if (-not $IsWindows) { return }
-
         $script:OriginalAppData = $env:APPDATA
         $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_AG20020_Test_$(New-Guid)"
         Initialize-AppData
@@ -198,7 +196,6 @@ Describe "New-MotivationTask  -  UNC path network failure (AG20-020, Windows onl
     }
 
     BeforeEach {
-        if (-not $IsWindows) { return }
         if (-not (Test-Path (Split-Path $script:TasksPath -Parent))) {
             New-Item -ItemType Directory -Path (Split-Path $script:TasksPath -Parent) -Force | Out-Null
         }

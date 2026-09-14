@@ -12,47 +12,44 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-009 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
+    if ($IsWindows) {
+        . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
-    . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_ExePath_Test_$(New-Guid)"
+        Initialize-AppData
 
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_ExePath_Test_$(New-Guid)"
-    Initialize-AppData
+        # Capture every call to New-ScheduledTaskAction so tests can inspect arguments.
+        # ExePath is only set inside `if (-not $NoRun)` in DailyMotivation.ps1,
+        # so it is never assigned when dot-sourcing with -NoRun. Initialize it to $null
+        # so that BeforeEach can safely save/restore it under Set-StrictMode -Version Latest.
+        $script:ExePath = $null
 
-    # Capture every call to New-ScheduledTaskAction so tests can inspect arguments.
-    # ExePath is only set inside `if (-not $NoRun)` in DailyMotivation.ps1,
-    # so it is never assigned when dot-sourcing with -NoRun. Initialize it to $null
-    # so that BeforeEach can safely save/restore it under Set-StrictMode -Version Latest.
-    $script:ExePath = $null
-
-    # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return real
-    # CimInstances. Mocking any of them with PSCustomObjects and -RemoveParameterValidation fails
-    # because that flag strips ValidateXxx attributes only  -  NOT type constraints.
-    # Let all helper cmdlets run for real.
-    #
-    # Capture Execute/Arguments from Register-ScheduledTask instead: the real CIM action object
-    # has .Execute and .Arguments properties that reflect exactly what DailyMotivation.ps1 passed.
-    $script:CapturedRegistrations = @()
-    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
-    Mock Register-ScheduledTask {
-        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-        $script:CapturedRegistrations += [PSCustomObject]@{
-            ActionExecute   = $Action.Execute
-            ActionArguments = $Action.Arguments
+        # New-ScheduledTaskAction/Trigger/Settings/Principal are native Windows cmdlets that return real
+        # CimInstances. Mocking any of them with PSCustomObjects and -RemoveParameterValidation fails
+        # because that flag strips ValidateXxx attributes only  -  NOT type constraints.
+        # Let all helper cmdlets run for real.
+        #
+        # Capture Execute/Arguments from Register-ScheduledTask instead: the real CIM action object
+        # has .Execute and .Arguments properties that reflect exactly what DailyMotivation.ps1 passed.
+        $script:CapturedRegistrations = @()
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
+        Mock Register-ScheduledTask {
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            $script:CapturedRegistrations += [PSCustomObject]@{
+                ActionExecute   = $Action.Execute
+                ActionArguments = $Action.Arguments
+            }
+            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
         }
-        return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
+        # Get-ScheduledTask: collision detection only; return $null = no collision
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq 'DailyMotivation_*') { return @() }
+            return $null
+        }
+        Mock Unregister-ScheduledTask {}
     }
-    # Get-ScheduledTask: collision detection only; return $null = no collision
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq 'DailyMotivation_*') { return @() }
-        return $null
-    }
-    Mock Unregister-ScheduledTask {}
 }
 
 AfterAll {

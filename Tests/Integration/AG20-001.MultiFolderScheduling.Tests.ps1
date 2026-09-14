@@ -8,29 +8,27 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-001 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
-    $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
-    . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Multi_$(New-Guid)"
-    Initialize-AppData
-    $script:ExePath = 'C:\Test\DailyMotivation.exe'
-    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
-    Mock Register-ScheduledTask {
-        param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,[switch]$Force)
-        return [PSCustomObject]@{ TaskName=$TaskName; State='Ready'; Triggers=@($Trigger) }
-    }
-    Mock Unregister-ScheduledTask {
-        param($TaskName,$Confirm)
-    }
-    # Get-ScheduledTask: collision detection only; return $null = no collision
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq 'DailyMotivation_*') { return @() }
-        return $null
+    if ($IsWindows) {
+        $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
+        . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Multi_$(New-Guid)"
+        Initialize-AppData
+        $script:ExePath = 'C:\Test\DailyMotivation.exe'
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
+        Mock Register-ScheduledTask {
+            param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,[switch]$Force)
+            return [PSCustomObject]@{ TaskName=$TaskName; State='Ready'; Triggers=@($Trigger) }
+        }
+        Mock Unregister-ScheduledTask {
+            param($TaskName,$Confirm)
+        }
+        # Get-ScheduledTask: collision detection only; return $null = no collision
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq 'DailyMotivation_*') { return @() }
+            return $null
+        }
     }
 }
 

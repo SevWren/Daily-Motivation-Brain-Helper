@@ -9,17 +9,14 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-013.PopupMutex.Tests.ps1 - Windows named mutex required" -ForegroundColor Yellow
-        return
+    if ($IsWindows) {
+        $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        . (Join-Path $script:ProjectRoot 'DailyMotivation.ps1') -NoRun
+
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Mutex_Test_$(New-Guid)"
+        Initialize-AppData
     }
-
-    $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    . (Join-Path $script:ProjectRoot 'DailyMotivation.ps1') -NoRun
-
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Mutex_Test_$(New-Guid)"
-    Initialize-AppData
 }
 
 AfterAll {

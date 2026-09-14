@@ -10,53 +10,50 @@
 #>
 
 BeforeAll {
-    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
-    if (-not $IsWindows) {
-        Write-Host "Skipping Security.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
+    if ($IsWindows) {
+        $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        . (Join-Path $script:ProjectRoot "DailyMotivation.ps1") -NoRun
 
-    $script:ProjectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-    . (Join-Path $script:ProjectRoot "DailyMotivation.ps1") -NoRun
+        # Set up test environment
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_SecurityTest_$(New-Guid)"
+        Initialize-AppData
 
-    # Set up test environment
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_SecurityTest_$(New-Guid)"
-    Initialize-AppData
+        # Override ExePath for task creation
+        $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    # Override ExePath for task creation
-    $script:ExePath = "C:\Test\DailyMotivation.exe"
-
-    # Mock Windows Task Scheduler cmdlets.
-    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask).
-    Mock Register-ScheduledTask {
-        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-        return [PSCustomObject]@{
-            TaskName  = $TaskName
-            Principal = [PSCustomObject]@{
-                RunLevel = if ($Principal) { $Principal.RunLevel } else { 'Limited' }
+        # Mock Windows Task Scheduler cmdlets.
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask).
+        Mock Register-ScheduledTask {
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+            return [PSCustomObject]@{
+                TaskName  = $TaskName
+                Principal = [PSCustomObject]@{
+                    RunLevel = if ($Principal) { $Principal.RunLevel } else { 'Limited' }
+                }
+                Triggers  = @($Trigger)
+                State     = 'Ready'
             }
-            Triggers  = @($Trigger)
-            State     = 'Ready'
         }
-    }
-    Mock Unregister-ScheduledTask {
-        param($TaskName, $Confirm)
-    }
-    # Get-ScheduledTask: collision detection only; return $null = no collision
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") { return @() }
-        return $null
+        Mock Unregister-ScheduledTask {
+            param($TaskName, $Confirm)
+        }
+        # Get-ScheduledTask: collision detection only; return $null = no collision
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
+        }
     }
 }
 
 AfterAll {
-    # Cleanup
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+    if ($IsWindows) {
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $env:APPDATA = $script:OriginalAppData
     }
-    $env:APPDATA = $script:OriginalAppData
 }
 
 Describe 'AG10-001: Unquoted Service Path / Code Injection' -Skip:(-not $IsWindows) {
