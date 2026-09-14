@@ -675,6 +675,31 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     It 'Should not throw when removing a non-existent task ID' {
         { Remove-MotivationTask -TaskId 'nonexistent' } | Should -Not -Throw
     }
+
+    It 'Should return false and keep the task record when OS task removal fails with access denied' {
+        $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        Mock Unregister-ScheduledTask {
+            throw [System.UnauthorizedAccessException]::new('Access is denied.')
+        }
+
+        $removed = Remove-MotivationTask -TaskId $r.TaskId
+
+        $removed | Should -Be $false
+        @(Get-TasksJson).Count | Should -Be 1
+        (Get-TasksJson)[0].task_id | Should -Be $r.TaskId
+    }
+
+    It 'Should remove the task record when OS task is already gone' {
+        $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        Mock Unregister-ScheduledTask {
+            throw [System.InvalidOperationException]::new('No MSFT_ScheduledTask objects found with property ''TaskName'' equal to ''DailyMotivation_missing''.')
+        }
+
+        $removed = Remove-MotivationTask -TaskId $r.TaskId
+
+        $removed | Should -Be $true
+        @(Get-TasksJson).Count | Should -Be 0
+    }
 }
 
 Describe 'WRONG-5: Register-ScheduledTask catch block covers all five error conditions' {
@@ -714,4 +739,3 @@ Describe 'WRONG-5: Register-ScheduledTask catch block covers all five error cond
         $fnBody -match 'switch\s+-Regex' | Should -Be $true -Because 'WRONG-5: catch block must use switch -Regex pattern'
     }
 }
-

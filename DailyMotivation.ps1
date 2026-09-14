@@ -1239,7 +1239,13 @@ function Remove-MotivationTask {
     # If task is already marked DELETED, skip OS unregister
     if ($target.status -eq 'DELETED') {
         $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
-        Save-TasksJson $tasks
+        try {
+            Save-TasksJson $tasks
+        }
+        catch {
+            Write-Warning "Remove-MotivationTask: failed to remove stale task record '$TaskId' from tasks.json: $($_.Exception.Message)"
+            return $false
+        }
         return $true
     }
 
@@ -1250,11 +1256,29 @@ function Remove-MotivationTask {
     else {
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
-        } catch {}
+        }
+        catch {
+            $errorMessage = $_.Exception.Message
+            if ($errorMessage -match 'cannot find' -or
+                $errorMessage -match 'not found' -or
+                $errorMessage -match 'No MSFT_ScheduledTask') {
+                # The OS task is already gone, so removing the stale JSON record is safe.
+            }
+            else {
+                Write-Warning "Remove-MotivationTask: failed to remove OS task '$($target.task_name)': $errorMessage"
+                return $false
+            }
+        }
     }
 
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
-    Save-TasksJson $tasks
+    try {
+        Save-TasksJson $tasks
+    }
+    catch {
+        Write-Warning "Remove-MotivationTask: failed to update tasks.json after removing task '$TaskId': $($_.Exception.Message)"
+        return $false
+    }
     return $true
 
     } finally {
@@ -1551,13 +1575,14 @@ function Invoke-FolderScheduling {
         Set-PopupConfig @popupConfigParams
     }
     catch {
-        Remove-MotivationTask -TaskId $result.TaskId -ErrorAction SilentlyContinue | Out-Null
+        $rollbackSucceeded = Remove-MotivationTask -TaskId $result.TaskId
+        $rollbackNote = if (-not $rollbackSucceeded) { " Cleanup rollback also failed; the OS task may still exist." } else { "" }
         return @{
             Success       = $false
             TaskId        = $null
             IsDuplicate   = $false
             IsNetworkPath = $isNetworkPath
-            Error         = "OS task registration succeeded but popup config write failed: $($_.Exception.Message)"
+            Error         = "OS task registration succeeded but popup config write failed: $($_.Exception.Message)$rollbackNote"
         }
     }
 
@@ -2331,8 +2356,12 @@ function Show-MainWindow {
     $undoBtn.Add_Click({
             if ($script:lastTaskId) {
                 $removedId = $script:lastTaskId
+                $removedOk = Remove-MotivationTask -TaskId $removedId
+                if (-not $removedOk) {
+                    Show-ErrorDialog -Title "Undo Failed" -Message "Could not remove the OS task for this reminder. The reminder is still active."
+                    return
+                }
                 Stop-UndoTimer -UndoBannerControl $undoBanner
-                Remove-MotivationTask -TaskId $removedId
                 $script:lastTaskId       = $null
                 $script:undoScheduledFor = $null
                 Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
@@ -2379,7 +2408,11 @@ function Show-MainWindow {
                     "Remove this scheduled task? This cannot be undone.",
                     "Confirm Delete", "YesNo", "Warning")
                 if ($confirm -eq "Yes") {
-                    Remove-MotivationTask -TaskId $container.Tag
+                    $removedOk = Remove-MotivationTask -TaskId $container.Tag
+                    if (-not $removedOk) {
+                        Show-ErrorDialog -Title "Delete Failed" -Message "Could not remove the OS task for this reminder. It may still be active."
+                        return
+                    }
                     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 }
             }
@@ -3230,8 +3263,19 @@ function Show-PopupWindow {
                 $pending = Get-MotivationTasks | Where-Object {
                     $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
                 }
+                $removeFailed = $false
                 foreach ($t in $pending) {
-                    Remove-MotivationTask -TaskId $t.task_id | Out-Null
+                    if (-not (Remove-MotivationTask -TaskId $t.task_id)) {
+                        $removeFailed = $true
+                        break
+                    }
+                }
+                if ($removeFailed) {
+                    if (-not $script:pathMissing -and $null -ne $timer -and -not $timer.IsEnabled -and -not $script:windowClosed) {
+                        $timer.Start()
+                    }
+                    Show-ErrorDialog -Title "Dismiss Failed" -Message "Could not remove one or more OS tasks for this folder. The reminder is still active."
+                    return
                 }
             }
             $window.Close()
@@ -3403,7 +3447,13 @@ function Show-PopupWindow {
     # Cannot rely on DeleteExpiredTaskAfter alone  -  it only fires when the scheduled
     # trigger expires naturally; manually-run tasks are never considered "expired".
     if ($config.task_id) {
-        Remove-MotivationTask -TaskId $config.task_id | Out-Null
+        $remainingOriginTask = Get-MotivationTasks | Where-Object { $_.task_id -eq $config.task_id }
+        if ($remainingOriginTask) {
+            $cleanupRemoved = Remove-MotivationTask -TaskId $config.task_id
+            if (-not $cleanupRemoved) {
+                Show-ErrorDialog -Title "Cleanup Failed" -Message "Could not remove the completed OS task. It may still appear in the Task List until the next sync."
+            }
+        }
     }
 
     # Post-close: open Explorer (REQ-009)
