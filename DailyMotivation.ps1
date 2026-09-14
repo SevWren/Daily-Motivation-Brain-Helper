@@ -426,15 +426,16 @@ function Save-Config {
 function Get-PopupConfig {
     [CmdletBinding()]
     param()
+    $defaultConfig = [PSCustomObject]@{
+        glyph         = "[+]"
+        title         = ""
+        body          = ""
+        explorer_path = ""
+        folder_name   = ""
+        task_id       = ""
+    }
     if (-not (Test-Path -Path "$script:PopupCfgPath" -PathType Leaf)) {
-        return [PSCustomObject]@{
-            glyph         = "[+]"
-            title         = ""
-            body          = ""
-            explorer_path = ""
-            folder_name   = ""
-            task_id       = ""
-        }
+        return $defaultConfig
     }
 
     try {
@@ -442,23 +443,44 @@ function Get-PopupConfig {
         if (Test-Path $script:PopupCfgPath) {
             $fileSize = (Get-Item $script:PopupCfgPath).Length
             if ($fileSize -gt 50KB) {
-                return [PSCustomObject]@{
-                    glyph = "[+]"; title = ""; body = ""
-                    explorer_path = ""; folder_name = ""; task_id = ""
-                }
+                return $defaultConfig
             }
         }
-        return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+        $parsed = Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($null -eq $parsed) {
+            return $defaultConfig
+        }
+
+        $getStringValue = {
+            param([object]$Source, [string[]]$PropertyNames, [string]$DefaultValue = "")
+            foreach ($propertyName in $PropertyNames) {
+                if ($Source.PSObject.Properties[$propertyName] -and $Source.$propertyName -is [string]) {
+                    return [string]$Source.$propertyName
+                }
+            }
+            return $DefaultValue
+        }
+
+        $normalizedExplorerPath = & $getStringValue $parsed @('explorer_path', 'folder_path') ''
+        $normalizedFolderName   = & $getStringValue $parsed @('folder_name') ''
+        if (-not $normalizedFolderName -and $normalizedExplorerPath) {
+            $normalizedFolderName = Split-Path -Leaf $normalizedExplorerPath
+            if (-not $normalizedFolderName) {
+                $normalizedFolderName = $normalizedExplorerPath
+            }
+        }
+
+        return [PSCustomObject]@{
+            glyph         = & $getStringValue $parsed @('glyph', 'message_glyph') $defaultConfig.glyph
+            title         = & $getStringValue $parsed @('title', 'message_title') ''
+            body          = & $getStringValue $parsed @('body', 'message_body') ''
+            explorer_path = $normalizedExplorerPath
+            folder_name   = $normalizedFolderName
+            task_id       = & $getStringValue $parsed @('task_id') ''
+        }
     }
     catch {
-        return [PSCustomObject]@{
-            glyph         = "[+]"
-            title         = ""
-            body          = ""
-            explorer_path = ""
-            folder_name   = ""
-            task_id       = ""
-        }
+        return $defaultConfig
     }
 }
 
@@ -1625,9 +1647,9 @@ function Unregister-ContextMenu {
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Name="MainWin"
     Title="Daily Motivation Brain Helper  -  Folder Scheduler"
-    Width="520" SizeToContent="Height"
+    Width="640" MinWidth="520" SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
-    ResizeMode="CanMinimize"
+    ResizeMode="CanResize"
     Background="#0D1117"
     FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI">
 
@@ -1650,6 +1672,9 @@ function Unregister-ContextMenu {
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#00D4EE"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#009FB5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -2852,30 +2877,21 @@ function Show-PopupWindow {
         return  # Exit safely rather than proceed with undefined state
     }
 
-    # Load popup config
-    $config = [PSCustomObject]@{
-        title         = "Time to Show Up"
-        body          = "Every great outcome starts with showing up. Let's make this session count."
-        glyph         = "[+]"
-        explorer_path = ""
-        folder_name   = ""
-        task_id       = ""
-    }
-    if (Test-Path $configPath) {
-        try {
-            $config = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
-        }
-        catch {
-            # Log parse failure; do not swallow silently (AG15-014)
-            $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
-            Add-Content -Path $debugLog `
-                -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] popup_config.json parse failed: $($_.Exception.Message)" `
-                -Encoding UTF8 -ErrorAction SilentlyContinue
-        }
-    }
+    # Load popup config through the shared normalization path so popup mode honors
+    # compatibility aliases (for example folder_path) and never consumes partial JSON raw.
+    $config = Get-PopupConfig
 
     # Exit silently if no folder has been configured
     if (-not $config.explorer_path) {
+        if (Test-Path $configPath) {
+            try {
+                $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
+                Add-Content -Path $debugLog `
+                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] popup_config.json missing explorer_path after normalization; popup skipped." `
+                    -Encoding UTF8 -ErrorAction SilentlyContinue
+            }
+            catch {}
+        }
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }

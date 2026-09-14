@@ -242,6 +242,38 @@ Describe 'Popup Config Functions' {
         $result.explorer_path  | Should -Be ''
         $result.task_id        | Should -Be ''
     }
+
+    It 'Get-PopupConfig should read folder_path as a compatibility alias for explorer_path' {
+        $cfgPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_config.json'
+        @{
+            folder_path = 'C:\Projects\AliasFolder'
+            title       = 'Alias Title'
+        } | ConvertTo-Json | Set-Content $cfgPath -Encoding UTF8
+
+        $result = Get-PopupConfig
+
+        $result.explorer_path | Should -Be 'C:\Projects\AliasFolder'
+        $result.folder_name   | Should -Be 'AliasFolder'
+        $result.title         | Should -Be 'Alias Title'
+    }
+
+    It 'Get-PopupConfig should restore safe defaults for missing string fields' {
+        $cfgPath = Join-Path $env:APPDATA 'DailyMotivationBrainHelper\popup_config.json'
+        @{
+            explorer_path = 'C:\Projects\Fallback'
+            glyph         = $null
+            body          = $null
+        } | ConvertTo-Json | Set-Content $cfgPath -Encoding UTF8
+
+        $result = Get-PopupConfig
+
+        $result.glyph         | Should -Be '[+]'
+        $result.title         | Should -Be ''
+        $result.body          | Should -Be ''
+        $result.explorer_path | Should -Be 'C:\Projects\Fallback'
+        $result.folder_name   | Should -Be 'Fallback'
+        $result.task_id       | Should -Be ''
+    }
 }
 
 Describe 'Write-OutcomeLog' {
