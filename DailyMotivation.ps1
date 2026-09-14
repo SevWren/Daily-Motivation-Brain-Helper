@@ -713,12 +713,64 @@ function Show-InfoDialog {
 # SECTION 4: Task Scheduler functions
 # ============================================================
 
+function Get-FileSha256Hex {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = $null
+    $sha256 = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash($stream)
+        return ($hashBytes | ForEach-Object { $_.ToString('X2') }) -join ''
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha256) { $sha256.Dispose() }
+    }
+}
+
+function Test-TasksJsonIntegrity {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $checksumPath = $Path + '.sha256'
+    if (-not (Test-Path -Path $Path -PathType Leaf)) { return $true }
+    if (-not (Test-Path -Path $checksumPath -PathType Leaf)) { return $true }
+
+    try {
+        $tasksInfo    = Get-Item -Path $Path -ErrorAction Stop
+        $checksumInfo = Get-Item -Path $checksumPath -ErrorAction Stop
+        if ($checksumInfo.LastWriteTimeUtc -lt $tasksInfo.LastWriteTimeUtc) {
+            return $true
+        }
+
+        $expectedHash = (Get-Content -Path $checksumPath -Raw -Encoding UTF8 -ErrorAction Stop).Trim()
+        if ($expectedHash -notmatch '^[0-9A-Fa-f]{64}$') {
+            Write-Warning "Get-TasksJson: invalid checksum sidecar '$checksumPath'; ignoring integrity check."
+            return $true
+        }
+
+        $actualHash = Get-FileSha256Hex -Path $Path
+        if ($actualHash -cne $expectedHash.ToUpperInvariant()) {
+            Write-Warning "Get-TasksJson: tasks.json checksum mismatch at '$Path'. Returning an empty task list."
+            return $false
+        }
+
+        return $true
+    }
+    catch {
+        Write-Warning "Get-TasksJson: failed to verify checksum for '$Path': $($_.Exception.Message)"
+        return $true
+    }
+}
+
 function Get-TasksJson {
     # Valid task status values
     $script:ValidTaskStatuses = @('PENDING', 'DELETED', 'COMPLETED', 'FAILED')
 
     $path = $script:TasksPath
     if (-not (Test-Path $path)) { return @() }
+    if (-not (Test-TasksJsonIntegrity -Path $path)) { return @() }
     try {
         $result = Get-Content -Path "$path" -Raw -Encoding UTF8 | ConvertFrom-Json
         # Ensure consistent array handling for empty JSON arrays
@@ -743,13 +795,18 @@ function Get-TasksJson {
 
         return $tasks
     }
-    catch { return @() }
+    catch {
+        Write-Warning "Get-TasksJson: failed to parse '$path': $($_.Exception.Message)"
+        return @()
+    }
 }
 
 function Save-TasksJson {
     param([object[]]$Tasks)
-    $path     = $script:TasksPath
-    $tempPath = $path + ".tmp"
+    $path             = $script:TasksPath
+    $tempPath         = $path + ".tmp"
+    $checksumPath     = $path + '.sha256'
+    $checksumTempPath = $checksumPath + '.tmp'
     # AG18-018: strip nulls before serialising so JSON never contains a null literal
     $Tasks = @($Tasks | Where-Object { $null -ne $_ })
     # AG7-011: verify directory is writable before attempting write
@@ -773,9 +830,27 @@ function Save-TasksJson {
             ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         }
         Move-Item -Path $tempPath -Destination $path -Force -ErrorAction Stop
+        if (Test-Path -Path $checksumPath -PathType Leaf) {
+            Remove-Item -Path $checksumPath -Force -ErrorAction SilentlyContinue
+        }
+        try {
+            $checksum = Get-FileSha256Hex -Path $path
+            Set-Content -Path $checksumTempPath -Value $checksum -Encoding UTF8 -NoNewline -ErrorAction Stop
+            Move-Item -Path $checksumTempPath -Destination $checksumPath -Force -ErrorAction Stop
+        }
+        catch {
+            if (Test-Path -Path $checksumTempPath -PathType Leaf) {
+                Remove-Item -Path $checksumTempPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -Path $checksumPath -PathType Leaf) {
+                Remove-Item -Path $checksumPath -Force -ErrorAction SilentlyContinue
+            }
+            Write-Warning "Save-TasksJson: wrote '$path' but could not update checksum sidecar '$checksumPath': $($_.Exception.Message)"
+        }
     }
     catch {
         if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
+        if (Test-Path $checksumTempPath) { Remove-Item $checksumTempPath -ErrorAction SilentlyContinue }
         throw
     }
     finally {
