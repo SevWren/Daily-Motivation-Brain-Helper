@@ -1,5 +1,7 @@
 # Daily Motivation Brain Helper
 
+[![Test Suite](https://github.com/SevWren/Daily-Motivation-Brain-Helper/actions/workflows/test.yml/badge.svg)](https://github.com/SevWren/Daily-Motivation-Brain-Helper/actions/workflows/test.yml)
+
 A Windows 10/11 desktop utility that pops up a motivational message and opens a chosen folder in Windows Explorer at a scheduled time — helping you start focused work sessions without friction.
 
 ---
