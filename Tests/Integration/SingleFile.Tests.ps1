@@ -195,8 +195,8 @@ Describe 'Mode switching and config persistence (AG8-026)' {
         # Simulate popup mode reading config
         $readConfig = Get-PopupConfig
         $readConfig | Should -Not -Be $null
-        $readConfig.folder_path | Should -Be $testConfig.folder_path
-        $readConfig.message_title | Should -Be $testConfig.message_title
+        $readConfig.explorer_path | Should -Be $testConfig.folder_path
+        $readConfig.title | Should -Be $testConfig.message_title
     }
 
     It 'Should verify config.json persists default settings across reads' {
