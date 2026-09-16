@@ -52,6 +52,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
 # Platform adapter (null by default, tests can inject HeadlessPlatform)
 $script:Platform = $null
 
+$script:LastUsedFolder = ""  # Persists last folder selection for the session
+
 $script:ConfigCache = $null
 $script:ConfigCacheMTime = $null
 
@@ -2146,6 +2148,31 @@ function Unregister-ContextMenu {
 # SECTION 7: Main Window Logic
 # ============================================================
 
+function Invoke-FolderBrowserDialog {
+    param(
+        [Parameter(Mandatory)][string]$Description
+    )
+    $dialog = $null
+    try {
+        $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+        $dialog.Description         = $Description
+        $dialog.ShowNewFolderButton = $true
+        if ($script:LastUsedFolder) { $dialog.SelectedPath = $script:LastUsedFolder }
+        if ($dialog.ShowDialog() -eq "OK") {
+            $script:LastUsedFolder = $dialog.SelectedPath
+            return $dialog.SelectedPath
+        }
+        return $null
+    }
+    catch {
+        Write-Warning "Invoke-FolderBrowserDialog: dialog failed: $($_.Exception.Message)"
+        return $null
+    }
+    finally {
+        if ($dialog) { $dialog.Dispose() }
+    }
+}
+
 function Show-MainWindow {
     if (-not $script:AssembliesLoaded) {
         [Console]::Error.WriteLine("UI cannot display: .NET Framework WPF assemblies not available.")
@@ -2354,16 +2381,8 @@ function Show-MainWindow {
 
     # --- Event handlers ---
     $selectFolderBtn.Add_Click({
-            $dialog = $null
-            try {
-                $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-                $dialog.Description         = "Select the folder you want to open tomorrow"
-                $dialog.ShowNewFolderButton = $false
-                if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
-            }
-            finally {
-                if ($dialog) { $dialog.Dispose() }
-            }
+            $picked = Invoke-FolderBrowserDialog -Description "Select the folder you want to open tomorrow"
+            if ($picked) { Set-SelectedPath $picked }
         })
 
     $converter = [System.Windows.Media.BrushConverter]::new() # AG14-006: Reuse single BrushConverter
@@ -3385,36 +3404,27 @@ function Show-PopupWindow {
 
     # Path missing - Re-pick folder
     $rePickBtn.Add_Click({
-        $dialog = $null
-        try {
-            $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-            $dialog.Description         = "Choose the new location for this folder"
-            $dialog.ShowNewFolderButton = $false
-            if ($dialog.ShowDialog() -eq "OK") {
-                $newPath = $dialog.SelectedPath
-                try {
-                    $c = Get-PopupConfig
-                    $popupParams = @{
-                        Glyph        = $c.glyph
-                        Title        = $c.title
-                        Body         = $c.body
-                        ExplorerPath = $newPath
-                        TaskId       = $c.task_id
-                    }
-                    Set-PopupConfig @popupParams
-                    $script:newExplorerPath = $newPath
-                    $script:openExplorer    = $true
-                    $window.Close()
+        $newPath = Invoke-FolderBrowserDialog -Description "Choose the new location for this folder"
+        if ($newPath) {
+            try {
+                $c = Get-PopupConfig
+                $popupParams = @{
+                    Glyph        = $c.glyph
+                    Title        = $c.title
+                    Body         = $c.body
+                    ExplorerPath = $newPath
+                    TaskId       = $c.task_id
                 }
-                catch {
-                    [void][System.Windows.MessageBox]::Show(
-                        "Could not save the new folder path.`n`n$($_.Exception.Message)",
-                        "Save Failed", "OK", "Error")
-                }
+                Set-PopupConfig @popupParams
+                $script:newExplorerPath = $newPath
+                $script:openExplorer    = $true
+                $window.Close()
             }
-        }
-        finally {
-            if ($dialog) { $dialog.Dispose() } # AG14-001
+            catch {
+                [void][System.Windows.MessageBox]::Show(
+                    "Could not save the new folder path.`n`n$($_.Exception.Message)",
+                    "Save Failed", "OK", "Error")
+            }
         }
     })
 
