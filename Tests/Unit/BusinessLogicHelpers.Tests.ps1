@@ -38,7 +38,7 @@ Describe 'Write-OutcomeLog' {
 
     It 'appends a correctly-formatted pipe-delimited entry' {
         Write-OutcomeLog -TaskId 'abc123' -FolderName 'Work' -FolderPath 'C:\Work' -Outcome 'Opened' -SnoozeCount 0
-        $lines = Get-Content $script:LogPath -Encoding UTF8
+        $lines = @(Get-Content $script:LogPath -Encoding UTF8)
         $lines | Should -HaveCount 1
         $lines[0] | Should -Match '^\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}\] \| abc123 \| Work \| HASH:[0-9A-F]{64} \| Opened \| 0$'
     }
@@ -67,7 +67,7 @@ Describe 'Write-OutcomeLog' {
     It 'appends a second entry without erasing the first' {
         Write-OutcomeLog -TaskId 'id1' -FolderName 'A' -FolderPath 'C:\A' -Outcome 'Opened'
         Write-OutcomeLog -TaskId 'id2' -FolderName 'B' -FolderPath 'C:\B' -Outcome 'Snoozed'
-        $lines = Get-Content $script:LogPath -Encoding UTF8
+        $lines = @(Get-Content $script:LogPath -Encoding UTF8)
         $lines | Should -HaveCount 2
         $lines[0] | Should -Match ' \| id1 \| '
         $lines[1] | Should -Match ' \| id2 \| '
@@ -81,6 +81,7 @@ Describe 'Write-OutcomeLog' {
 
     It 'emits Write-Warning and does not throw when Add-Content fails' {
         Mock Add-Content { throw 'disk full' }
+        Mock Write-Warning {}
         { Write-OutcomeLog -TaskId 'abc123' -FolderName 'Work' -FolderPath 'C:\Work' -Outcome 'Opened' } |
             Should -Not -Throw
         Should -Invoke Write-Warning -Times 1 -Scope It -ParameterFilter {
