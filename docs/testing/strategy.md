@@ -70,11 +70,25 @@ Every suite that needs functions uses:
 | `Tests/Unit/AG17-009.UndoFeedbackTimer.Tests.ps1` | Both — source-text analysis | — |
 | `Tests/Unit/AG17-025.ContextMenuNullCheck.Tests.ps1` | Both — source-text analysis | — |
 | `Tests/Unit/AG19-010.TabOrder.Tests.ps1` | Both — source-text analysis | — |
+| `Tests/Unit/AG19.MainWindowUX.Tests.ps1` | Both — source-text analysis | — |
+| `Tests/Unit/BusinessLogicHelpers.Tests.ps1` | Both | — |
+| `Tests/Unit/DataLayerHelpers.Tests.ps1` | Both | — |
+| `Tests/Unit/WPFAssemblies.Tests.ps1` | **Windows only** | `-Skip:(-not $IsWindows)` on the single `Describe` |
+| `Tests/Unit/WPFControls.Tests.ps1` | **Partially Windows** | XAML control-tree `Describe` blocks are cross-platform (Pattern A); `Show-MainWindow` early-exit `Describe` carries `-Skip:(-not $IsWindows)` (Pattern B) |
+| `Tests/Unit/MopUp201.Tests.ps1` | **Partially Windows** | `New-MotivationTask` error-branch and collision-retry `Describe` blocks carry `-Skip:(-not $IsWindows)`; `Invoke-FolderScheduling`, `Set-SnoozeDuration`, and `Stop-UndoTimer` `Describe` blocks are cross-platform |
 | `Tests/Unit/Build.Tests.ps1` | Both — reads `build.ps1` | — |
 | `Tests/Unit/CI.Tests.ps1` | Both — reads `.github/workflows/test.yml` | — |
 | `Tests/Unit/PowerShellBestPractices.Tests.ps1` | Both | — |
 
 **Source-text analysis tests** read `DailyMotivation.ps1` as a raw string and use regex to assert structural properties (presence of disposal calls, null guards, XAML attributes, etc.). They run on any platform but they can only verify that a code pattern exists in the source — they cannot verify that the pattern executes correctly at runtime.
+
+There are three approved patterns for WPF-adjacent tests (defined in `CONTEXT.md`):
+
+| Pattern | Name | Description |
+|---------|------|-------------|
+| **Pattern A** | Source-text regex | Read `DailyMotivation.ps1` as a raw string; assert control names via regex. Cross-platform, headless, 0 coverage lines. Canonical for XAML control-existence assertions. |
+| **Pattern B** | Early-exit path exploitation | Exercise code paths in `Show-MainWindow` or `Show-PopupWindow` that return before `ShowDialog()`. For `Show-MainWindow`: set `$script:AssembliesLoaded = $false`. For `Show-PopupWindow`: call without a valid `explorer_path`. No window opened, no STA runspace required. |
+| **Pattern C** | Skip-as-specification | Mark tests that genuinely require `ShowDialog()` with `-Skip` and an explicit comment stating what would un-skip them. Serves as a TDD specification; never satisfy by opening a real window. |
 
 ---
 
@@ -88,7 +102,7 @@ The following tests are skipped or degenerate on Linux. Each entry states the sp
 |-----------|----------------------|--------------------------|
 | `New-MotivationTask` happy path | `Register-ScheduledTask`, `New-ScheduledTaskAction`, `New-ScheduledTaskTrigger`, `New-ScheduledTaskSettingsSet`, `New-ScheduledTaskPrincipal` | Mock returns `$null`; real cmdlet returns a `CimInstance` (MSFT_ScheduledTask). Code that inspects the return object will see different behavior. |
 | Task principal validation | `New-ScheduledTaskPrincipal -LogonType S4U -RunLevel Limited` | Mock accepts any object. Real cmdlet enforces CimInstance type validation on all parameters. S4U logon availability depends on Windows edition and Group Policy; a mock cannot reproduce this. |
-| Error path dispatch | `Register-ScheduledTask` throws | Mock throws a bare `string`. Real cmdlet throws with a populated `$_.Exception.HResult`. The catch block dispatches on HResult values (`0x80070005`, `0x80041315`, `0x8007052e`, `0x80070002`). Mock tests exercise only the `default` branch of that switch. |
+| Error path dispatch | `Register-ScheduledTask` throws | Mock throws a bare `string`. Real cmdlet throws with a populated `$_.Exception.HResult`. The catch block dispatches on regex patterns matching specific Windows error messages. All 5 specific arms (access denied, elevation, S4U, scheduler unavailable, exe not found) plus `already exists`, `default`, and null-return are covered in `MopUp201.Tests.ps1`. On real Windows the `HResult` field would be populated; on mock it is `0`. |
 | `Get-ScheduledTask` "not found" exception | `CimJobException` | Mock on line 108 of the test file constructs a `CimJobException` — this type is Windows-only (part of the CIM infrastructure). This is exactly why the whole file skips on Linux: instantiating `CimJobException` fails on Linux. |
 | Task name collision detection | `Get-ScheduledTask` per-name lookup | Mock returns a stored hashtable entry. Real cmdlet queries the Windows Task Scheduler COM object; timing, service state, and scheduler database locking are not simulated. |
 | `New-ScheduledTaskAction` exe-path validation | Real cmdlet | Real cmdlet validates the `Execute` path against the filesystem at registration time. Mock always succeeds regardless of path. |
@@ -236,9 +250,10 @@ These tests validate the JSON-persistence layer, duplicate detection, and busine
 
 | Category | Files |
 |----------|-------|
-| HeadlessPlatform | `Config.Platform.Tests.ps1`, `TaskScheduler.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, `FolderScheduling.Tests.ps1` (partial) |
-| Pure logic / file I/O | `Config.Tests.ps1` (partial), `Config.AG7-023.Tests.ps1`, `Messages.Tests.ps1`, `PopupDisplay.Tests.ps1`, `PowerShellBestPractices.Tests.ps1` |
-| Source-text analysis | `UIDisposal.Tests.ps1`, `Performance.Tests.ps1`, `AG17-002.ContextMenuVerification.Tests.ps1`, `AG17-009.UndoFeedbackTimer.Tests.ps1`, `AG17-025.ContextMenuNullCheck.Tests.ps1`, `AG19-010.TabOrder.Tests.ps1` |
+| HeadlessPlatform | `Config.Platform.Tests.ps1`, `TaskScheduler.Platform.Tests.ps1`, `PlatformAdapter.Tests.ps1`, `FolderScheduling.Tests.ps1` (partial), `MopUp201.Tests.ps1` (partial) |
+| Pure logic / file I/O | `Config.Tests.ps1` (partial), `Config.AG7-023.Tests.ps1`, `Messages.Tests.ps1`, `PopupDisplay.Tests.ps1`, `PowerShellBestPractices.Tests.ps1`, `BusinessLogicHelpers.Tests.ps1`, `DataLayerHelpers.Tests.ps1` |
+| Source-text analysis | `UIDisposal.Tests.ps1`, `Performance.Tests.ps1`, `AG17-002.ContextMenuVerification.Tests.ps1`, `AG17-009.UndoFeedbackTimer.Tests.ps1`, `AG17-025.ContextMenuNullCheck.Tests.ps1`, `AG19-010.TabOrder.Tests.ps1`, `AG19.MainWindowUX.Tests.ps1`, `WPFControls.Tests.ps1` (Pattern A Describes) |
+| WPF early-exit (Pattern B) | `WPFControls.Tests.ps1` (Pattern B Describe), `WPFAssemblies.Tests.ps1` |
 | Build / CI artifact | `Build.Tests.ps1`, `CI.Tests.ps1` |
 
 ---
@@ -269,6 +284,16 @@ See [ADR-003](../architecture/adr-003-platform-adapter.md).
 ## Coverage goals
 
 Coverage is collected for `DailyMotivation.ps1` and output as `coverage.xml` (JaCoCo format). Coverage percentage is a signal for finding untested code paths — it is not a substitute for Windows behavioral tests. A line covered on Linux through a HeadlessPlatform mock does not mean the equivalent Windows code path has been validated.
+
+**Current state (branch `SevAI_installing_bmad`, 2026-09-17):**
+
+| Metric | Value |
+|--------|-------|
+| CI threshold | 53% |
+| Achieved coverage | 54.21% |
+| Test result | Passed=586 Failed=0 Skipped=6 |
+
+**Coverage ceiling:** `Show-MainWindow` (~490 LOC) and `Show-PopupWindow` (~610 LOC) require `ShowDialog()` and are 0% covered. Together they represent ~29% of the script. The headless ceiling for the current test infrastructure is approximately **~68%**. Going beyond that requires a real WPF STA harness with `ShowDialog()` automation, which was explicitly rejected (see `docs/architecture/adr-005-mandate-history.md` and the #200 constraint analysis).
 
 ---
 
