@@ -233,3 +233,50 @@ Describe 'Show-ErrorDialog — sanitizes message before display' -Skip:(-not $Is
         { Show-ErrorDialog -Message $raw -Title 'Test' } | Should -Not -Throw
     }
 }
+
+# ============================================================
+# Show-ErrorDialog / Show-InfoDialog — WPF-attempt path
+# Exercises WPF try-block lines: assemblies load fine on any
+# thread; Window instantiation or ShowDialog throws on non-STA,
+# caught by the inner catch, then falls through to MessageBox/
+# console fallback. Covers lines that the console-fallback tests
+# cannot reach because $script:WpfLoaded was $false there.
+# ============================================================
+Describe 'Show-ErrorDialog — WPF-attempt path (assemblies loaded)' -Skip:(-not $IsWindows) {
+
+    BeforeAll {
+        # Force assembly reload so $script:WpfLoaded reflects actual load result
+        $script:AssembliesLoaded = $false
+        $script:WpfLoaded        = $false
+        Initialize-WindowsAssemblies
+        # After this, $script:WpfLoaded = $true if PresentationFramework loaded
+    }
+
+    It 'does not throw when WPF assemblies are loaded (STA not available in Pester; fallback path runs)' {
+        # Show-ErrorDialog enters the WPF try-block because WpfLoaded = $true.
+        # XamlReader::Load or ShowDialog throws "The calling thread must be STA";
+        # the inner catch falls through to MessageBox/console. Must never surface.
+        { Show-ErrorDialog -Message 'Test error' -Title 'Test' } | Should -Not -Throw
+    }
+
+    It 'does not throw for a message containing a credential keyword when WPF path is attempted' {
+        { Show-ErrorDialog -Message 'token=abc123' -Title 'Test' } | Should -Not -Throw
+    }
+}
+
+Describe 'Show-InfoDialog — WPF-attempt path (assemblies loaded)' -Skip:(-not $IsWindows) {
+
+    BeforeAll {
+        $script:AssembliesLoaded = $false
+        $script:WpfLoaded        = $false
+        Initialize-WindowsAssemblies
+    }
+
+    It 'does not throw when WPF assemblies are loaded (MessageBox::Show throws on non-STA; fallback runs)' {
+        { Show-InfoDialog -Message 'Test info' -Title 'Test' } | Should -Not -Throw
+    }
+
+    It 'does not throw when Title is omitted and WPF path is attempted' {
+        { Show-InfoDialog -Message 'Info' } | Should -Not -Throw
+    }
+}
