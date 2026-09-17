@@ -20,11 +20,12 @@ BeforeAll {
 }
 
 AfterAll {
-    if (-not $IsWindows) { return }
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+    if ($IsWindows) {
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $env:APPDATA = $script:OriginalAppData
     }
-    $env:APPDATA = $script:OriginalAppData
 }
 
 Describe 'Show-PopupWindow mutex lifecycle (AG20-013)' -Skip:(-not $IsWindows) {

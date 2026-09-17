@@ -165,34 +165,37 @@ Describe "New-MotivationTask  -  UNC path network failure (AG20-020, Windows onl
     -Skip:(-not $IsWindows) {
 
     BeforeAll {
-        $script:OriginalAppData = $env:APPDATA
-        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_AG20020_Test_$(New-Guid)"
-        Initialize-AppData
-        $script:ExePath = "C:\Test\DailyMotivation.exe"
+        if ($IsWindows) {
+            $script:OriginalAppData = $env:APPDATA
+            $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_AG20020_Test_$(New-Guid)"
+            Initialize-AppData
+            $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
-        Mock Register-ScheduledTask {
-            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
-            return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
+            # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
+            Mock Register-ScheduledTask {
+                param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, [switch]$Force)
+                return [PSCustomObject]@{ TaskName = $TaskName; State = 'Ready' }
+            }
+            Mock Unregister-ScheduledTask {
+                param($TaskName, $Confirm)
+            }
+            Mock Get-ScheduledTask {
+                param($TaskName)
+                if ($TaskName -eq 'DailyMotivation_*') { return @() }
+                return $null
+            }
+            # Ensure no Platform adapter from other test files bleeds into this scope
+            $script:Platform = $null
         }
-        Mock Unregister-ScheduledTask {
-            param($TaskName, $Confirm)
-        }
-        Mock Get-ScheduledTask {
-            param($TaskName)
-            if ($TaskName -eq 'DailyMotivation_*') { return @() }
-            return $null
-        }
-        # Ensure no Platform adapter from other test files bleeds into this scope
-        $script:Platform = $null
     }
 
     AfterAll {
-        if (-not $IsWindows) { return }
-        if (Test-Path $env:APPDATA) {
-            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        if ($IsWindows) {
+            if (Test-Path $env:APPDATA) {
+                Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            $env:APPDATA = $script:OriginalAppData
         }
-        $env:APPDATA = $script:OriginalAppData
     }
 
     BeforeEach {
