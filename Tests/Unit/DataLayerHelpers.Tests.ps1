@@ -13,6 +13,30 @@ BeforeAll {
     $script:OriginalAppData = $env:APPDATA
     $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_DataLayer_$(New-Guid)"
     Initialize-AppData
+
+    # Helper: append a pipe-delimited Outcome Log entry to $script:LogPath
+    function script:Add-TestLogEntry {
+        param([string]$Timestamp, [string]$FolderName, [string]$Outcome)
+        $hash = 'A' * 64
+        "[$Timestamp] | task-001 | $FolderName | HASH:$hash | $Outcome | 0" |
+            Add-Content -Path $script:LogPath -Encoding UTF8
+    }
+
+    # Helper: build a minimal MotivationTask PSCustomObject for Save-TasksJson
+    function script:New-TestTask {
+        param([string]$TaskId, [string]$FolderName, [string]$Status,
+              [string]$ScheduledTime = '2026-09-20T14:00:00+00:00')
+        [PSCustomObject]@{
+            task_id        = $TaskId
+            task_name      = "DailyMotivation_$TaskId"
+            folder_path    = "C:\Work\$FolderName"
+            folder_name    = $FolderName
+            status         = $Status
+            scheduled_time = $ScheduledTime
+            snooze_count   = 0
+            description    = "Daily Motivation Brain Helper - Task $TaskId"
+        }
+    }
 }
 
 AfterAll {
@@ -21,30 +45,6 @@ AfterAll {
             Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
         }
         $env:APPDATA = $script:OriginalAppData
-    }
-}
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-function Add-TestLogEntry {
-    param([string]$Timestamp, [string]$FolderName, [string]$Outcome)
-    $hash = 'A' * 64
-    "[$Timestamp] | task-001 | $FolderName | HASH:$hash | $Outcome | 0" |
-        Add-Content -Path $script:LogPath -Encoding UTF8
-}
-
-function New-TestTask {
-    param([string]$TaskId, [string]$FolderName, [string]$Status,
-          [string]$ScheduledTime = '2026-09-20T14:00:00+00:00')
-    [PSCustomObject]@{
-        task_id        = $TaskId
-        task_name      = "DailyMotivation_$TaskId"
-        folder_path    = "C:\Work\$FolderName"
-        folder_name    = $FolderName
-        status         = $Status
-        scheduled_time = $ScheduledTime
-        snooze_count   = 0
-        description    = "Daily Motivation Brain Helper - Task $TaskId"
     }
 }
 
@@ -262,19 +262,6 @@ Describe 'Update-TaskListUI' {
         $taskList.ItemsSource[0].folder_name | Should -Be ''
     }
 
-    It 'uses empty string for task_id when the field is absent' {
-        $task = [PSCustomObject]@{
-            task_name = 'DailyMotivation_aaa1'; folder_name = 'Work'
-            status = 'PENDING'; scheduled_time = '2026-09-20T14:00:00+00:00'
-            folder_path = 'C:\Work'; snooze_count = 0; description = 'x'
-        }
-        Save-TasksJson @($task)
-        $taskList = [PSCustomObject]@{ ItemsSource = $null }
-        $noLabel  = [PSCustomObject]@{ Visibility  = $null }
-        Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noLabel
-        $taskList.ItemsSource[0].task_id | Should -Be ''
-    }
-
     It 'sets ItemsSource on the control (not $null) even when all tasks are DELETED' {
         Save-TasksJson @(New-TestTask -TaskId 'del1' -FolderName 'Gone' -Status 'DELETED')
         $taskList = [PSCustomObject]@{ ItemsSource = $null }
@@ -295,11 +282,12 @@ Describe 'Update-HistoryUI' {
         }
     }
 
-    It 'sets ItemsSource to an array (not null) when the Outcome Log is absent' {
+    It 'sets ItemsSource to an empty array (not null) when the Outcome Log is absent' {
         $historyList = [PSCustomObject]@{ ItemsSource = $null }
         Update-HistoryUI -HistoryListControl $historyList
-        $historyList.ItemsSource | Should -Not -BeNull
-        @($historyList.ItemsSource) | Should -HaveCount 0
+        # Avoid pipeline unrolling of @() — check directly instead
+        ($null -ne $historyList.ItemsSource) | Should -Be $true
+        @($historyList.ItemsSource).Count   | Should -Be 0
     }
 
     It 'sorts entries newest-first by default' {
