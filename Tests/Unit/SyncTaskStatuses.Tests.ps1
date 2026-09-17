@@ -9,52 +9,49 @@
 #>
 
 BeforeAll {
-    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
-    if (-not $IsWindows) {
-        Write-Host "Skipping SyncTaskStatuses.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
+    if ($IsWindows) {
+        . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
-    . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Sync_Test_$(New-Guid)"
+        Initialize-AppData
 
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Sync_Test_$(New-Guid)"
-    Initialize-AppData
+        $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    $script:ExePath = "C:\Test\DailyMotivation.exe"
+        # Track registered tasks for stateful mocking
+        $script:SyncMockedTasks = @{}
 
-    # Track registered tasks for stateful mocking
-    $script:SyncMockedTasks = @{}
-
-    Mock Register-ScheduledTask {
-        param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
-        $script:SyncMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
-        return $null
-    }
-    Mock Unregister-ScheduledTask {
-        param($TaskName, $Confirm)
-        if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
-            $script:SyncMockedTasks.Remove($TaskName)
+        Mock Register-ScheduledTask {
+            param($TaskName, $Action, $Trigger, $Settings, $Principal, $Description, $Force, $ErrorAction)
+            $script:SyncMockedTasks[$TaskName] = [PSCustomObject]@{ TaskName = $TaskName }
+            return $null
         }
-    }
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") {
-            return @($script:SyncMockedTasks.Values)
+        Mock Unregister-ScheduledTask {
+            param($TaskName, $Confirm)
+            if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
+                $script:SyncMockedTasks.Remove($TaskName)
+            }
         }
-        if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
-            return $script:SyncMockedTasks[$TaskName]
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") {
+                return @($script:SyncMockedTasks.Values)
+            }
+            if ($script:SyncMockedTasks.ContainsKey($TaskName)) {
+                return $script:SyncMockedTasks[$TaskName]
+            }
+            throw "Task not found: $TaskName"
         }
-        throw "Task not found: $TaskName"
     }
 }
 
 AfterAll {
-    if (-not $IsWindows) { return }
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+    if ($IsWindows) {
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $env:APPDATA = $script:OriginalAppData
     }
-    $env:APPDATA = $script:OriginalAppData
 }
 
 Describe 'Sync-TaskStatuses' -Skip:(-not $IsWindows) {

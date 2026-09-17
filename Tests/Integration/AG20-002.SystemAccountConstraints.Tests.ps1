@@ -8,40 +8,38 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-002 - Windows SYSTEM account testing required" -ForegroundColor Yellow
-        return
+    if ($IsWindows) {
+        $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
+        . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
     }
-    $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
-    . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
-    $script:OriginalAppData = $env:APPDATA
 }
 
 AfterAll {
-    if (-not $IsWindows) { return }
-
-    # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
-    try {
-        $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
-        if ($strayTasks) {
-            Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
-            foreach ($task in $strayTasks) {
-                try {
-                    Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
-                    Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
-                }
-                catch {
-                    Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+    if ($IsWindows) {
+        # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
+        try {
+            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+            if ($strayTasks) {
+                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+                foreach ($task in $strayTasks) {
+                    try {
+                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+                    }
                 }
             }
         }
-    }
-    catch {
-        # Get-ScheduledTask itself failed - log but don't fail the test run
-        Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
-    }
+        catch {
+            # Get-ScheduledTask itself failed - log but don't fail the test run
+            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
+        }
 
-    $env:APPDATA = $script:OriginalAppData
+        $env:APPDATA = $script:OriginalAppData
+    }
 }
 
 Describe 'AG20-002 SYSTEM Account Identity Constraints' -Skip:(-not $IsWindows) {

@@ -1,6 +1,6 @@
 # Function reference
 
-All 32 public functions defined in `DailyMotivation.ps1`. Functions are grouped by script section (see [CLAUDE.md](../../CLAUDE.md) Script Sections table).
+All public functions defined in `DailyMotivation.ps1`. Functions are grouped by script section (see [CLAUDE.md](../../CLAUDE.md) Script Sections table).
 
 Domain terminology: [CONTEXT.md](../../CONTEXT.md). Config schemas: [config.md](config.md). CLI: [cli.md](cli.md).
 
@@ -10,7 +10,8 @@ Domain terminology: [CONTEXT.md](../../CONTEXT.md). Config schemas: [config.md](
 
 | Function | Purpose |
 |----------|---------|
-| `Initialize-WindowsAssemblies` | Load WPF/WinForms assemblies; skipped under HeadlessPlatform |
+| `Invoke-ConfigMigration` | Migrate a config object from an older schema version by filling missing properties from `$script:ConfigDefaults`; called by `Get-Config` |
+| `Initialize-WindowsAssemblies` | Load WPF (`PresentationFramework`, `PresentationCore`, `WindowsBase`) and WinForms assemblies; sets `$script:AssembliesLoaded`, `$script:WpfLoaded`, `$script:FormsLoaded`; idempotent — returns immediately on repeat calls |
 
 ## Section 2.5 — Platform abstraction
 
@@ -34,8 +35,10 @@ Domain terminology: [CONTEXT.md](../../CONTEXT.md). Config schemas: [config.md](
 
 | Function | Purpose |
 |----------|---------|
+| `Get-FileSha256Hex` | Compute the SHA-256 hex digest of a file; used by `Save-TasksJson` to write the `.sha256` integrity sidecar |
+| `Test-TasksJsonIntegrity` | Verify `tasks.json` against its `.sha256` sidecar; returns `$true` (pass or no sidecar), `$false` (mismatch); called by `Get-TasksJson` |
 | `Get-TasksJson` | Read `tasks.json`; wraps result in `@()` for consistent array handling; normalizes unknown statuses to `UNKNOWN` |
-| `Save-TasksJson` | Write `tasks.json` |
+| `Save-TasksJson` | Write `tasks.json` via temp-file-then-move; writes SHA-256 sidecar |
 | `New-MotivationTask` | Create a MotivationTask record, register OS Task in Windows Task Scheduler, write PopupConfig; enforces duplicate detection (same FolderPath + same date); accepts `-Force` to override |
 | `Sync-TaskStatuses` | Refresh task statuses by checking whether corresponding OS Tasks still exist in Task Scheduler; sets status to `DELETED` for missing tasks |
 | `Get-MotivationTasks` | Return all MotivationTask records from `tasks.json` |
@@ -65,12 +68,14 @@ Domain terminology: [CONTEXT.md](../../CONTEXT.md). Config schemas: [config.md](
 
 | Function | Purpose |
 |----------|---------|
-| `Show-MainWindow` | Build and show the WPF main window (main mode entry point); folder picker, task list, history panel, undo banner |
+| `Invoke-FolderBrowserDialog` | Open a WinForms `FolderBrowserDialog` with `ShowNewFolderButton=$true`; pre-populates from `$script:LastUsedFolder` and writes back on success; returns `$null` on cancel |
+| `Show-MainWindow` | Build and show the WPF main window (main mode entry point); guarded by `$script:AssembliesLoaded` — returns early without opening a window if assemblies are not loaded; folder picker, task list, history panel, undo banner |
 
 ## Section 8–9 — Popup window
 
 | Function | Purpose |
 |----------|---------|
+| `Get-PopupOutcome` | Pure stateless function that maps popup end-of-session state to a canonical Outcome string (`Opened`, `Snoozed`, `Dismissed`, `PathMissing`); independently unit-testable |
 | `Show-PopupWindow` | Build and show the popup (popup mode entry point); acquires per-user/session mutex `Global\DailyMotivationBrainHelperPopup_{USERNAME}_{SessionId}`; reads PopupConfig; starts countdown; handles Open Folder / Snooze / Dismiss / PathMissing |
 
 ## Section 10 — Text helpers

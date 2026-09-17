@@ -9,101 +9,97 @@
 #>
 
 BeforeAll {
-    # Skip all tests if not on Windows (Task Scheduler cmdlets don't exist on Linux)
-    if (-not $IsWindows) {
-        Write-Host "Skipping TaskScheduler.Tests.ps1 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
+    if ($IsWindows) {
+        . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
 
-    . (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Task_Test_$(New-Guid)"
+        Initialize-AppData
 
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Task_Test_$(New-Guid)"
-    Initialize-AppData
+        # Override ExePath so the task action points to a dummy path
+        $script:ExePath = "C:\Test\DailyMotivation.exe"
 
-    # Override ExePath so the task action points to a dummy path
-    $script:ExePath = "C:\Test\DailyMotivation.exe"
+        $script:TestFolder1 = 'C:\Projects\TestFolder1'
+        $script:TestFolder2 = 'C:\Projects\TestFolder2'
 
-    $script:TestFolder1 = 'C:\Projects\TestFolder1'
-    $script:TestFolder2 = 'C:\Projects\TestFolder2'
+        # AG8-009: Mock Scope Documentation
+        # ===================================
+        # These mocks are scoped to BeforeAll, meaning they affect ALL tests in this file.
+        # This is intentional for baseline behavior: most tests expect Register-ScheduledTask
+        # to succeed and Get-ScheduledTask to return $null (no collision).
+        #
+        # Individual Context blocks override these mocks when testing specific scenarios:
+        # - 'Collision detection retry loop' overrides Get-ScheduledTask to simulate collisions
+        # - 'Error paths' overrides Register-ScheduledTask to throw exceptions
+        #
+        # Mock overrides in Context/It blocks are cleaned up in AfterEach to restore baseline.
+        # This prevents test pollution where one test's mock affects subsequent tests.
 
-    # AG8-009: Mock Scope Documentation
-    # ===================================
-    # These mocks are scoped to BeforeAll, meaning they affect ALL tests in this file.
-    # This is intentional for baseline behavior: most tests expect Register-ScheduledTask
-    # to succeed and Get-ScheduledTask to return $null (no collision).
-    #
-    # Individual Context blocks override these mocks when testing specific scenarios:
-    # - 'Collision detection retry loop' overrides Get-ScheduledTask to simulate collisions
-    # - 'Error paths' overrides Register-ScheduledTask to throw exceptions
-    #
-    # Mock overrides in Context/It blocks are cleaned up in AfterEach to restore baseline.
-    # This prevents test pollution where one test's mock affects subsequent tests.
+        # Mock Windows Task Scheduler cmdlets so tests run without admin rights.
+        # Register-ScheduledTask returns the task object on success (AG5-001 verification
+        # now uses the return value, so mocks must return a non-null object).
+        # Get-ScheduledTask is only used for collision detection (return $null = no collision).
 
-    # Mock Windows Task Scheduler cmdlets so tests run without admin rights.
-    # Register-ScheduledTask returns the task object on success (AG5-001 verification
-    # now uses the return value, so mocks must return a non-null object).
-    # Get-ScheduledTask is only used for collision detection (return $null = no collision).
-
-    # AG8-001: Add -Verifiable to enable mock call verification
-    Mock Register-ScheduledTask -Verifiable {
-        param(
-            $TaskName,
-            $Action,
-            $Trigger,
-            $Settings,
-            $Principal,
-            $Description,
-            [switch]$Force
-        )
-        # Return a task object: AG5-001 verification checks the return value, not a
-        # separate Get-ScheduledTask call. Returning $null would fail verification.
-        return [PSCustomObject]@{
-            TaskName = $TaskName
-            State    = [PSCustomObject]@{ State = 'Ready' }
-            Triggers = @($Trigger)
+        # AG8-001: Add -Verifiable to enable mock call verification
+        Mock Register-ScheduledTask -Verifiable {
+            param(
+                $TaskName,
+                $Action,
+                $Trigger,
+                $Settings,
+                $Principal,
+                $Description,
+                [switch]$Force
+            )
+            # Return a task object: AG5-001 verification checks the return value, not a
+            # separate Get-ScheduledTask call. Returning $null would fail verification.
+            return [PSCustomObject]@{
+                TaskName = $TaskName
+                State    = [PSCustomObject]@{ State = 'Ready' }
+                Triggers = @($Trigger)
+            }
         }
-    }
-    # AG8-003: Add -Verifiable to Unregister mock for validation
-    Mock Unregister-ScheduledTask -Verifiable {
-        param($TaskName, $Confirm)
-    }
-    # Get-ScheduledTask: used only for task-name collision detection.
-    # Return $null for specific names (no collision) and empty array for wildcard.
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq "DailyMotivation_*") { return @() }
-        return $null
+        # AG8-003: Add -Verifiable to Unregister mock for validation
+        Mock Unregister-ScheduledTask -Verifiable {
+            param($TaskName, $Confirm)
+        }
+        # Get-ScheduledTask: used only for task-name collision detection.
+        # Return $null for specific names (no collision) and empty array for wildcard.
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq "DailyMotivation_*") { return @() }
+            return $null
+        }
     }
 }
 
 AfterAll {
-    if (-not $IsWindows) { return }
-
-    # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
-    try {
-        $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
-        if ($strayTasks) {
-            Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
-            foreach ($task in $strayTasks) {
-                try {
-                    Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
-                    Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
-                }
-                catch {
-                    Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+    if ($IsWindows) {
+        # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
+        try {
+            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+            if ($strayTasks) {
+                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+                foreach ($task in $strayTasks) {
+                    try {
+                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+                    }
                 }
             }
         }
-    }
-    catch {
-        Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
-    }
+        catch {
+            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
+        }
 
-    if (Test-Path $env:APPDATA) {
-        Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path $env:APPDATA) {
+            Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        $env:APPDATA = $script:OriginalAppData
     }
-    $env:APPDATA = $script:OriginalAppData
 }
 
 Describe 'New-MotivationTask' -Skip:(-not $IsWindows) {
@@ -675,6 +671,31 @@ Describe 'Remove-MotivationTask' -Skip:(-not $IsWindows) {
     It 'Should not throw when removing a non-existent task ID' {
         { Remove-MotivationTask -TaskId 'nonexistent' } | Should -Not -Throw
     }
+
+    It 'Should return false and keep the task record when OS task removal fails with access denied' {
+        $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        Mock Unregister-ScheduledTask {
+            throw [System.UnauthorizedAccessException]::new('Access is denied.')
+        }
+
+        $removed = Remove-MotivationTask -TaskId $r.TaskId
+
+        $removed | Should -Be $false
+        @(Get-TasksJson).Count | Should -Be 1
+        (Get-TasksJson)[0].task_id | Should -Be $r.TaskId
+    }
+
+    It 'Should remove the task record when OS task is already gone' {
+        $r = New-MotivationTask -FolderPath $script:TestFolder1 -TriggerTime ((Get-Date).AddHours(2))
+        Mock Unregister-ScheduledTask {
+            throw [System.InvalidOperationException]::new('No MSFT_ScheduledTask objects found with property ''TaskName'' equal to ''DailyMotivation_missing''.')
+        }
+
+        $removed = Remove-MotivationTask -TaskId $r.TaskId
+
+        $removed | Should -Be $true
+        @(Get-TasksJson).Count | Should -Be 0
+    }
 }
 
 Describe 'WRONG-5: Register-ScheduledTask catch block covers all five error conditions' {
@@ -714,4 +735,3 @@ Describe 'WRONG-5: Register-ScheduledTask catch block covers all five error cond
         $fnBody -match 'switch\s+-Regex' | Should -Be $true -Because 'WRONG-5: catch block must use switch -Regex pattern'
     }
 }
-

@@ -121,3 +121,25 @@ Describe 'AG1-012: Explorer launch includes Test-Path pre-validation' {
         $testPathPos   | Should -BeLessThan $startProcPos -Because 'Test-Path guard must come before Start-Process'
     }
 }
+
+Describe 'AG1-007: Dismiss handler checks task-removal results' {
+    BeforeAll {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\..\DailyMotivation.ps1') -Raw
+        $dismissStart = $src.IndexOf('# Dismiss for Today')
+        $dismissEnd   = $src.IndexOf('# Open Folder button', $dismissStart)
+        $script:dismissBlock = $src.Substring($dismissStart, $dismissEnd - $dismissStart)
+    }
+
+    It 'Dismiss handler does not discard Remove-MotivationTask return values' {
+        $script:dismissBlock -match 'Remove-MotivationTask[^\r\n]*\| Out-Null' | Should -Be $false `
+            -Because 'the popup must react if removing a pending task fails'
+    }
+
+    It 'Dismiss handler shows an error before closing when a removal fails' {
+        $errorPos = $script:dismissBlock.IndexOf('Show-ErrorDialog -Title "Dismiss Failed"')
+        $closePos = $script:dismissBlock.IndexOf('$window.Close()')
+
+        $errorPos | Should -BeGreaterThan -1 -Because 'a failed dismiss should surface a user-visible error'
+        $errorPos | Should -BeLessThan $closePos -Because 'the popup should not close before a removal failure is handled'
+    }
+}

@@ -22,9 +22,10 @@ Describe 'AG14-001: FolderBrowserDialog Not Disposed' {
         $clickHandlerStart = $functionBody.IndexOf('$selectFolderBtn.Add_Click')
         $clickHandlerSection = $functionBody.Substring($clickHandlerStart, 500)
 
-        # Should have try-finally with dialog.Dispose()
+        # Should dispose inline OR delegate to Invoke-FolderBrowserDialog (which disposes in its own finally block)
         $hasDialogDisposal = ($clickHandlerSection -match 'finally\s*\{[^\}]*\$dialog.*\.Dispose\(\)') -or
-                             ($clickHandlerSection -match '\$dialog\.Dispose\(\)')
+                             ($clickHandlerSection -match '\$dialog\.Dispose\(\)') -or
+                             ($clickHandlerSection -match 'Invoke-FolderBrowserDialog')
 
         $hasDialogDisposal | Should -Be $true -Because "FolderBrowserDialog must be disposed to prevent window handle leak (AG14-001)"
     }
@@ -38,11 +39,12 @@ Describe 'AG14-001: FolderBrowserDialog Not Disposed' {
         if ($clickHandlerStart -gt 0) {
             $clickHandlerSection = $content.Substring($clickHandlerStart, 2000)
 
-            # Should have finally block with dialog.Dispose()
+            # Should dispose inline (finally + AG14-001 comment) OR delegate to Invoke-FolderBrowserDialog
             $hasFinally = $clickHandlerSection -match 'finally'
             $hasDispose = $clickHandlerSection -match 'Dispose.*AG14-001'
+            $delegatesToHelper = $clickHandlerSection -match 'Invoke-FolderBrowserDialog'
 
-            ($hasFinally -and $hasDispose) | Should -Be $true -Because "FolderBrowserDialog must be disposed to prevent window handle leak (AG14-001)"
+            ($delegatesToHelper -or ($hasFinally -and $hasDispose)) | Should -Be $true -Because "FolderBrowserDialog must be disposed to prevent window handle leak (AG14-001)"
         }
     }
 }

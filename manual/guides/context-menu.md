@@ -19,7 +19,7 @@ The context menu entry **"Set as tomorrow's folder (Daily Motivation)"** is regi
 
 The context menu always schedules for **tomorrow** at the `default_trigger_hour` from `config.json` (default: 2:00 PM). To schedule for today or a different time, use the main window instead.
 
-## Removing the context menu entry
+## Removing the context menu entry (cleanup all registry entries)
 
 Run `DailyMotivation.exe /uninstall` from a command prompt. This removes
 the "Set as tomorrow's folder (Daily Motivation)" entry and shows a

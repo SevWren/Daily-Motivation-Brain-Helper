@@ -32,55 +32,55 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) { return }
+    if ($IsWindows) {
+        # Resolve the script path to a normalized absolute path. A literal '..\..' in the
+        # dot-source command position can fail to resolve under Pester's run context.
+        $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+        $scriptToDotSource = Join-Path $repoRoot 'DailyMotivation.ps1'
+        if (-not (Test-Path -LiteralPath $scriptToDotSource)) {
+            throw "Cannot find DailyMotivation.ps1 at $scriptToDotSource"
+        }
+        . $scriptToDotSource -NoRun
 
-    # Resolve the script path to a normalized absolute path. A literal '..\..' in the
-    # dot-source command position can fail to resolve under Pester's run context.
-    $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-    $scriptToDotSource = Join-Path $repoRoot 'DailyMotivation.ps1'
-    if (-not (Test-Path -LiteralPath $scriptToDotSource)) {
-        throw "Cannot find DailyMotivation.ps1 at $scriptToDotSource"
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_IntegReal_$(New-Guid)"
+        Initialize-AppData
+
+        # Real registration validates ExePath (absolute + .exe). Create a throwaway .exe;
+        # Task Scheduler does not require it to be a valid PE at register time.
+        $script:probeExe = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_IntegReal_$(New-Guid).exe"
+        'DMBH' | Set-Content $script:probeExe -Encoding ASCII
+
+        # $script:ExePath is only assigned by the script's entry-point block, which -NoRun
+        # skips, so it is unset here and an unguarded read throws under the runner's
+        # Set-StrictMode -Version Latest. Capture it defensively, then repoint the
+        # dot-sourced functions at the throwaway .exe.
+        $script:OriginalExePath = $null
+        if (Get-Variable -Name 'ExePath' -Scope 'Script' -ErrorAction SilentlyContinue) {
+            $script:OriginalExePath = $script:ExePath
+        }
+        $script:ExePath = $script:probeExe
+
+        $script:IntegCreated = @()   # every OS task name created this run, for leak-free cleanup
     }
-    . $scriptToDotSource -NoRun
-
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_IntegReal_$(New-Guid)"
-    Initialize-AppData
-
-    # Real registration validates ExePath (absolute + .exe). Create a throwaway .exe;
-    # Task Scheduler does not require it to be a valid PE at register time.
-    $script:probeExe = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_IntegReal_$(New-Guid).exe"
-    'DMBH' | Set-Content $script:probeExe -Encoding ASCII
-
-    # $script:ExePath is only assigned by the script's entry-point block, which -NoRun
-    # skips, so it is unset here and an unguarded read throws under the runner's
-    # Set-StrictMode -Version Latest. Capture it defensively, then repoint the
-    # dot-sourced functions at the throwaway .exe.
-    $script:OriginalExePath = $null
-    if (Get-Variable -Name 'ExePath' -Scope 'Script' -ErrorAction SilentlyContinue) {
-        $script:OriginalExePath = $script:ExePath
-    }
-    $script:ExePath = $script:probeExe
-
-    $script:IntegCreated = @()   # every OS task name created this run, for leak-free cleanup
 }
 
 AfterAll {
-    # Safety net: unregister every task this run created (in-process, so it works).
-    # Every script var is probed with Get-Variable: the runner's Set-StrictMode -Version
-    # Latest turns a read of a not-yet-assigned variable into a terminating error, and
-    # BeforeAll early-returns on non-Windows (and could stop mid-way on error), leaving
-    # these unset. Getting them via a local default keeps AfterAll from aborting the run.
-    $createdTasks = @()
-    if (Get-Variable -Name 'IntegCreated' -Scope 'Script' -ErrorAction SilentlyContinue) { $createdTasks = $script:IntegCreated }
-    foreach ($name in $createdTasks) {
-        try { Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue }
-        catch {}
-    }
-
-    # AG20-015: Comprehensive sweep for ANY stray DailyMotivation_* tasks (safety net)
-    # This catches tasks that were created but not tracked (e.g., test failure before adding to $script:IntegCreated)
     if ($IsWindows) {
+        # Safety net: unregister every task this run created (in-process, so it works).
+        # Every script var is probed with Get-Variable: the runner's Set-StrictMode -Version
+        # Latest turns a read of a not-yet-assigned variable into a terminating error, and
+        # a partial BeforeAll can leave these unset. Getting them via a local default keeps
+        # AfterAll from aborting the run.
+        $createdTasks = @()
+        if (Get-Variable -Name 'IntegCreated' -Scope 'Script' -ErrorAction SilentlyContinue) { $createdTasks = $script:IntegCreated }
+        foreach ($name in $createdTasks) {
+            try { Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue }
+            catch {}
+        }
+
+        # AG20-015: Comprehensive sweep for ANY stray DailyMotivation_* tasks (safety net)
+        # This catches tasks that were created but not tracked (e.g., test failure before adding to $script:IntegCreated)
         try {
             $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
             if ($strayTasks) {
@@ -100,22 +100,22 @@ AfterAll {
             # Get-ScheduledTask itself failed - log but don't fail the test run
             Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
         }
+
+        $probe = $null
+        if (Get-Variable -Name 'probeExe' -Scope 'Script' -ErrorAction SilentlyContinue) { $probe = $script:probeExe }
+        if ($probe -and (Test-Path -LiteralPath $probe)) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue }
+
+        $origAppData = $null
+        if (Get-Variable -Name 'OriginalAppData' -Scope 'Script' -ErrorAction SilentlyContinue) { $origAppData = $script:OriginalAppData }
+        if ($origAppData -and $env:APPDATA -and $env:APPDATA -ne $origAppData -and (Test-Path -LiteralPath $env:APPDATA)) {
+            Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        if ($origAppData) { $env:APPDATA = $origAppData }
+
+        $origExe = $null
+        if (Get-Variable -Name 'OriginalExePath' -Scope 'Script' -ErrorAction SilentlyContinue) { $origExe = $script:OriginalExePath }
+        if ($null -ne $origExe) { $script:ExePath = $origExe }
     }
-
-    $probe = $null
-    if (Get-Variable -Name 'probeExe' -Scope 'Script' -ErrorAction SilentlyContinue) { $probe = $script:probeExe }
-    if ($probe -and (Test-Path -LiteralPath $probe)) { Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue }
-
-    $origAppData = $null
-    if (Get-Variable -Name 'OriginalAppData' -Scope 'Script' -ErrorAction SilentlyContinue) { $origAppData = $script:OriginalAppData }
-    if ($origAppData -and $env:APPDATA -and $env:APPDATA -ne $origAppData -and (Test-Path -LiteralPath $env:APPDATA)) {
-        Remove-Item -LiteralPath $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    if ($origAppData) { $env:APPDATA = $origAppData }
-
-    $origExe = $null
-    if (Get-Variable -Name 'OriginalExePath' -Scope 'Script' -ErrorAction SilentlyContinue) { $origExe = $script:OriginalExePath }
-    if ($null -ne $origExe) { $script:ExePath = $origExe }
 }
 
 Describe 'New-MotivationTask - real Task Scheduler integration (no mocking)' -Skip:(-not $IsWindows) {

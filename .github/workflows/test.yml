@@ -84,8 +84,12 @@ jobs:
         run: |
           # Parse Pester JaCoCo XML directly — irongut/CodeCoverageSummary cannot handle
           # the <!DOCTYPE report ...> declaration in Pester's JaCoCo output.
-          # Temporary threshold: 40% (see coverage roadmap issue #196).
-          $minPct = 40
+          # Threshold: 51% — CI windows-latest (Windows Server) produces 51.3%;
+          # local Windows 10 produces 53.59%. The gap is a platform difference:
+          # 4 Show-ErrorDialog/InfoDialog WPF-attempt tests are Pattern C (Skip)
+          # after the ShowDialog() hang fix — those lines are no longer covered on
+          # any runner. See #198 / fix(ci) commit 52f7f05.
+          $minPct = 51
           [xml]$report = Get-Content coverage.xml -Raw
           $allCounters = @(
             $report.report.counter

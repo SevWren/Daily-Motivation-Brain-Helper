@@ -8,58 +8,56 @@
 #>
 
 BeforeAll {
-    if (-not $IsWindows) {
-        Write-Host "Skipping AG20-001 - Windows Task Scheduler required" -ForegroundColor Yellow
-        return
-    }
-    $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
-    . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
-    $script:OriginalAppData = $env:APPDATA
-    $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Multi_$(New-Guid)"
-    Initialize-AppData
-    $script:ExePath = 'C:\Test\DailyMotivation.exe'
-    # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
-    Mock Register-ScheduledTask {
-        param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,[switch]$Force)
-        return [PSCustomObject]@{ TaskName=$TaskName; State='Ready'; Triggers=@($Trigger) }
-    }
-    Mock Unregister-ScheduledTask {
-        param($TaskName,$Confirm)
-    }
-    # Get-ScheduledTask: collision detection only; return $null = no collision
-    Mock Get-ScheduledTask {
-        param($TaskName)
-        if ($TaskName -eq 'DailyMotivation_*') { return @() }
-        return $null
+    if ($IsWindows) {
+        $script:RepoRoot = Join-Path $PSScriptRoot '..\..'
+        . (Join-Path $script:RepoRoot 'DailyMotivation.ps1') -NoRun
+        $script:OriginalAppData = $env:APPDATA
+        $env:APPDATA = Join-Path ([System.IO.Path]::GetTempPath()) "DMBH_Multi_$(New-Guid)"
+        Initialize-AppData
+        $script:ExePath = 'C:\Test\DailyMotivation.exe'
+        # Register returns task object (AG5-001 verification uses return value, not Get-ScheduledTask)
+        Mock Register-ScheduledTask {
+            param($TaskName,$Action,$Trigger,$Settings,$Principal,$Description,[switch]$Force)
+            return [PSCustomObject]@{ TaskName=$TaskName; State='Ready'; Triggers=@($Trigger) }
+        }
+        Mock Unregister-ScheduledTask {
+            param($TaskName,$Confirm)
+        }
+        # Get-ScheduledTask: collision detection only; return $null = no collision
+        Mock Get-ScheduledTask {
+            param($TaskName)
+            if ($TaskName -eq 'DailyMotivation_*') { return @() }
+            return $null
+        }
     }
 }
 
 AfterAll {
-    if (-not $IsWindows) { return }
-
-    # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
-    try {
-        $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
-        if ($strayTasks) {
-            Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
-            foreach ($task in $strayTasks) {
-                try {
-                    Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
-                    Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
-                }
-                catch {
-                    Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+    if ($IsWindows) {
+        # AG20-015: Sweep for stray DailyMotivation_* tasks (safety net)
+        try {
+            $strayTasks = Get-ScheduledTask -TaskName "DailyMotivation_*" -ErrorAction SilentlyContinue
+            if ($strayTasks) {
+                Write-Warning "AG20-015 cleanup: Found $($strayTasks.Count) stray task(s) after test run. Removing..."
+                foreach ($task in $strayTasks) {
+                    try {
+                        Unregister-ScheduledTask -TaskName $task.TaskName -Confirm:$false -ErrorAction Stop
+                        Write-Host "  - Removed stray task: $($task.TaskName)" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Warning "  - Failed to remove $($task.TaskName): $($_.Exception.Message)"
+                    }
                 }
             }
         }
-    }
-    catch {
-        # Get-ScheduledTask itself failed - log but don't fail the test run
-        Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
-    }
+        catch {
+            # Get-ScheduledTask itself failed - log but don't fail the test run
+            Write-Warning "AG20-015 cleanup: Could not sweep for stray tasks: $($_.Exception.Message)"
+        }
 
-    if (Test-Path $env:APPDATA) { Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue }
-    $env:APPDATA = $script:OriginalAppData
+        if (Test-Path $env:APPDATA) { Remove-Item -Path $env:APPDATA -Recurse -Force -ErrorAction SilentlyContinue }
+        $env:APPDATA = $script:OriginalAppData
+    }
 }
 
 Describe 'AG20-001 Multi-Folder Scheduling Integration' -Skip:(-not $IsWindows) {

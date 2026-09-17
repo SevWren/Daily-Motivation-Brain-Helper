@@ -52,6 +52,8 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
 # Platform adapter (null by default, tests can inject HeadlessPlatform)
 $script:Platform = $null
 
+$script:LastUsedFolder = ""  # Persists last folder selection for the session
+
 $script:ConfigCache = $null
 $script:ConfigCacheMTime = $null
 
@@ -426,15 +428,16 @@ function Save-Config {
 function Get-PopupConfig {
     [CmdletBinding()]
     param()
+    $defaultConfig = [PSCustomObject]@{
+        glyph         = "[+]"
+        title         = ""
+        body          = ""
+        explorer_path = ""
+        folder_name   = ""
+        task_id       = ""
+    }
     if (-not (Test-Path -Path "$script:PopupCfgPath" -PathType Leaf)) {
-        return [PSCustomObject]@{
-            glyph         = "[+]"
-            title         = ""
-            body          = ""
-            explorer_path = ""
-            folder_name   = ""
-            task_id       = ""
-        }
+        return $defaultConfig
     }
 
     try {
@@ -442,23 +445,44 @@ function Get-PopupConfig {
         if (Test-Path $script:PopupCfgPath) {
             $fileSize = (Get-Item $script:PopupCfgPath).Length
             if ($fileSize -gt 50KB) {
-                return [PSCustomObject]@{
-                    glyph = "[+]"; title = ""; body = ""
-                    explorer_path = ""; folder_name = ""; task_id = ""
-                }
+                return $defaultConfig
             }
         }
-        return Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+        $parsed = Get-Content -Path "$script:PopupCfgPath" -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($null -eq $parsed) {
+            return $defaultConfig
+        }
+
+        $getStringValue = {
+            param([object]$Source, [string[]]$PropertyNames, [string]$DefaultValue = "")
+            foreach ($propertyName in $PropertyNames) {
+                if ($Source.PSObject.Properties[$propertyName] -and $Source.$propertyName -is [string]) {
+                    return [string]$Source.$propertyName
+                }
+            }
+            return $DefaultValue
+        }
+
+        $normalizedExplorerPath = & $getStringValue $parsed @('explorer_path', 'folder_path') ''
+        $normalizedFolderName   = & $getStringValue $parsed @('folder_name') ''
+        if (-not $normalizedFolderName -and $normalizedExplorerPath) {
+            $normalizedFolderName = Split-Path -Leaf $normalizedExplorerPath
+            if (-not $normalizedFolderName) {
+                $normalizedFolderName = $normalizedExplorerPath
+            }
+        }
+
+        return [PSCustomObject]@{
+            glyph         = & $getStringValue $parsed @('glyph', 'message_glyph') $defaultConfig.glyph
+            title         = & $getStringValue $parsed @('title', 'message_title') ''
+            body          = & $getStringValue $parsed @('body', 'message_body') ''
+            explorer_path = $normalizedExplorerPath
+            folder_name   = $normalizedFolderName
+            task_id       = & $getStringValue $parsed @('task_id') ''
+        }
     }
     catch {
-        return [PSCustomObject]@{
-            glyph         = "[+]"
-            title         = ""
-            body          = ""
-            explorer_path = ""
-            folder_name   = ""
-            task_id       = ""
-        }
+        return $defaultConfig
     }
 }
 
@@ -691,12 +715,64 @@ function Show-InfoDialog {
 # SECTION 4: Task Scheduler functions
 # ============================================================
 
+function Get-FileSha256Hex {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = $null
+    $sha256 = $null
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $hashBytes = $sha256.ComputeHash($stream)
+        return ($hashBytes | ForEach-Object { $_.ToString('X2') }) -join ''
+    }
+    finally {
+        if ($stream) { $stream.Dispose() }
+        if ($sha256) { $sha256.Dispose() }
+    }
+}
+
+function Test-TasksJsonIntegrity {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $checksumPath = $Path + '.sha256'
+    if (-not (Test-Path -Path $Path -PathType Leaf)) { return $true }
+    if (-not (Test-Path -Path $checksumPath -PathType Leaf)) { return $true }
+
+    try {
+        $tasksInfo    = Get-Item -Path $Path -ErrorAction Stop
+        $checksumInfo = Get-Item -Path $checksumPath -ErrorAction Stop
+        if ($checksumInfo.LastWriteTimeUtc -lt $tasksInfo.LastWriteTimeUtc) {
+            return $true
+        }
+
+        $expectedHash = (Get-Content -Path $checksumPath -Raw -Encoding UTF8 -ErrorAction Stop).Trim()
+        if ($expectedHash -notmatch '^[0-9A-Fa-f]{64}$') {
+            Write-Warning "Get-TasksJson: invalid checksum sidecar '$checksumPath'; ignoring integrity check."
+            return $true
+        }
+
+        $actualHash = Get-FileSha256Hex -Path $Path
+        if ($actualHash -cne $expectedHash.ToUpperInvariant()) {
+            Write-Warning "Get-TasksJson: tasks.json checksum mismatch at '$Path'. Returning an empty task list."
+            return $false
+        }
+
+        return $true
+    }
+    catch {
+        Write-Warning "Get-TasksJson: failed to verify checksum for '$Path': $($_.Exception.Message)"
+        return $true
+    }
+}
+
 function Get-TasksJson {
     # Valid task status values
     $script:ValidTaskStatuses = @('PENDING', 'DELETED', 'COMPLETED', 'FAILED')
 
     $path = $script:TasksPath
     if (-not (Test-Path $path)) { return @() }
+    if (-not (Test-TasksJsonIntegrity -Path $path)) { return @() }
     try {
         $result = Get-Content -Path "$path" -Raw -Encoding UTF8 | ConvertFrom-Json
         # Ensure consistent array handling for empty JSON arrays
@@ -721,13 +797,18 @@ function Get-TasksJson {
 
         return $tasks
     }
-    catch { return @() }
+    catch {
+        Write-Warning "Get-TasksJson: failed to parse '$path': $($_.Exception.Message)"
+        return @()
+    }
 }
 
 function Save-TasksJson {
     param([object[]]$Tasks)
-    $path     = $script:TasksPath
-    $tempPath = $path + ".tmp"
+    $path             = $script:TasksPath
+    $tempPath         = $path + ".tmp"
+    $checksumPath     = $path + '.sha256'
+    $checksumTempPath = $checksumPath + '.tmp'
     # AG18-018: strip nulls before serialising so JSON never contains a null literal
     $Tasks = @($Tasks | Where-Object { $null -ne $_ })
     # AG7-011: verify directory is writable before attempting write
@@ -751,9 +832,27 @@ function Save-TasksJson {
             ConvertTo-Json -InputObject $Tasks -Depth 4 | Set-Content -Path $tempPath -Encoding UTF8 -ErrorAction Stop
         }
         Move-Item -Path $tempPath -Destination $path -Force -ErrorAction Stop
+        if (Test-Path -Path $checksumPath -PathType Leaf) {
+            Remove-Item -Path $checksumPath -Force -ErrorAction SilentlyContinue
+        }
+        try {
+            $checksum = Get-FileSha256Hex -Path $path
+            Set-Content -Path $checksumTempPath -Value $checksum -Encoding UTF8 -NoNewline -ErrorAction Stop
+            Move-Item -Path $checksumTempPath -Destination $checksumPath -Force -ErrorAction Stop
+        }
+        catch {
+            if (Test-Path -Path $checksumTempPath -PathType Leaf) {
+                Remove-Item -Path $checksumTempPath -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -Path $checksumPath -PathType Leaf) {
+                Remove-Item -Path $checksumPath -Force -ErrorAction SilentlyContinue
+            }
+            Write-Warning "Save-TasksJson: wrote '$path' but could not update checksum sidecar '$checksumPath': $($_.Exception.Message)"
+        }
     }
     catch {
         if (Test-Path $tempPath) { Remove-Item $tempPath -ErrorAction SilentlyContinue }
+        if (Test-Path $checksumTempPath) { Remove-Item $checksumTempPath -ErrorAction SilentlyContinue }
         throw
     }
     finally {
@@ -1217,7 +1316,13 @@ function Remove-MotivationTask {
     # If task is already marked DELETED, skip OS unregister
     if ($target.status -eq 'DELETED') {
         $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
-        Save-TasksJson $tasks
+        try {
+            Save-TasksJson $tasks
+        }
+        catch {
+            Write-Warning "Remove-MotivationTask: failed to remove stale task record '$TaskId' from tasks.json: $($_.Exception.Message)"
+            return $false
+        }
         return $true
     }
 
@@ -1228,11 +1333,29 @@ function Remove-MotivationTask {
     else {
         try {
             Unregister-ScheduledTask -TaskName $target.task_name -Confirm:$false -ErrorAction Stop
-        } catch {}
+        }
+        catch {
+            $errorMessage = $_.Exception.Message
+            if ($errorMessage -match 'cannot find' -or
+                $errorMessage -match 'not found' -or
+                $errorMessage -match 'No MSFT_ScheduledTask') {
+                # The OS task is already gone, so removing the stale JSON record is safe.
+            }
+            else {
+                Write-Warning "Remove-MotivationTask: failed to remove OS task '$($target.task_name)': $errorMessage"
+                return $false
+            }
+        }
     }
 
     $tasks = $tasks | Where-Object { $_.task_id -ne $TaskId }
-    Save-TasksJson $tasks
+    try {
+        Save-TasksJson $tasks
+    }
+    catch {
+        Write-Warning "Remove-MotivationTask: failed to update tasks.json after removing task '$TaskId': $($_.Exception.Message)"
+        return $false
+    }
     return $true
 
     } finally {
@@ -1529,13 +1652,14 @@ function Invoke-FolderScheduling {
         Set-PopupConfig @popupConfigParams
     }
     catch {
-        Remove-MotivationTask -TaskId $result.TaskId -ErrorAction SilentlyContinue | Out-Null
+        $rollbackSucceeded = Remove-MotivationTask -TaskId $result.TaskId
+        $rollbackNote = if (-not $rollbackSucceeded) { " Cleanup rollback also failed; the OS task may still exist." } else { "" }
         return @{
             Success       = $false
             TaskId        = $null
             IsDuplicate   = $false
             IsNetworkPath = $isNetworkPath
-            Error         = "OS task registration succeeded but popup config write failed: $($_.Exception.Message)"
+            Error         = "OS task registration succeeded but popup config write failed: $($_.Exception.Message)$rollbackNote"
         }
     }
 
@@ -1625,9 +1749,9 @@ function Unregister-ContextMenu {
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Name="MainWin"
     Title="Daily Motivation Brain Helper  -  Folder Scheduler"
-    Width="520" SizeToContent="Height"
+    Width="640" MinWidth="520" SizeToContent="Height"
     WindowStartupLocation="CenterScreen"
-    ResizeMode="CanMinimize"
+    ResizeMode="CanResize"
     Background="#0D1117"
     FontFamily="Segoe UI Emoji, Segoe UI Symbol, Segoe UI">
 
@@ -1650,6 +1774,9 @@ function Unregister-ContextMenu {
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#00D4EE"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#009FB5"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -2021,6 +2148,31 @@ function Unregister-ContextMenu {
 # SECTION 7: Main Window Logic
 # ============================================================
 
+function Invoke-FolderBrowserDialog {
+    param(
+        [Parameter(Mandatory)][string]$Description
+    )
+    $dialog = $null
+    try {
+        $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
+        $dialog.Description         = $Description
+        $dialog.ShowNewFolderButton = $true
+        if ($script:LastUsedFolder) { $dialog.SelectedPath = $script:LastUsedFolder }
+        if ($dialog.ShowDialog() -eq "OK") {
+            $script:LastUsedFolder = $dialog.SelectedPath
+            return $dialog.SelectedPath
+        }
+        return $null
+    }
+    catch {
+        Write-Warning "Invoke-FolderBrowserDialog: dialog failed: $($_.Exception.Message)"
+        return $null
+    }
+    finally {
+        if ($dialog) { $dialog.Dispose() }
+    }
+}
+
 function Show-MainWindow {
     if (-not $script:AssembliesLoaded) {
         [Console]::Error.WriteLine("UI cannot display: .NET Framework WPF assemblies not available.")
@@ -2229,16 +2381,8 @@ function Show-MainWindow {
 
     # --- Event handlers ---
     $selectFolderBtn.Add_Click({
-            $dialog = $null
-            try {
-                $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-                $dialog.Description         = "Select the folder you want to open tomorrow"
-                $dialog.ShowNewFolderButton = $false
-                if ($dialog.ShowDialog() -eq "OK") { Set-SelectedPath $dialog.SelectedPath }
-            }
-            finally {
-                if ($dialog) { $dialog.Dispose() }
-            }
+            $picked = Invoke-FolderBrowserDialog -Description "Select the folder you want to open tomorrow"
+            if ($picked) { Set-SelectedPath $picked }
         })
 
     $converter = [System.Windows.Media.BrushConverter]::new() # AG14-006: Reuse single BrushConverter
@@ -2306,8 +2450,12 @@ function Show-MainWindow {
     $undoBtn.Add_Click({
             if ($script:lastTaskId) {
                 $removedId = $script:lastTaskId
+                $removedOk = Remove-MotivationTask -TaskId $removedId
+                if (-not $removedOk) {
+                    Show-ErrorDialog -Title "Undo Failed" -Message "Could not remove the OS task for this reminder. The reminder is still active."
+                    return
+                }
                 Stop-UndoTimer -UndoBannerControl $undoBanner
-                Remove-MotivationTask -TaskId $removedId
                 $script:lastTaskId       = $null
                 $script:undoScheduledFor = $null
                 Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
@@ -2354,7 +2502,11 @@ function Show-MainWindow {
                     "Remove this scheduled task? This cannot be undone.",
                     "Confirm Delete", "YesNo", "Warning")
                 if ($confirm -eq "Yes") {
-                    Remove-MotivationTask -TaskId $container.Tag
+                    $removedOk = Remove-MotivationTask -TaskId $container.Tag
+                    if (-not $removedOk) {
+                        Show-ErrorDialog -Title "Delete Failed" -Message "Could not remove the OS task for this reminder. It may still be active."
+                        return
+                    }
                     Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noTasksLabel
                 }
             }
@@ -2852,30 +3004,21 @@ function Show-PopupWindow {
         return  # Exit safely rather than proceed with undefined state
     }
 
-    # Load popup config
-    $config = [PSCustomObject]@{
-        title         = "Time to Show Up"
-        body          = "Every great outcome starts with showing up. Let's make this session count."
-        glyph         = "[+]"
-        explorer_path = ""
-        folder_name   = ""
-        task_id       = ""
-    }
-    if (Test-Path $configPath) {
-        try {
-            $config = Get-Content -Path "$configPath" -Raw -Encoding UTF8 | ConvertFrom-Json
-        }
-        catch {
-            # Log parse failure; do not swallow silently (AG15-014)
-            $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
-            Add-Content -Path $debugLog `
-                -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] popup_config.json parse failed: $($_.Exception.Message)" `
-                -Encoding UTF8 -ErrorAction SilentlyContinue
-        }
-    }
+    # Load popup config through the shared normalization path so popup mode honors
+    # compatibility aliases (for example folder_path) and never consumes partial JSON raw.
+    $config = Get-PopupConfig
 
     # Exit silently if no folder has been configured
     if (-not $config.explorer_path) {
+        if (Test-Path $configPath) {
+            try {
+                $debugLog = Join-Path $script:AppDataDir 'popup_debug.txt'
+                Add-Content -Path $debugLog `
+                    -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] popup_config.json missing explorer_path after normalization; popup skipped." `
+                    -Encoding UTF8 -ErrorAction SilentlyContinue
+            }
+            catch {}
+        }
         if ($mutexOwned -and $mutex) { try { $mutex.ReleaseMutex() } catch {} }
         return
     }
@@ -3214,8 +3357,19 @@ function Show-PopupWindow {
                 $pending = Get-MotivationTasks | Where-Object {
                     $_.folder_path -eq $config.explorer_path -and $_.status -eq "PENDING"
                 }
+                $removeFailed = $false
                 foreach ($t in $pending) {
-                    Remove-MotivationTask -TaskId $t.task_id | Out-Null
+                    if (-not (Remove-MotivationTask -TaskId $t.task_id)) {
+                        $removeFailed = $true
+                        break
+                    }
+                }
+                if ($removeFailed) {
+                    if (-not $script:pathMissing -and $null -ne $timer -and -not $timer.IsEnabled -and -not $script:windowClosed) {
+                        $timer.Start()
+                    }
+                    Show-ErrorDialog -Title "Dismiss Failed" -Message "Could not remove one or more OS tasks for this folder. The reminder is still active."
+                    return
                 }
             }
             $window.Close()
@@ -3250,36 +3404,27 @@ function Show-PopupWindow {
 
     # Path missing - Re-pick folder
     $rePickBtn.Add_Click({
-        $dialog = $null
-        try {
-            $dialog = [System.Windows.Forms.FolderBrowserDialog]::new()
-            $dialog.Description         = "Choose the new location for this folder"
-            $dialog.ShowNewFolderButton = $false
-            if ($dialog.ShowDialog() -eq "OK") {
-                $newPath = $dialog.SelectedPath
-                try {
-                    $c = Get-PopupConfig
-                    $popupParams = @{
-                        Glyph        = $c.glyph
-                        Title        = $c.title
-                        Body         = $c.body
-                        ExplorerPath = $newPath
-                        TaskId       = $c.task_id
-                    }
-                    Set-PopupConfig @popupParams
-                    $script:newExplorerPath = $newPath
-                    $script:openExplorer    = $true
-                    $window.Close()
+        $newPath = Invoke-FolderBrowserDialog -Description "Choose the new location for this folder"
+        if ($newPath) {
+            try {
+                $c = Get-PopupConfig
+                $popupParams = @{
+                    Glyph        = $c.glyph
+                    Title        = $c.title
+                    Body         = $c.body
+                    ExplorerPath = $newPath
+                    TaskId       = $c.task_id
                 }
-                catch {
-                    [void][System.Windows.MessageBox]::Show(
-                        "Could not save the new folder path.`n`n$($_.Exception.Message)",
-                        "Save Failed", "OK", "Error")
-                }
+                Set-PopupConfig @popupParams
+                $script:newExplorerPath = $newPath
+                $script:openExplorer    = $true
+                $window.Close()
             }
-        }
-        finally {
-            if ($dialog) { $dialog.Dispose() } # AG14-001
+            catch {
+                [void][System.Windows.MessageBox]::Show(
+                    "Could not save the new folder path.`n`n$($_.Exception.Message)",
+                    "Save Failed", "OK", "Error")
+            }
         }
     })
 
@@ -3387,7 +3532,13 @@ function Show-PopupWindow {
     # Cannot rely on DeleteExpiredTaskAfter alone  -  it only fires when the scheduled
     # trigger expires naturally; manually-run tasks are never considered "expired".
     if ($config.task_id) {
-        Remove-MotivationTask -TaskId $config.task_id | Out-Null
+        $remainingOriginTask = Get-MotivationTasks | Where-Object { $_.task_id -eq $config.task_id }
+        if ($remainingOriginTask) {
+            $cleanupRemoved = Remove-MotivationTask -TaskId $config.task_id
+            if (-not $cleanupRemoved) {
+                Show-ErrorDialog -Title "Cleanup Failed" -Message "Could not remove the completed OS task. It may still appear in the Task List until the next sync."
+            }
+        }
     }
 
     # Post-close: open Explorer (REQ-009)
