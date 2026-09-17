@@ -96,9 +96,23 @@ try {
     Write-Host " Results: Passed=$($result.PassedCount)  Failed=$($result.FailedCount)  Skipped=$($result.SkippedCount)" -ForegroundColor $(if ($result.FailedCount -gt 0) { 'Red' } else { 'Green' })
     Write-Host "=====================================================================" -ForegroundColor Cyan
 
+    # Run WPF smoke tests in an STA runspace (Windows only, #200)
+    $staScript = Join-Path $RepoRoot 'Tests\WPF\Invoke-STAPester.ps1'
+    if ($IsWindows -and (Test-Path $staScript)) {
+        Write-Host ""
+        Write-Host "Running WPF smoke tests (STA Harness)..." -ForegroundColor Cyan
+        $staArgs = @('-Coverage', $Coverage)
+        if ($CI) { $staArgs += '-CI' }
+        & $staScript @staArgs -RepoRoot $RepoRoot
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WPF SMOKE TESTS FAILED" -ForegroundColor Red
+            if ($CI) { exit 1 }
+        }
+    }
+
     # Story 2.4: Enforce coverage threshold in CI mode.
     # $CoverageThreshold aligned with the CI coverage-gate job (see #196 roadmap).
-    $CoverageThreshold = 49
+    $CoverageThreshold = 75
     if ($CI -and $Coverage -and $null -ne $result.CodeCoverage) {
         $pct = [math]::Round($result.CodeCoverage.CoveragePercent, 1)
         Write-Host ""

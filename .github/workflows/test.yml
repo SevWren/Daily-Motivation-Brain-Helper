@@ -57,7 +57,9 @@ jobs:
           name: test-results-${{ matrix.os }}  # per-OS to avoid matrix name collision
           path: |
             TestResults.xml
+            TestResults-WPF.xml
             coverage.xml
+            coverage-wpf.xml
           retention-days: 30                    # Story 2.7
 
       - name: Publish test results
@@ -84,17 +86,22 @@ jobs:
         run: |
           # Parse Pester JaCoCo XML directly — irongut/CodeCoverageSummary cannot handle
           # the <!DOCTYPE report ...> declaration in Pester's JaCoCo output.
-          # Threshold: 49% — raised by #199 (see coverage roadmap issue #196).
-          $minPct = 49
-          [xml]$report = Get-Content coverage.xml -Raw
-          $allCounters = @(
-            $report.report.counter
-            $report.report.package | ForEach-Object { $_.counter }
-            $report.report.package | ForEach-Object { $_.class } | ForEach-Object { $_.counter }
-          ) | Where-Object { $_ -and $_.type -eq 'LINE' }
-          $covered = ($allCounters | Measure-Object -Property covered -Sum).Sum
-          $missed  = ($allCounters | Measure-Object -Property missed  -Sum).Sum
-          $total   = $covered + $missed
+          # Aggregate coverage.xml (standard) + coverage-wpf.xml (STA Harness, #200).
+          # Threshold: 75% — raised by #200 (see coverage roadmap issue #196).
+          $minPct = 75
+          $covered = 0; $missed = 0
+          foreach ($file in @('coverage.xml', 'coverage-wpf.xml')) {
+            if (-not (Test-Path $file)) { continue }
+            [xml]$report = Get-Content $file -Raw
+            $allCounters = @(
+              $report.report.counter
+              $report.report.package | ForEach-Object { $_.counter }
+              $report.report.package | ForEach-Object { $_.class } | ForEach-Object { $_.counter }
+            ) | Where-Object { $_ -and $_.type -eq 'LINE' }
+            $covered += ($allCounters | Measure-Object -Property covered -Sum).Sum
+            $missed  += ($allCounters | Measure-Object -Property missed  -Sum).Sum
+          }
+          $total = $covered + $missed
           if ($total -eq 0) { throw "Coverage XML contained no LINE counters — verify Pester generated coverage.xml" }
           $pct = [math]::Round($covered / $total * 100, 1)
           Write-Host "Line coverage: $pct% ($covered covered / $total total lines)"
