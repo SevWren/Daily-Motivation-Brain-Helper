@@ -41,13 +41,13 @@ _Avoid_: Invocation type, Run context, Entry path
 **main mode**:
 Default Mode. Entered when `$Mode` is anything other than `"/popup"`,
 `"/setfolder"`, or `"/uninstall"`. Shows the Main Window - folder picker and
-task scheduler UI.
+task scheduler UI. Implemented by `Show-MainWindow` (~700 LOC).
 _Avoid_: Normal mode, UI mode, Interactive mode
 
 **popup mode**:
 Triggered by Windows Task Scheduler via `DailyMotivation.exe /popup`. The
 `$Mode` parameter equals `"/popup"`. Shows the Popup Window. Never launched by
-the user directly.
+the user directly. Implemented by `Show-PopupWindow` (~600 LOC).
 _Avoid_: Notification mode, Reminder mode, Scheduled run
 
 **setfolder mode**:
@@ -133,6 +133,28 @@ Creating a MotivationTask despite a Duplicate being detected. Code-level concept
 only; the UI shows "Already Scheduled" and asks "Schedule again anyway?" before
 passing `-Force` to the scheduling function.
 _Avoid_: Override, Bypass duplicate check
+
+**tasks.json**:
+The persistence file for all MotivationTask records, stored in AppData Dir. The
+canonical source of truth for each task's TaskId, FolderPath, TriggerTime,
+Status, and SnoozeCount across sessions.
+_Avoid_: Task file, Task database
+
+**New-MotivationTask**:
+The function that implements the Schedule verb. Writes a MotivationTask record
+to `tasks.json`, registers an OS Task in Windows Task Scheduler, and handles
+Duplicate detection. The single authoritative entry point for creating any
+MotivationTask.
+_Avoid_: Create task, Register task, Add task
+
+**TaskId collision retry**:
+The internal loop inside `New-MotivationTask` that detects an OS-layer name
+clash — an existing OS Task already named `DailyMotivation_{TaskId}` — and
+retries with a freshly generated TaskId, up to a fixed attempt limit. Distinct
+from **Duplicate** detection, which is a domain-level check on FolderPath and
+date. A TaskId collision is an OS scheduler namespace conflict; a Duplicate is
+a scheduling intent conflict.
+_Avoid_: Retry loop, Deduplication loop, Collision (when describing Duplicate)
 
 **Status**:
 The lifecycle state of a MotivationTask. At runtime only `PENDING` (created, not
@@ -300,6 +322,13 @@ prefixed with `HASH:` (or `HASH:NO_PATH` when empty). Append-only, with rotation
 at 1 MB and 30-day archive retention (see ADR-010).
 _Avoid_: Log file, History, Activity log
 
+**Write-OutcomeLog**:
+The function that appends a single pipe-delimited Outcome record to the Outcome
+Log. Acquires the log Mutex before writing to prevent interleaved entries from
+concurrent popup sessions. Hashes the FolderPath to `HASH:{sha256}` before
+writing, so no plaintext path ever reaches the log file.
+_Avoid_: Log write, Append log, Write log
+
 ---
 
 ### Windows integration
@@ -392,6 +421,75 @@ The project's test runner script. Wraps `Invoke-Pester` with a
 In CI mode (`-CI`) it sets `Run.Exit = $true` and emits NUnit XML and JaCoCo
 coverage artifacts.
 _Avoid_: Test script, Run script
+
+**Initialize-WindowsAssemblies**:
+The function that loads WPF (`PresentationFramework`, `PresentationCore`,
+`WindowsBase`) and WinForms assemblies into the runspace. Must be called before
+any window is shown and must run on an STA thread. Idempotent — safe to call
+more than once; subsequent calls return immediately.
+_Avoid_: Load assemblies, Init WPF, Setup assemblies
+
+**STA Harness**:
+A PowerShell wrapper script (`Tests/WPF/Invoke-STAPester.ps1`) that creates an
+STA runspace and runs Pester inside it, enabling WPF-dependent tests to execute
+on `windows-latest` CI. Invoked by `Invoke-Tests.ps1` when `-Tag WPF` is
+passed. Emits a separate `coverage-wpf.xml` artifact.
+_Avoid_: STA wrapper, STA runner, WPF test runner
+
+**WPF tag**:
+The Pester tag string `"WPF"` applied to tests that require a real STA runspace
+and Windows WPF assemblies. Routes those tests to the STA Harness. Any test
+file that instantiates a WPF window or calls `Initialize-WindowsAssemblies`
+must carry this tag and be decorated with `-Skip:(-not $IsWindows)`.
+_Avoid_: WPF tests tag, UI tag
+
+**$script:Window**:
+The script-scoped variable holding the live WPF window reference during a main
+mode or popup mode session. Setting it to `$null` in tests suppresses all WPF
+dispatch calls in `Update-*UI` functions, enabling cross-platform data-path
+testing without opening a real window. The canonical seam for WPF-bypass in
+unit tests.
+_Avoid_: Window reference, Window handle, Window variable
+
+**Get-HistoryData**:
+Reads the Outcome Log and returns the most recent 30 records formatted for
+display in the History Panel, with an `OutcomeColor` hex value derived from
+each record's Outcome. Returns an empty array when the log file is absent or
+contains no valid entries.
+_Avoid_: Read history, Fetch history, Load history
+
+**Update-HistoryUI**:
+Sorts records returned by `Get-HistoryData` and assigns them to the History
+Panel control's `ItemsSource`. WPF assignment is suppressed when
+`$script:Window` is `$null`.
+_Avoid_: Render history, Refresh history
+
+**Get-ScheduleTime**:
+Converts the Today/Tomorrow Selector state and the `default_trigger_hour` from
+AppConfig into a concrete TriggerTime `[datetime]`. Returns today-at-hour when
+the Today radio is visible and checked; returns tomorrow-at-hour otherwise.
+_Avoid_: Calculate time, Resolve trigger time, Compute schedule
+
+**Update-TaskListUI**:
+Queries `Get-MotivationTasks`, filters out DELETED tasks, sorts PENDING tasks
+ascending by TriggerTime, and assigns the display-formatted list to the Task
+List control's `ItemsSource`. WPF assignment is suppressed when
+`$script:Window` is `$null`.
+_Avoid_: Render tasks, Refresh task list, Load task list
+
+**Get-SafeErrorMessage**:
+Sanitises a raw exception message before display or logging by redacting Windows
+drive paths to `[PATH]`, UNC paths to `[UNC_PATH]`, credential keywords to
+`[REDACTED]`, `$env:` variable paths to `[ENV_PATH]`, and stripping stack trace
+lines. Ensures FolderPaths are never exposed in error dialogs.
+_Avoid_: Sanitize error, Clean error, Scrub message
+
+**Show-ErrorDialog / Show-InfoDialog**:
+Windows-only functions that display a modal message box via WPF (preferred),
+falling back to WinForms, then to console output when neither is available.
+`Show-ErrorDialog` passes its message through `Get-SafeErrorMessage` before
+display. Both are no-ops on non-Windows platforms when no assembly is loaded.
+_Avoid_: Alert dialog, Message box, Error popup, Info popup
 
 ---
 
@@ -517,4 +615,4 @@ _Avoid_: Test script, Run script
 
 ---
 
-_Last updated: 2026-08-27_
+_Last updated: 2026-09-17_
