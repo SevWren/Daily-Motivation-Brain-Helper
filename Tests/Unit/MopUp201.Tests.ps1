@@ -147,7 +147,12 @@ Describe 'Invoke-FolderScheduling - Set-PopupConfig write failure triggers OS ta
     BeforeAll {
         $script:Platform = [HeadlessPlatform]::new()
 
-        Mock Set-PopupConfig      { throw [System.IO.IOException]::new('Disk full') }
+        # Mock New-MotivationTask so no task is written to tasks.json between tests.
+        # Without this, the first test's successful New-MotivationTask call persists a
+        # task record; the second and third tests then hit duplicate detection and return
+        # early (IsDuplicate=$true, no Error key) before ever reaching Set-PopupConfig.
+        Mock New-MotivationTask    { return @{ Success = $true; TaskId = 'mocked-task-000001'; IsDuplicate = $false; IsNetworkPath = $false } }
+        Mock Set-PopupConfig       { throw [System.IO.IOException]::new('Disk full') }
         Mock Remove-MotivationTask { return $true }
     }
 
