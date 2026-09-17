@@ -84,8 +84,8 @@ jobs:
         run: |
           # Parse Pester JaCoCo XML directly — irongut/CodeCoverageSummary cannot handle
           # the <!DOCTYPE report ...> declaration in Pester's JaCoCo output.
-          # Temporary threshold: 40% (see coverage roadmap issue #196).
-          $minPct = 40
+          # Threshold: 50% — raised by #198 (see coverage roadmap issue #196).
+          $minPct = 50
           [xml]$report = Get-Content coverage.xml -Raw
           $allCounters = @(
             $report.report.counter
