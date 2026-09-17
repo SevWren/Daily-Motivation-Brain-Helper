@@ -267,7 +267,8 @@ Describe 'Update-TaskListUI' {
         $taskList = [PSCustomObject]@{ ItemsSource = $null }
         $noLabel  = [PSCustomObject]@{ Visibility  = $null }
         Update-TaskListUI -TaskListControl $taskList -NoTasksLabelControl $noLabel
-        $taskList.ItemsSource | Should -Not -BeNullOrEmpty -Because 'ItemsSource must be set even when empty'
+        # @() pipeline-unrolls to zero items — check directly to avoid false null
+        ($null -ne $taskList.ItemsSource) | Should -Be $true -Because 'ItemsSource must be set even when empty'
     }
 }
 
