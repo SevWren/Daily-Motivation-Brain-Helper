@@ -236,35 +236,42 @@ Describe 'Show-ErrorDialog — sanitizes message before display' -Skip:(-not $Is
 
 # ============================================================
 # Show-ErrorDialog / Show-InfoDialog — WPF-attempt path
-# Exercises WPF try-block lines: assemblies load fine on any
-# thread; Window instantiation or ShowDialog throws on non-STA,
-# caught by the inner catch, then falls through to MessageBox/
-# console fallback. Covers lines that the console-fallback tests
-# cannot reach because $script:WpfLoaded was $false there.
+# Pattern C (Skip-as-specification): these tests require ShowDialog() to run
+# and cannot be exercised headlessly on any automated runner.
+#
+# ROOT CAUSE OF PREVIOUS CI HANG (16+ min): the assumption that
+# XamlReader::Load() or ShowDialog() would throw "The calling thread must
+# be STA" on the Windows CI runner was WRONG. XamlReader::Load() succeeds
+# on MTA threads; execution reaches [void]$errWin.ShowDialog() which blocks
+# the thread indefinitely waiting for a message pump and user interaction
+# that never arrives on a headless runner. This is a WRONG-1 violation:
+# ShowDialog must never execute during automated tests.
+#
+# Un-skip when: a real STA Pester harness drives the window's Close() call
+# from a DispatcherTimer or equivalent before ShowDialog() blocks.
 # ============================================================
-Describe 'Show-ErrorDialog — WPF-attempt path (assemblies loaded)' -Skip:(-not $IsWindows) {
+Describe 'Show-ErrorDialog — WPF-attempt path (assemblies loaded)' -Skip {
 
     BeforeAll {
-        # Force assembly reload so $script:WpfLoaded reflects actual load result
         $script:AssembliesLoaded = $false
         $script:WpfLoaded        = $false
         Initialize-WindowsAssemblies
-        # After this, $script:WpfLoaded = $true if PresentationFramework loaded
     }
 
-    It 'does not throw when WPF assemblies are loaded (STA not available in Pester; fallback path runs)' {
-        # Show-ErrorDialog enters the WPF try-block because WpfLoaded = $true.
-        # XamlReader::Load or ShowDialog throws "The calling thread must be STA";
-        # the inner catch falls through to MessageBox/console. Must never surface.
+    It 'does not throw when WPF assemblies are loaded' -Skip {
+        # Pattern C: Show-ErrorDialog calls [void]$errWin.ShowDialog() when
+        # WpfLoaded=$true. ShowDialog() blocks on any headless runner — it does
+        # NOT throw STA on windows-latest CI. Un-skip with a real STA harness.
         { Show-ErrorDialog -Message 'Test error' -Title 'Test' } | Should -Not -Throw
     }
 
-    It 'does not throw for a message containing a credential keyword when WPF path is attempted' {
+    It 'does not throw for a message containing a credential keyword when WPF path is attempted' -Skip {
+        # Pattern C: same ShowDialog() hang risk. Un-skip with a real STA harness.
         { Show-ErrorDialog -Message 'token=abc123' -Title 'Test' } | Should -Not -Throw
     }
 }
 
-Describe 'Show-InfoDialog — WPF-attempt path (assemblies loaded)' -Skip:(-not $IsWindows) {
+Describe 'Show-InfoDialog — WPF-attempt path (assemblies loaded)' -Skip {
 
     BeforeAll {
         $script:AssembliesLoaded = $false
@@ -272,11 +279,15 @@ Describe 'Show-InfoDialog — WPF-attempt path (assemblies loaded)' -Skip:(-not 
         Initialize-WindowsAssemblies
     }
 
-    It 'does not throw when WPF assemblies are loaded (MessageBox::Show throws on non-STA; fallback runs)' {
+    It 'does not throw when WPF assemblies are loaded' -Skip {
+        # Pattern C: Show-InfoDialog calls [System.Windows.MessageBox]::Show() when
+        # WpfLoaded=$true. On windows-latest CI this blocks; it does NOT throw STA.
+        # Un-skip with a real STA harness.
         { Show-InfoDialog -Message 'Test info' -Title 'Test' } | Should -Not -Throw
     }
 
-    It 'does not throw when Title is omitted and WPF path is attempted' {
+    It 'does not throw when Title is omitted and WPF path is attempted' -Skip {
+        # Pattern C: same ShowDialog() hang risk. Un-skip with a real STA harness.
         { Show-InfoDialog -Message 'Info' } | Should -Not -Throw
     }
 }
