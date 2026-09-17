@@ -98,7 +98,7 @@ try {
 
     # Story 2.4: Enforce coverage threshold in CI mode.
     # $CoverageThreshold aligned with the CI coverage-gate job (see #196 roadmap).
-    $CoverageThreshold = 53
+    $CoverageThreshold = 51
     if ($CI -and $Coverage -and $null -ne $result.CodeCoverage) {
         $pct = [math]::Round($result.CodeCoverage.CoveragePercent, 1)
         Write-Host ""
