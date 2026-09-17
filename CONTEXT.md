@@ -362,6 +362,14 @@ MotivationTask they just created. Uses a ProgressBar countdown. Calls
 `Remove-MotivationTask` and cancels the Undo timer on click.
 _Avoid_: Cancel, Revert, Delete (Undo is always time-bounded; Delete is permanent)
 
+**Invoke-FolderBrowserDialog**:
+The helper function that opens a WinForms `FolderBrowserDialog`. Called from `Show-MainWindow` (the Select Folder button) and from the **Re-Pick Folder** handler in popup mode. Always sets `ShowNewFolderButton = $true`. Pre-populates `SelectedPath` from `$script:LastUsedFolder` when non-empty; writes the chosen path back to `$script:LastUsedFolder` on success. Returns `$null` when the user cancels or the dialog throws.
+_Avoid_: Folder picker, Open dialog, Browse dialog
+
+**$script:LastUsedFolder**:
+Session memory variable (initialized to `""` at startup) that stores the most recently chosen path from `Invoke-FolderBrowserDialog`. Pre-populates the dialog's starting directory on the next call within the same App session. Not persisted to disk — resets on each new App launch.
+_Avoid_: Last path, Recent folder, Saved folder
+
 ---
 
 ### Build and test
@@ -429,19 +437,17 @@ any window is shown and must run on an STA thread. Idempotent — safe to call
 more than once; subsequent calls return immediately.
 _Avoid_: Load assemblies, Init WPF, Setup assemblies
 
-**STA Harness**:
-A PowerShell wrapper script (`Tests/WPF/Invoke-STAPester.ps1`) that creates an
-STA runspace and runs Pester inside it, enabling WPF-dependent tests to execute
-on `windows-latest` CI. Invoked by `Invoke-Tests.ps1` when `-Tag WPF` is
-passed. Emits a separate `coverage-wpf.xml` artifact.
-_Avoid_: STA wrapper, STA runner, WPF test runner
+**$script:AssembliesLoaded**:
+Script-scoped boolean flag, initialized to `$false` at startup and set to `$true` by `Initialize-WindowsAssemblies` after both WPF and WinForms loads are attempted. Used by `Show-MainWindow` as an early-exit guard — if `$false`, the function writes to `[Console]::Error` and returns without opening any window. Under `Set-StrictMode -Version Latest`, reading this variable before it is initialized is a terminating `RuntimeException`.
+_Avoid_: Assemblies flag, WPF ready, Loaded flag
 
-**WPF tag**:
-The Pester tag string `"WPF"` applied to tests that require a real STA runspace
-and Windows WPF assemblies. Routes those tests to the STA Harness. Any test
-file that instantiates a WPF window or calls `Initialize-WindowsAssemblies`
-must carry this tag and be decorated with `-Skip:(-not $IsWindows)`.
-_Avoid_: WPF tests tag, UI tag
+**$script:WpfLoaded**:
+Script-scoped boolean sub-flag set to `$true` within `Initialize-WindowsAssemblies` after `PresentationFramework`, `PresentationCore`, and `WindowsBase` load successfully. Checked by `Show-ErrorDialog`, `Show-InfoDialog`, and `Show-PopupWindow` before WPF-specific calls. Distinct from `$script:AssembliesLoaded`: `$script:WpfLoaded` is WPF-specific; `$script:AssembliesLoaded` is the composite "both loads attempted" gate used by `Show-MainWindow`.
+_Avoid_: WPF flag, WPF ready, Presentation loaded
+
+**$script:FormsLoaded**:
+Script-scoped boolean sub-flag set to `$true` within `Initialize-WindowsAssemblies` after `System.Windows.Forms` loads successfully. Enables the WinForms fallback path in `Show-ErrorDialog` and powers `Invoke-FolderBrowserDialog`.
+_Avoid_: Forms flag, WinForms ready
 
 **$script:Window**:
 The script-scoped variable holding the live WPF window reference during a main
@@ -490,6 +496,18 @@ falling back to WinForms, then to console output when neither is available.
 `Show-ErrorDialog` passes its message through `Get-SafeErrorMessage` before
 display. Both are no-ops on non-Windows platforms when no assembly is loaded.
 _Avoid_: Alert dialog, Message box, Error popup, Info popup
+
+**WPF test pattern — Source-text regex (Pattern A)**:
+A headless, cross-platform test pattern that reads `DailyMotivation.ps1` as a raw string and asserts control presence via regex (e.g., `$src | Should -Match 'x:Name="SelectFolderBtn"'`). No functions are invoked and no window is opened. Adds zero code-coverage lines but satisfies XAML control-existence acceptance criteria. Reference files: `Tests/Unit/AG19-010.TabOrder.Tests.ps1`, `Tests/Unit/AG19.MainWindowUX.Tests.ps1`.
+_Avoid_: XAML test, Source scan, Grep test
+
+**WPF test pattern — Early-exit path exploitation (Pattern B)**:
+A test pattern that exercises code paths in `Show-MainWindow` or `Show-PopupWindow` that return before any `ShowDialog()` call. For `Show-MainWindow`: set `$script:AssembliesLoaded = $false` before calling — it returns immediately via `[Console]::Error.WriteLine`. For `Show-PopupWindow`: call without a valid `explorer_path` in the PopupConfig — it exits before building the window. No window is opened; no STA runspace is required. Reference file: `Tests/Unit/AG20-013.PopupMutex.Tests.ps1`.
+_Avoid_: No-window test, Guard test, Early-return test
+
+**WPF test pattern — Skip-as-specification (Pattern C)**:
+A test pattern for behaviors that genuinely require `ShowDialog()` and cannot be exercised headlessly. The test is written and marked `-Skip` with an explicit comment stating the condition that would un-skip it. Serves as a TDD specification — a written record of what is not yet covered and why. Never satisfy a Pattern C test by opening a real window in automated tests. Reference file: `Tests/Unit/AG20-007.CountdownTimer.Tests.ps1`.
+_Avoid_: Skipped test, Pending test, TODO test
 
 ---
 
